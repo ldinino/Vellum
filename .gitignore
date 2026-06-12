@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Third-party styling references (fetched locally, not redistributable)
+# Run scripts/fetch-references.ps1 to obtain them
+vendor/reference/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
