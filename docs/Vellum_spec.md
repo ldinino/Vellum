@@ -596,8 +596,8 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 - Memory: verify Ollama releases after Refine idle timeout; no leaks in long sessions
 - Mac build: test WebView rendering, file paths, background process behavior
 - Linux build (best effort): same checks
-- Installer / updater: Tauri's built-in updater wired to a release channel
-- Code signing (Windows): required for SmartScreen to not block the installer
+- Installer: basic Inno Setup script, per-user install to `%LOCALAPPDATA%\Programs` (no admin elevation). No auto-updater — releases are downloaded and installed manually.
+- No code signing. SmartScreen warning on first run is accepted for v1.
 
 **Exit criteria:** No data loss scenarios. Background processes are robust. Installer runs cleanly on a clean Windows 10 VM.
 
@@ -632,5 +632,5 @@ Phases 3, 4, 5, 6, and 7 can proceed in parallel after Phase 2 is stable.
 | Model manifest (models.json) | TBD — requires testing across hardware tiers to determine viable models and thresholds |
 | System requirements | TBD — will be determined through pre-release model evaluation |
 | LanguageTool language packs to bundle | Decision needed before Phase 4 — English-only is the v1 default candidate |
-| Code signing certificate (Windows) | Required before public distribution |
-| Auto-updater infrastructure | Server/endpoint needed before Phase 11 |
+| Code signing certificate (Windows) | Resolved — not doing for v1; unsigned Inno Setup installer |
+| Auto-updater infrastructure | Resolved — not doing for v1; manual release downloads, per-user install to AppData |
