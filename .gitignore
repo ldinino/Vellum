@@ -16,6 +16,9 @@ dist-ssr
 # Run scripts/fetch-references.ps1 to obtain them
 vendor/reference/
 
+# Bundled runtime binaries (large; fetched via scripts/fetch-binaries.ps1)
+vendor/bin/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
