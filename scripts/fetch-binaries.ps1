@@ -1,9 +1,12 @@
-# Fetches the bundled runtime binaries (see docs/Vellum_spec.md sections 3, 9, 10).
+# Fetches the runtime component binaries for local development
+# (see docs/Vellum_spec.md sections 3, 9, 10).
 # Pinned versions — bump deliberately, not automatically.
 #   Ollama: standalone zip (no installer, no tray app — spec requires headless spawn)
 #   LanguageTool: open-source desktop release, includes languagetool-server.jar
-# Downloads land in vendor\bin\ which is gitignored (large, redistributed at
-# bundle time via Tauri resources/sidecar config instead).
+# These are NOT bundled in the installer: the app downloads them on demand into
+# %LOCALAPPDATA%\Vellum\runtime\ at first feature-enable. This local copy in
+# vendor\bin\ (gitignored) is for dev work and as source material for the
+# component zips published to GitHub Releases.
 
 $ErrorActionPreference = 'Stop'
 

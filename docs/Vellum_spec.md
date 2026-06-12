@@ -1,9 +1,5 @@
 # Vellum — Product Specification & Implementation Plan
 
-> App name is a placeholder. v1 targets Windows 10/11.
-
----
-
 ## Part 1: Product Specification
 
 ---
@@ -22,8 +18,8 @@ A desktop note-taking application modeled on the layout and UX feel of Microsoft
 | Frontend | React | |
 | Rich text | Tiptap (free/MIT tier) | Built on ProseMirror |
 | Storage | SQLite (per-notebook) | WAL mode, FTS5 for search |
-| Grammar | LanguageTool | Bundled with minimal JRE via jlink |
-| LLM inference | Ollama (bundled binary) | Custom port 11435, custom model path |
+| Grammar | LanguageTool | Downloaded component: JAR + minimal JRE via jlink |
+| LLM inference | Ollama (downloaded on demand) | Custom port 11435, custom model path |
 | Styling | Bespoke CSS component library | No framework — retro aesthetic requires hand-built components |
 
 ---
@@ -37,11 +33,19 @@ A desktop note-taking application modeled on the layout and UX feel of Microsoft
 - Platform-specific file path handling (Tauri provides abstractions for this)
 - CI matrix builds (Windows, Mac, Linux) should be set up from day one so this stays low-effort
 
-**Bundled dependencies:**
-- `ollama.exe` — started on app launch only when Refine is enabled, via `OLLAMA_HOST=127.0.0.1:11435`, `OLLAMA_MODELS` pointed to app-specific path. Killed on app exit. No UI, no tray icon. If Refine is disabled in Settings, Ollama is never spawned.
-- LanguageTool JAR + minimal JRE built with `jlink` — only required modules, roughly 50–80MB compressed. Started as a background process on launch, bound to localhost.
+**Installer & updates:**
+- Tauri NSIS bundler, per-user install (`installMode: "currentUser"`) to `%LOCALAPPDATA%` — no admin elevation.
+- In-app updates via `tauri-plugin-updater`, artifacts and `latest.json` hosted on GitHub Releases (`tauri-action` publishes them). Update artifacts are signed with a local minisign keypair (`tauri signer generate`) — this is not code signing.
+- No code signing certificate. The SmartScreen warning on first run is accepted for v1.
 
-Both processes are spawned by the Tauri Rust backend and are not visible to the user.
+**Runtime components (downloaded on demand, not bundled):**
+
+The heavyweight runtimes are not shipped in the installer — this keeps the installer and every in-app update small (~tens of MB instead of gigabytes). Each is downloaded once into `%LOCALAPPDATA%\Vellum\runtime\[component]\[version]\`, verified by SHA-256 against a pinned manifest, and reused across app updates. Local app data is used (not `Documents\Vellum`, which is deliberately OneDrive-synced; runtimes must not sync).
+
+- `ollama.exe` — downloaded when the user first enables Refine. Started only when Refine is enabled, via `OLLAMA_HOST=127.0.0.1:11435`, `OLLAMA_MODELS` pointed to `%LOCALAPPDATA%\Vellum\runtime\models\`. Killed on app exit. No UI, no tray icon. If Refine is disabled in Settings, Ollama is never spawned.
+- LanguageTool + minimal JRE (built with `jlink` in CI, only required modules, roughly 50–80MB compressed) — published as a per-platform component zip on GitHub Releases, downloaded when grammar check is first enabled. Started as a background process while grammar check is on, bound to localhost.
+
+Download flows show progress and handle failure/retry; each feature degrades gracefully (toggle stays off with an explanatory message) until its component is present. Both processes are spawned by the Tauri Rust backend and are not visible to the user.
 
 ---
 
@@ -209,7 +213,7 @@ Refine templates are named system prompts used by the Refine feature. They are i
 
 **Processing:**
 1. Selected text and the chosen template's system prompt are sent to Ollama (local, port 11435).
-2. Ollama is loaded just-in-time. If not already running, the bundled binary is started. Memory is allocated on demand.
+2. Ollama is loaded just-in-time. If not already running, the downloaded binary is started. Memory is allocated on demand.
 3. A subtle loading indicator appears on the selected text.
 4. On response, Refine computes a word-level diff between original and returned text.
 
@@ -268,12 +272,12 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 
 ### 10. Grammar Check
 
-**Engine:** LanguageTool, bundled with a minimal JRE produced by `jlink`.
+**Engine:** LanguageTool, running on a minimal JRE produced by `jlink`, downloaded as a component on first enable.
 
 **Distribution approach:**
-- LanguageTool JAR is included in the app bundle.
-- A custom minimal JRE is built at compile time using `jlink` with only the Java modules required by LanguageTool. Target size: ~50–80MB after compression.
-- The Tauri Rust backend spawns LanguageTool as a local HTTP server on startup (localhost, random available port). Port is passed to the renderer at startup.
+- LanguageTool JAR + a custom minimal JRE (built in CI using `jlink` with only the Java modules required by LanguageTool, ~50–80MB compressed) are packaged as a per-platform component zip attached to GitHub Releases.
+- The component is downloaded on demand into `%LOCALAPPDATA%\Vellum\runtime\` when grammar check is first enabled (see Section 3) — it is not part of the installer.
+- The Tauri Rust backend spawns LanguageTool as a local HTTP server (localhost, random available port). Port is passed to the renderer.
 - Killed on app exit.
 
 **UI behavior:**
@@ -284,7 +288,7 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 
 **Scope:** Runs on the current page only. Does not scan across pages or notebooks in the background.
 
-**Portability:** The bundled JRE approach makes the app self-contained on Windows, Mac, and Linux. No Java installation required on the host.
+**Portability:** The downloaded JRE component makes grammar check self-contained on Windows, Mac, and Linux. No Java installation required on the host.
 
 ---
 
@@ -368,7 +372,7 @@ No PDF export, no Markdown export, no HTML export in v1.
 | Editor | Default font, default font size, spell check on/off |
 | Grammar | Grammar check on/off, LanguageTool language selection |
 | Refine | Enable toggle, Strict ↔ Liberal slider, model selector, Refine template manager, debug panel access |
-| About | Version, bundled dependency versions |
+| About | Version, runtime component versions (Ollama, LanguageTool), check for updates |
 
 ---
 
@@ -404,7 +408,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 - Establish `Documents\Vellum\` file layout; implement `app.json` and `notebooks.json` with atomic writes
 - Implement per-notebook SQLite creation (WAL mode, schema migrations via versioned migration runner)
 - Implement Ollama background process: spawn conditionally (Refine enabled only), bind to port 11435, custom model path, kill on exit
-- Implement LanguageTool background process: spawn on launch, bind to available localhost port, kill on exit
+- Implement LanguageTool background process: spawn when grammar check is enabled and its component is present, bind to available localhost port, kill on exit
 - Define CSS custom property tokens: colors, gradients, spacing, border radii, shadow depths for retro theme. Color and gradient values sourced from Office-Ribbon-2010 LESS (toolbar gradients, button group borders, amber/orange hover glow) and 7.css (window chrome, panel backgrounds, control states)
 - Build core UI component library using 7.css (scoped via `7.scoped.css`, tree-shaken to required components) as the base. Office-Ribbon-2010 LESS serves as the measured color/gradient reference for toolbar and button states — extract values, convert to CSS custom properties, no jQuery dependency carried over
 - Components requiring bespoke work beyond 7.css: Toolbar (Office 2007–2010 gradient and button groups), left navigation panel, page list panel, attachment bar, Refine suggestion underlines, grammar underlines
@@ -471,7 +475,8 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 **Goal:** LanguageTool grammar underlines working in editor.
 
-- Verify bundled JRE (`jlink` build) starts LanguageTool correctly on Windows
+- Build jlink JRE + LanguageTool component zip in CI; implement on-demand download into `%LOCALAPPDATA%\Vellum\runtime\` (progress, SHA-256 verification, retry)
+- Verify downloaded JRE (`jlink` build) starts LanguageTool correctly on Windows
 - Implement Rust backend: spawn LanguageTool server, pass port to renderer at startup
 - Implement Tiptap `grammarError` mark and decoration
 - On page open and on save (debounced 2s after last keystroke), send page text to LanguageTool HTTP API
@@ -479,7 +484,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 - Click to accept, right-click for Accept / Ignore / Ignore Rule
 - Settings toggle: grammar check on/off
 - Settings: language selection (LanguageTool supports multiple languages)
-- Test bundled JRE + JAR on a clean Windows machine with no Java installed
+- Test downloaded JRE + JAR on a clean Windows machine with no Java installed
 
 **Exit criteria:** Grammar errors underline correctly. Accept/ignore flows work. No Java dependency on host machine required.
 
@@ -519,6 +524,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 - Refine template data model in `app.json`
 - Settings → Refine → Templates: create, edit (name, system prompt, description, adherence override), delete, reorder
+- Ollama runtime download flow: fetch on first Refine enable into `%LOCALAPPDATA%\Vellum\runtime\` (progress, SHA-256 verification, retry)
 - Ollama process: conditional spawn (Refine enabled check), port 11435, custom model path
 - Hardware detection: VRAM and RAM via Windows API in Rust; map to Fast/Balanced/Thorough tier
 - `models.json` manifest: load on startup, expose to renderer
@@ -596,8 +602,9 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 - Memory: verify Ollama releases after Refine idle timeout; no leaks in long sessions
 - Mac build: test WebView rendering, file paths, background process behavior
 - Linux build (best effort): same checks
-- Installer: basic Inno Setup script, per-user install to `%LOCALAPPDATA%\Programs` (no admin elevation). No auto-updater — releases are downloaded and installed manually.
-- No code signing. SmartScreen warning on first run is accepted for v1.
+- Installer: Tauri NSIS bundler, per-user install (`installMode: "currentUser"`, no admin elevation). No code signing — SmartScreen warning accepted for v1.
+- In-app updates: `tauri-plugin-updater` against GitHub Releases (`tauri-action` builds, signs with local minisign key, uploads artifacts + `latest.json`)
+- Runtime component download flows: failure, retry, disk-full, and offline behavior verified for Ollama and LanguageTool components
 
 **Exit criteria:** No data loss scenarios. Background processes are robust. Installer runs cleanly on a clean Windows 10 VM.
 
@@ -632,5 +639,5 @@ Phases 3, 4, 5, 6, and 7 can proceed in parallel after Phase 2 is stable.
 | Model manifest (models.json) | TBD — requires testing across hardware tiers to determine viable models and thresholds |
 | System requirements | TBD — will be determined through pre-release model evaluation |
 | LanguageTool language packs to bundle | Decision needed before Phase 4 — English-only is the v1 default candidate |
-| Code signing certificate (Windows) | Resolved — not doing for v1; unsigned Inno Setup installer |
-| Auto-updater infrastructure | Resolved — not doing for v1; manual release downloads, per-user install to AppData |
+| Code signing certificate (Windows) | Resolved — not doing for v1; unsigned NSIS installer, SmartScreen warning accepted |
+| Auto-updater infrastructure | Resolved — `tauri-plugin-updater` + GitHub Releases; repo flips public at first release |
