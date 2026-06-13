@@ -74,6 +74,14 @@
   padding: 0 1px;
 }
 
+/* Search-result highlight (spec Section 11) — distinct from the user's own
+ * Highlight mark; an orange wash echoing the Office 2007 selection. */
+.v-search-hit {
+  background: #ffd86b;
+  box-shadow: 0 0 0 1px rgba(194, 138, 48, 0.6);
+  border-radius: 2px;
+}
+
 /* ---- Tables ------------------------------------------------------------ */
 
 .v-prose table {

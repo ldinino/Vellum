@@ -4,6 +4,7 @@ mod db;
 mod notebook;
 mod paths;
 mod process;
+mod search;
 
 use process::ollama::{self, OllamaState};
 use tauri::Manager;
@@ -53,6 +54,8 @@ pub fn run() {
             commands::save_page_snapshot,
             commands::notebook_path,
             commands::save_page_image,
+            commands::search,
+            commands::reindex_all,
             commands::ollama_start,
             commands::ollama_stop,
             commands::ollama_status,

@@ -4,6 +4,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { buildExtensions } from "./extensions";
 import { setImageSrcResolver } from "./ResizableImage";
+import { applySearchHighlight } from "./SearchHighlight";
 import { EditorToolbar } from "./EditorToolbar";
 import { createDebouncer } from "../../lib/debounce";
 import { useVellum } from "../../state/vellum";
@@ -23,11 +24,20 @@ function derivePreview(text: string): string {
  * saves. Auto-save writes an op checkpoint (~300ms) and a durable snapshot
  * (~3s); on mount we load the freshest saved content (recovery).
  */
-export function PageEditor({ notebookId, page }: { notebookId: string; page: Page }) {
+export function PageEditor({
+  notebookId,
+  page,
+  highlightQuery = "",
+}: {
+  notebookId: string;
+  page: Page;
+  highlightQuery?: string;
+}) {
   const { actions } = useVellum();
   const [title, setTitle] = useState(page.title);
   const titleRef = useRef<HTMLInputElement>(null);
   const loadingRef = useRef(true);
+  const [contentLoaded, setContentLoaded] = useState(false);
 
   // Stable per-mount debouncers and identifiers.
   const opSaver = useMemo(() => createDebouncer(300, 1000), []);
@@ -149,12 +159,23 @@ export function PageEditor({ notebookId, page }: { notebookId: string; page: Pag
       })
       .catch((e) => console.error("load page content failed", e))
       .finally(() => {
-        if (!cancelled) loadingRef.current = false;
+        if (!cancelled) {
+          loadingRef.current = false;
+          setContentLoaded(true);
+        }
       });
     return () => {
       cancelled = true;
     };
   }, [editor, notebookId, page.id]);
+
+  // Highlight search terms (and scroll to the first match) once content is in.
+  // Re-runs if the query changes while the same page stays open.
+  useEffect(() => {
+    if (!editor || !contentLoaded) return;
+    const terms = highlightQuery.split(/\s+/).filter(Boolean);
+    applySearchHighlight(editor, terms);
+  }, [editor, contentLoaded, highlightQuery]);
 
   // Focus the title of a freshly created (untitled) page.
   useEffect(() => {

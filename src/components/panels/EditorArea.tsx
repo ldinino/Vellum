@@ -7,7 +7,7 @@ import "./EditorArea.css";
  * (keyed by page id so each page gets a clean instance with its own auto-save).
  */
 export function EditorArea() {
-  const { pages, selectedNotebookId, selectedPageId } = useVellum();
+  const { pages, selectedNotebookId, selectedPageId, searchHighlight } = useVellum();
   const page = pages.find((p) => p.id === selectedPageId);
 
   if (!page || !selectedNotebookId) {
@@ -20,5 +20,12 @@ export function EditorArea() {
     );
   }
 
-  return <PageEditor key={page.id} notebookId={selectedNotebookId} page={page} />;
+  return (
+    <PageEditor
+      key={page.id}
+      notebookId={selectedNotebookId}
+      page={page}
+      highlightQuery={searchHighlight}
+    />
+  );
 }

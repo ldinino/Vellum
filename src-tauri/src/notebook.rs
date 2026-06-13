@@ -4,8 +4,8 @@
 //! connection, foreign keys on). Deletes rely on `ON DELETE CASCADE`: removing
 //! a section removes its pages, and removing a page removes its content, ops,
 //! and attachment rows. `fts_index` is a virtual table with no foreign key, so
-//! its rows are cleaned up explicitly where present (search lands in Phase 3;
-//! today it is empty).
+//! its rows are maintained explicitly: `reindex_page` rebuilds them on save and
+//! the delete paths remove them (spec Section 11).
 
 use serde::Serialize;
 use sqlx::{Pool, Sqlite};
@@ -107,14 +107,33 @@ pub async fn update_section(
     Ok(())
 }
 
-pub async fn delete_section(pool: &Pool<Sqlite>, id: &str) -> Result<(), String> {
+/// Delete a section and its pages, returning the deleted page ids so the caller
+/// can purge them from the master search index. The per-notebook `fts_index`
+/// rows are removed here (the cascade can't reach a virtual table).
+pub async fn delete_section(pool: &Pool<Sqlite>, id: &str) -> Result<Vec<String>, String> {
+    let page_ids: Vec<String> =
+        sqlx::query_scalar("SELECT id FROM pages WHERE section_id = ?1")
+            .bind(id)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("section page ids: {e}"))?;
+
+    let mut tx = pool.begin().await.map_err(|e| format!("begin delete section: {e}"))?;
+    for pid in &page_ids {
+        sqlx::query("DELETE FROM fts_index WHERE page_id = ?1")
+            .bind(pid)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("delete section fts: {e}"))?;
+    }
     // Cascade removes the section's pages and their content/ops/attachments.
     sqlx::query("DELETE FROM sections WHERE id = ?1")
         .bind(id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await
         .map_err(|e| format!("delete section: {e}"))?;
-    Ok(())
+    tx.commit().await.map_err(|e| format!("commit delete section: {e}"))?;
+    Ok(page_ids)
 }
 
 pub async fn reorder_sections(pool: &Pool<Sqlite>, ordered_ids: &[String]) -> Result<(), String> {
@@ -206,6 +225,12 @@ pub async fn set_page_title(pool: &Pool<Sqlite>, id: &str, title: &str) -> Resul
 }
 
 pub async fn delete_page(pool: &Pool<Sqlite>, id: &str) -> Result<(), String> {
+    // fts_index is a virtual table with no foreign key, so its row won't cascade.
+    sqlx::query("DELETE FROM fts_index WHERE page_id = ?1")
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("delete page fts: {e}"))?;
     sqlx::query("DELETE FROM pages WHERE id = ?1")
         .bind(id)
         .execute(pool)
@@ -414,6 +439,112 @@ pub async fn save_page_snapshot(
         .map_err(|e| format!("prune ops: {e}"))?;
 
     tx.commit().await.map_err(|e| format!("commit snapshot: {e}"))
+}
+
+// ---------------------------------------------------------------------------
+// Search indexing (spec Section 11)
+// ---------------------------------------------------------------------------
+
+/// Everything the search indexes need for one page. Returned by `reindex_page`
+/// so the caller can mirror the row into the master index without re-reading.
+#[derive(Debug, Clone)]
+pub struct PageIndexData {
+    pub page_id: String,
+    pub section_id: String,
+    pub section_name: String,
+    pub title: String,
+    pub content_text: String,
+    pub attachment_names: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub has_attachment: bool,
+}
+
+/// All page ids in the notebook (for a full master rebuild).
+pub async fn all_page_ids(pool: &Pool<Sqlite>) -> Result<Vec<String>, String> {
+    sqlx::query_scalar("SELECT id FROM pages")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("all page ids: {e}"))
+}
+
+/// Rebuild a page's row in the per-notebook `fts_index` from its current title,
+/// content snapshot, and attachment filenames, and return the data needed to
+/// mirror it into the master index. `None` if the page no longer exists.
+pub async fn reindex_page(
+    pool: &Pool<Sqlite>,
+    page_id: &str,
+) -> Result<Option<PageIndexData>, String> {
+    let row: Option<(String, String, String, String)> = sqlx::query_as(
+        "SELECT p.section_id, p.title, p.created_at, p.updated_at \
+         FROM pages p WHERE p.id = ?1",
+    )
+    .bind(page_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("reindex read page: {e}"))?;
+    let Some((section_id, title, created_at, updated_at)) = row else {
+        return Ok(None);
+    };
+
+    let section_name: String =
+        sqlx::query_scalar("SELECT name FROM sections WHERE id = ?1")
+            .bind(&section_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| format!("reindex section name: {e}"))?
+            .unwrap_or_default();
+
+    let content_json: Option<String> =
+        sqlx::query_scalar("SELECT content_json FROM page_content WHERE page_id = ?1")
+            .bind(page_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| format!("reindex content: {e}"))?;
+    let content_text = content_json
+        .as_deref()
+        .map(crate::search::flatten_text)
+        .unwrap_or_default();
+
+    let attachment_names: Vec<String> =
+        sqlx::query_scalar("SELECT filename FROM attachments WHERE page_id = ?1")
+            .bind(page_id)
+            .fetch_all(pool)
+            .await
+            .map_err(|e| format!("reindex attachments: {e}"))?;
+    let has_attachment = !attachment_names.is_empty();
+    let attachment_names = attachment_names.join(" ");
+
+    let mut tx = pool.begin().await.map_err(|e| format!("begin reindex: {e}"))?;
+    sqlx::query("DELETE FROM fts_index WHERE page_id = ?1")
+        .bind(page_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("reindex delete fts: {e}"))?;
+    sqlx::query(
+        "INSERT INTO fts_index (page_id, title, content, attachment_names) \
+         VALUES (?1, ?2, ?3, ?4)",
+    )
+    .bind(page_id)
+    .bind(&title)
+    .bind(&content_text)
+    .bind(&attachment_names)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("reindex insert fts: {e}"))?;
+    tx.commit().await.map_err(|e| format!("commit reindex: {e}"))?;
+
+    Ok(Some(PageIndexData {
+        page_id: page_id.to_string(),
+        section_id,
+        section_name,
+        title,
+        content_text,
+        attachment_names,
+        created_at,
+        updated_at,
+        has_attachment,
+    }))
 }
 
 // ---------------------------------------------------------------------------

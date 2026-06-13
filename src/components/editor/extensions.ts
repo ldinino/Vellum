@@ -20,6 +20,7 @@ import Subscript from "@tiptap/extension-subscript";
 import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table";
 import type { Extensions } from "@tiptap/react";
 import { ResizableImage } from "./ResizableImage";
+import { SearchHighlight } from "./SearchHighlight";
 
 export function buildExtensions(): Extensions {
   return [
@@ -45,5 +46,6 @@ export function buildExtensions(): Extensions {
     TableRow,
     TableHeader,
     TableCell,
+    SearchHighlight,
   ];
 }

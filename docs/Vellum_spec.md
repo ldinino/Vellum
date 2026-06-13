@@ -82,7 +82,7 @@ OneDrive (and other sync clients) cover this path by default on Windows — no c
 - Refine template library (name, system_prompt, description, adherence_override, id)
 - App-level settings
 
-**Search across notebooks:** A lightweight master index DB lives in the Vellum root and maintains a cross-notebook FTS5 index. Updated on every save. Scoped search queries the per-notebook DB directly; global search queries the master index.
+**Search across notebooks:** A lightweight master index DB (`search-index.db`) lives in the Vellum root and maintains a cross-notebook FTS5 index, updated on every save. Both global and scoped search query it (scope = a notebook filter); the per-notebook FTS5 index is maintained as the durable source the master is rebuilt from. See the Section 11 design note.
 
 ---
 
@@ -304,7 +304,16 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 
 **Scope filter:** Dropdown next to the search bar — All Notebooks, or any specific notebook by name.
 
-**Search engine:** SQLite FTS5. Master index DB for global; per-notebook DB for scoped.
+**Search engine:** SQLite FTS5.
+
+> **Design note (as built):** Both global and scoped search run against the
+> master index (`search-index.db` in the Vellum root); scope is applied as a
+> `notebookIds` filter. The per-notebook `fts_index` is still maintained on every
+> save — it's the durable, authoritative per-notebook index the master is derived
+> from, and `reindex_all` rebuilds the master from it on startup (self-healing any
+> drift from edits made while the app was closed). A single, well-tested query
+> path was chosen over two parallel engines; the per-notebook index remains
+> available for future per-notebook features.
 
 **Filters (collapsible panel below the search bar):**
 - Notebook (multi-select)
@@ -410,7 +419,8 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 | 0 — Project Foundation | ✅ Complete |
 | 1 — Navigation Shell | ✅ Complete |
 | 2 — Editor Core + Auto-Save | ✅ Complete |
-| 3–11 | ⬜ Not started |
+| 3 — Search | ✅ Complete |
+| 4–11 | ⬜ Not started |
 
 ---
 
@@ -468,7 +478,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 ---
 
-### Phase 3 — Search
+### Phase 3 — Search ✅
 
 **Goal:** Fast, reliable global and scoped keyword search with filters.
 

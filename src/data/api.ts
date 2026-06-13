@@ -2,7 +2,7 @@
 // maps them to the snake_case Rust parameters automatically.
 
 import { invoke } from "@tauri-apps/api/core";
-import type { Notebook, Page, Section } from "./types";
+import type { Notebook, Page, Section, SearchFilters, SearchHit } from "./types";
 
 // --- Notebooks (notebooks.json registry) -----------------------------------
 
@@ -102,3 +102,12 @@ export const savePageImage = (
   bytes: number[],
   ext: string,
 ) => invoke<string>("save_page_image", { notebookId, pageId, bytes, ext });
+
+// --- Search (spec Section 11) -----------------------------------------------
+
+/** Query the master index; `filters.notebookIds` scopes it (empty = all). */
+export const search = (query: string, filters: SearchFilters = {}) =>
+  invoke<SearchHit[]>("search", { query, filters });
+
+/** Rebuild the master index from every notebook (run once on startup). */
+export const reindexAll = () => invoke<void>("reindex_all");

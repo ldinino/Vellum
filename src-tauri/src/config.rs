@@ -129,7 +129,11 @@ fn read_json_or_default<T: Default + for<'de> Deserialize<'de> + Serialize>(
 ) -> Result<T, String> {
     match fs::read_to_string(path) {
         Ok(text) => {
-            serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))
+            // Tolerate a UTF-8 BOM: Documents\Vellum is OneDrive-synced and may be
+            // touched by external editors/tools that prepend one, which serde_json
+            // would otherwise reject ("expected value at line 1 column 1").
+            let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+            serde_json::from_str(text).map_err(|e| format!("parse {}: {e}", path.display()))
         }
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             let value = T::default();

@@ -29,6 +29,9 @@ interface VellumState {
   selectedNotebookId: string | null;
   selectedSectionId: string | null;
   selectedPageId: string | null;
+  /** Query whose matches the open page should highlight (set when navigating
+   * from a search result); empty when not arriving from search. */
+  searchHighlight: string;
   error: string | null;
 }
 
@@ -38,6 +41,7 @@ const initial: VellumState = {
   selectedNotebookId: null,
   selectedSectionId: null,
   selectedPageId: null,
+  searchHighlight: "",
   error: null,
 };
 
@@ -48,6 +52,14 @@ interface VellumActions {
   toggleNotebook: (id: string) => Promise<void>;
   selectSection: (notebookId: string, sectionId: string) => Promise<void>;
   selectPage: (pageId: string) => void;
+  /** Navigate to a page anywhere (e.g. from a search result), expanding and
+   * loading its notebook/section, and highlight `query` in it. */
+  openPage: (
+    notebookId: string,
+    sectionId: string,
+    pageId: string,
+    query?: string,
+  ) => Promise<void>;
 
   createNotebook: (name: string) => Promise<Notebook | null>;
   renameNotebook: (id: string, name: string) => Promise<void>;
@@ -143,6 +155,12 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     reload();
   }, [reload]);
 
+  // Rebuild the master search index once on startup so global search is complete
+  // and self-heals any drift (deletes/edits made while the app was closed).
+  useEffect(() => {
+    api.reindexAll().catch((e) => console.error("reindex failed", e));
+  }, []);
+
   const toggleNotebook = useCallback(
     async (id: string) => {
       const nb = ref.current.notebooks.find((n) => n.id === id);
@@ -165,6 +183,7 @@ export function VellumProvider({ children }: { children: ReactNode }) {
         selectedNotebookId: notebookId,
         selectedSectionId: sectionId,
         selectedPageId: null,
+        searchHighlight: "",
         pages: [],
       }));
       await reloadPages(notebookId, sectionId);
@@ -173,8 +192,34 @@ export function VellumProvider({ children }: { children: ReactNode }) {
   );
 
   const selectPage = useCallback((pageId: string) => {
-    setState((s) => ({ ...s, selectedPageId: pageId }));
+    setState((s) => ({ ...s, selectedPageId: pageId, searchHighlight: "" }));
   }, []);
+
+  const openPage = useCallback(
+    async (notebookId: string, sectionId: string, pageId: string, query = "") => {
+      // Make sure the target notebook is expanded with its sections loaded.
+      const nb = ref.current.notebooks.find((n) => n.id === notebookId);
+      if (nb?.sections == null) await reloadSections(notebookId);
+      setState((s) => ({
+        ...s,
+        notebooks: s.notebooks.map((n) =>
+          n.id === notebookId ? { ...n, expanded: true } : n,
+        ),
+      }));
+      // Select the section (loads its pages), then the page, then the highlight.
+      setState((s) => ({
+        ...s,
+        selectedNotebookId: notebookId,
+        selectedSectionId: sectionId,
+        selectedPageId: null,
+        searchHighlight: "",
+        pages: [],
+      }));
+      await reloadPages(notebookId, sectionId);
+      setState((s) => ({ ...s, selectedPageId: pageId, searchHighlight: query }));
+    },
+    [reloadSections, reloadPages],
+  );
 
   // After a section mutation, reload that notebook's sections (if loaded).
   const afterSectionChange = useCallback(
@@ -199,6 +244,7 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     toggleNotebook,
     selectSection,
     selectPage,
+    openPage,
 
     createNotebook: async (name) => {
       try {

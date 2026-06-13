@@ -9,7 +9,65 @@ use crate::config::{self, AppConfig, NotebookMeta};
 use crate::notebook::{self, Page, Section};
 use crate::process::ollama::{self, OllamaState};
 use crate::process::ProcessStatus;
+use crate::search::{self, SearchFilters, SearchHit};
 use crate::{db, paths};
+
+/// Path to the master cross-notebook search index in the Vellum root.
+fn master_index_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    Ok(paths::data_dir(app)?.join("search-index.db"))
+}
+
+/// Display name for a notebook id, used in search breadcrumbs.
+fn notebook_name(app: &AppHandle, notebook_id: &str) -> Result<String, String> {
+    let registry = config::load_registry(app)?;
+    registry
+        .notebooks
+        .iter()
+        .find(|n| n.id == notebook_id)
+        .map(|n| n.name.clone())
+        .ok_or_else(|| format!("Unknown notebook id {notebook_id}"))
+}
+
+/// Rebuild a page's per-notebook and master index rows. Index upkeep is best
+/// effort: failures are logged, not surfaced, so a stale index never blocks the
+/// user's edit. (`reindex_all` and the next save will heal it.)
+async fn index_page(app: &AppHandle, notebook_id: &str, page_id: &str) {
+    if let Err(e) = index_page_inner(app, notebook_id, page_id).await {
+        eprintln!("search index update failed for page {page_id}: {e}");
+    }
+}
+
+async fn index_page_inner(app: &AppHandle, notebook_id: &str, page_id: &str) -> Result<(), String> {
+    let pool = pool_for(app, notebook_id).await?;
+    let data = notebook::reindex_page(&pool, page_id).await;
+    pool.close().await;
+
+    let master = search::open_master(&master_index_path(app)?, true).await?;
+    let r = match data? {
+        Some(data) => {
+            let name = notebook_name(app, notebook_id)?;
+            search::upsert_master(&master, notebook_id, &name, &data).await
+        }
+        None => search::remove_page(&master, page_id).await,
+    };
+    master.close().await;
+    r
+}
+
+/// Drop a page's row from the master index (used on delete, where the
+/// per-notebook row is already gone with the page).
+async fn unindex_page(app: &AppHandle, page_id: &str) {
+    if let Err(e) = async {
+        let master = search::open_master(&master_index_path(app)?, true).await?;
+        let r = search::remove_page(&master, page_id).await;
+        master.close().await;
+        r
+    }
+    .await
+    {
+        eprintln!("search index remove failed for page {page_id}: {e}");
+    }
+}
 
 /// Resolve a notebook id to an open pool on its `notebook.db`. Opened per call
 /// (SQLite open is cheap); Phase 2's hot auto-save path may add caching.
@@ -176,7 +234,7 @@ pub fn set_notebook_color(
 /// (notebook.db + attachments). Destructive and irreversible — the frontend
 /// confirms first.
 #[tauri::command]
-pub fn delete_notebook(app: AppHandle, notebook_id: String) -> Result<(), String> {
+pub async fn delete_notebook(app: AppHandle, notebook_id: String) -> Result<(), String> {
     let mut registry = config::load_registry(&app)?;
     let idx = registry
         .notebooks
@@ -194,7 +252,13 @@ pub fn delete_notebook(app: AppHandle, notebook_id: String) -> Result<(), String
         std::fs::remove_dir_all(&dir)
             .map_err(|e| format!("remove {}: {e}", dir.display()))?;
     }
-    Ok(())
+
+    // The notebook.db (and its fts_index) went with the folder; clear the
+    // notebook's rows from the master index too.
+    let master = search::open_master(&master_index_path(&app)?, true).await?;
+    let r = search::remove_notebook(&master, &notebook_id).await;
+    master.close().await;
+    r
 }
 
 /// Persist a new notebook ordering. `ordered_ids` lists every notebook id in
@@ -272,7 +336,15 @@ pub async fn delete_section(
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::delete_section(&pool, &section_id).await;
     pool.close().await;
-    r
+    let page_ids = r?;
+    let master = search::open_master(&master_index_path(&app)?, true).await?;
+    for pid in &page_ids {
+        if let Err(e) = search::remove_page(&master, pid).await {
+            eprintln!("search index remove failed for page {pid}: {e}");
+        }
+    }
+    master.close().await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -326,7 +398,9 @@ pub async fn set_page_title(
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::set_page_title(&pool, &page_id, &title).await;
     pool.close().await;
-    r
+    r?;
+    index_page(&app, &notebook_id, &page_id).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -338,7 +412,9 @@ pub async fn delete_page(
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::delete_page(&pool, &page_id).await;
     pool.close().await;
-    r
+    r?;
+    unindex_page(&app, &page_id).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -350,7 +426,9 @@ pub async fn duplicate_page(
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::duplicate_page(&pool, &page_id).await;
     pool.close().await;
-    r
+    let page = r?;
+    index_page(&app, &notebook_id, &page.id).await;
+    Ok(page)
 }
 
 #[tauri::command]
@@ -363,7 +441,10 @@ pub async fn move_page(
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::move_page(&pool, &page_id, &to_section_id).await;
     pool.close().await;
-    r
+    r?;
+    // Section changed → refresh the indexed breadcrumb.
+    index_page(&app, &notebook_id, &page_id).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -468,7 +549,86 @@ pub async fn save_page_snapshot(
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::save_page_snapshot(&pool, &page_id, &content_json, &preview).await;
     pool.close().await;
+    r?;
+    // Re-index on every durable snapshot (spec Section 11).
+    index_page(&app, &notebook_id, &page_id).await;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Search (spec Section 11)
+// ---------------------------------------------------------------------------
+
+/// Search the master index. `filters.notebookIds` scopes the query (empty/absent
+/// = all notebooks); the other filters narrow by section, date range, and
+/// attachment presence.
+#[tauri::command]
+pub async fn search(
+    app: AppHandle,
+    query: String,
+    filters: SearchFilters,
+) -> Result<Vec<SearchHit>, String> {
+    let master = search::open_master(&master_index_path(&app)?, true).await?;
+    let r = search::search(&master, &query, &filters).await;
+    master.close().await;
     r
+}
+
+/// Rebuild the master index from every notebook. Called on startup (in the
+/// background) so global search is complete and self-heals after out-of-band
+/// edits; also refreshes each notebook's own `fts_index`.
+#[tauri::command]
+pub async fn reindex_all(app: AppHandle) -> Result<(), String> {
+    let registry = config::load_registry(&app)?;
+    let master = search::open_master(&master_index_path(&app)?, true).await?;
+
+    let keep: Vec<String> = registry.notebooks.iter().map(|n| n.id.clone()).collect();
+    search::prune_notebooks(&master, &keep).await?;
+
+    for nb in &registry.notebooks {
+        // Skip notebooks whose DB is missing rather than failing the whole rebuild.
+        let path = match paths::notebook_dir(&app, &nb.folder) {
+            Ok(dir) => dir.join("notebook.db"),
+            Err(_) => continue,
+        };
+        if !path.is_file() {
+            continue;
+        }
+        let pool = match db::open_pool(&path, false).await {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("reindex_all: open {}: {e}", nb.id);
+                continue;
+            }
+        };
+        // Drop the notebook's master rows, then re-add every current page so
+        // deletions made while closed don't linger.
+        if let Err(e) = search::remove_notebook(&master, &nb.id).await {
+            eprintln!("reindex_all: clear {}: {e}", nb.id);
+        }
+        match notebook::all_page_ids(&pool).await {
+            Ok(ids) => {
+                for pid in ids {
+                    match notebook::reindex_page(&pool, &pid).await {
+                        Ok(Some(data)) => {
+                            if let Err(e) =
+                                search::upsert_master(&master, &nb.id, &nb.name, &data).await
+                            {
+                                eprintln!("reindex_all: upsert {pid}: {e}");
+                            }
+                        }
+                        Ok(None) => {}
+                        Err(e) => eprintln!("reindex_all: reindex {pid}: {e}"),
+                    }
+                }
+            }
+            Err(e) => eprintln!("reindex_all: page ids {}: {e}", nb.id),
+        }
+        pool.close().await;
+    }
+
+    master.close().await;
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

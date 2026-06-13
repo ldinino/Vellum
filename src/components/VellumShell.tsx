@@ -3,6 +3,7 @@ import { NavPanel } from "./panels/NavPanel";
 import { PageList } from "./panels/PageList";
 import { EditorArea } from "./panels/EditorArea";
 import { SectionPropertiesModal } from "./panels/SectionPropertiesModal";
+import { SearchBar } from "./search/SearchBar";
 import { useVellum } from "../state/vellum";
 import { Icon } from "./ui/Icon";
 import "./VellumShell.css";
@@ -16,6 +17,7 @@ export function VellumShell() {
 
   return (
     <div className="v-shell">
+      <SearchBar />
       {error && (
         <div className="v-shell__error" role="alert">
           <Icon name="exclamation" />

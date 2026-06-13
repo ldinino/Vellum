@@ -27,3 +27,28 @@ export interface Page {
   /** First line of content, for the page-list preview. */
   preview: string;
 }
+
+export interface SearchFilters {
+  /** Restrict to these notebooks; empty/absent = all. */
+  notebookIds?: string[];
+  sectionId?: string;
+  dateField?: "created" | "modified";
+  /** RFC3339 inclusive bounds. */
+  dateFrom?: string;
+  dateTo?: string;
+  hasAttachment?: boolean;
+}
+
+export interface SearchHit {
+  pageId: string;
+  notebookId: string;
+  notebookName: string;
+  sectionId: string;
+  sectionName: string;
+  title: string;
+  /** Content excerpt; matched runs wrapped in U+0001 … U+0002. */
+  snippet: string;
+  createdAt: string;
+  updatedAt: string;
+  hasAttachment: boolean;
+}
