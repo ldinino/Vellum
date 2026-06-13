@@ -63,6 +63,14 @@
   white-space: nowrap;
 }
 
+.v-pagelist__preview {
+  font-size: var(--text-size-small);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .v-pagelist__date {
   font-size: var(--text-size-small);
   color: var(--text-disabled);

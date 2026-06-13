@@ -378,6 +378,99 @@ pub async fn reorder_pages(
     r
 }
 
+/// Absolute path to a notebook's folder (for the renderer to resolve
+/// attachment-relative image paths into asset:// URLs).
+#[tauri::command]
+pub fn notebook_path(app: AppHandle, notebook_id: String) -> Result<String, String> {
+    let registry = config::load_registry(&app)?;
+    let meta = registry
+        .notebooks
+        .iter()
+        .find(|n| n.id == notebook_id)
+        .ok_or_else(|| format!("Unknown notebook id {notebook_id}"))?;
+    Ok(paths::notebook_dir(&app, &meta.folder)?.display().to_string())
+}
+
+/// Store a pasted/dropped image under `attachments/<page-id>/` and return its
+/// notebook-relative path (forward slashes) for embedding in the doc.
+#[tauri::command]
+pub fn save_page_image(
+    app: AppHandle,
+    notebook_id: String,
+    page_id: String,
+    bytes: Vec<u8>,
+    ext: String,
+) -> Result<String, String> {
+    let registry = config::load_registry(&app)?;
+    let meta = registry
+        .notebooks
+        .iter()
+        .find(|n| n.id == notebook_id)
+        .ok_or_else(|| format!("Unknown notebook id {notebook_id}"))?;
+
+    // Keep only a safe, short extension; default to png.
+    let ext: String = ext
+        .trim_start_matches('.')
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(5)
+        .collect::<String>()
+        .to_lowercase();
+    let ext = if ext.is_empty() { "png".to_string() } else { ext };
+
+    let rel = format!("attachments/{page_id}/{}.{ext}", uuid::Uuid::new_v4());
+    let abs = paths::notebook_dir(&app, &meta.folder)?.join(&rel);
+    if let Some(parent) = abs.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("create {}: {e}", parent.display()))?;
+    }
+    std::fs::write(&abs, &bytes).map_err(|e| format!("write {}: {e}", abs.display()))?;
+    Ok(rel)
+}
+
+// ---------------------------------------------------------------------------
+// Page content & auto-save
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn load_page_content(
+    app: AppHandle,
+    notebook_id: String,
+    page_id: String,
+) -> Result<Option<String>, String> {
+    let pool = pool_for(&app, &notebook_id).await?;
+    let r = notebook::load_page_content(&pool, &page_id).await;
+    pool.close().await;
+    r
+}
+
+#[tauri::command]
+pub async fn append_page_op(
+    app: AppHandle,
+    notebook_id: String,
+    page_id: String,
+    op_json: String,
+) -> Result<(), String> {
+    let pool = pool_for(&app, &notebook_id).await?;
+    let r = notebook::append_page_op(&pool, &page_id, &op_json).await;
+    pool.close().await;
+    r
+}
+
+#[tauri::command]
+pub async fn save_page_snapshot(
+    app: AppHandle,
+    notebook_id: String,
+    page_id: String,
+    content_json: String,
+    preview: String,
+) -> Result<(), String> {
+    let pool = pool_for(&app, &notebook_id).await?;
+    let r = notebook::save_page_snapshot(&pool, &page_id, &content_json, &preview).await;
+    pool.close().await;
+    r
+}
+
 // ---------------------------------------------------------------------------
 // Background processes
 // ---------------------------------------------------------------------------

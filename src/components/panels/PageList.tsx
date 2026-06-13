@@ -134,6 +134,7 @@ export function PageList() {
               }}
               onCancel={() => setEditingId(null)}
             />
+            {p.preview && <span className="v-pagelist__preview">{p.preview}</span>}
             <span className="v-pagelist__date">{formatDate(p.updatedAt)}</span>
           </div>
         ))}

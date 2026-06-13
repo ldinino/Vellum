@@ -70,3 +70,35 @@ export const movePage = (notebookId: string, pageId: string, toSectionId: string
 
 export const reorderPages = (notebookId: string, orderedIds: string[]) =>
   invoke<void>("reorder_pages", { notebookId, orderedIds });
+
+// --- Page content / auto-save -----------------------------------------------
+
+/** Freshest saved doc for a page (newest op, else snapshot), or null if blank. */
+export const loadPageContent = (notebookId: string, pageId: string) =>
+  invoke<string | null>("load_page_content", { notebookId, pageId });
+
+/** Frequent op-log checkpoint (~300ms). */
+export const appendPageOp = (notebookId: string, pageId: string, opJson: string) =>
+  invoke<void>("append_page_op", { notebookId, pageId, opJson });
+
+/** Durable snapshot (~3s); also refreshes the page-list preview. */
+export const savePageSnapshot = (
+  notebookId: string,
+  pageId: string,
+  contentJson: string,
+  preview: string,
+) => invoke<void>("save_page_snapshot", { notebookId, pageId, contentJson, preview });
+
+// --- Images -----------------------------------------------------------------
+
+/** Absolute path to a notebook's folder, for resolving relative image paths. */
+export const notebookPath = (notebookId: string) =>
+  invoke<string>("notebook_path", { notebookId });
+
+/** Store an image under attachments/<page>/ and return its relative path. */
+export const savePageImage = (
+  notebookId: string,
+  pageId: string,
+  bytes: number[],
+  ext: string,
+) => invoke<string>("save_page_image", { notebookId, pageId, bytes, ext });

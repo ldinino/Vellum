@@ -341,15 +341,17 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 
 ### 13. Auto-Save & Crash Recovery
 
-**Save strategy:**
-- Tiptap emits a transaction on every document change.
-- Each transaction is written to `page_ops` (operation log) debounced at 300ms.
-- A full content snapshot is written to `page_content` debounced at 3 seconds.
+**Save strategy:** Two tiers of crash-safe checkpoints, both storing the **full Tiptap document** (not incremental ProseMirror steps):
+- On document change, a checkpoint is appended to `page_ops` on a 300ms debounce (max 1s during continuous typing, so saves still fire mid-burst).
+- A durable snapshot is written to `page_content` on a 3s debounce (max 5s). Writing a snapshot also refreshes the page-list preview/timestamp and prunes the `page_ops` rows it supersedes.
 - SQLite WAL mode is always on — writes are atomic; partial writes do not corrupt the DB.
+- Switching pages flushes any pending checkpoint immediately, so the outgoing page is always persisted.
+
+> **Design note:** the original plan stored incremental ProseMirror *steps* in `page_ops` and replayed them over the snapshot. We store full-document checkpoints instead: at our scale the extra write size is negligible, and replay-free recovery is far more robust (no step-ordering or schema-mismatch failure modes). The two-tier `page_ops` / `page_content` structure and the recovery guarantee are unchanged.
 
 **Crash recovery:**
-- On open, if a page has unresolved ops in `page_ops` newer than the last `page_content` snapshot, replay ops over the snapshot.
-- Provides recovery to within ~300ms of last keystroke.
+- On open, load the freshest saved document: the newest surviving `page_ops` checkpoint (which is by construction newer than the snapshot), else the `page_content` snapshot.
+- Provides recovery to within ~300ms–1s of the last keystroke.
 
 No manual save. No save indicator. No "unsaved changes" state.
 
@@ -407,7 +409,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 |---|---|
 | 0 — Project Foundation | ✅ Complete |
 | 1 — Navigation Shell | ✅ Complete |
-| 2 — Editor Core + Auto-Save | ⏳ In progress |
+| 2 — Editor Core + Auto-Save | ✅ Complete |
 | 3–11 | ⬜ Not started |
 
 ---
@@ -447,7 +449,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 ---
 
-### Phase 2 — Editor Core + Auto-Save
+### Phase 2 — Editor Core + Auto-Save ✅
 
 **Goal:** Fully functional rich text editor with reliable auto-save. Highest-risk phase.
 

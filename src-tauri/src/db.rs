@@ -78,6 +78,10 @@ const MIGRATIONS: &[&str] = &[
         attachment_names
     );
     "#,
+    // 2: denormalized page preview (first line of content) for the page list.
+    r#"
+    ALTER TABLE pages ADD COLUMN preview TEXT NOT NULL DEFAULT '';
+    "#,
 ];
 
 /// Open a single-connection pool to a notebook DB with foreign keys on and

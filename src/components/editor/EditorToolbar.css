@@ -1,0 +1,97 @@
+.v-editortoolbar {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+/* Let the formatting toolbar wrap on narrow widths instead of clipping. */
+.v-editortoolbar .v-toolbar {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: var(--toolbar-height);
+  padding-top: 3px;
+  padding-bottom: 3px;
+  row-gap: 3px;
+}
+
+.v-editortoolbar__select {
+  height: 24px;
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-content);
+  padding: 0 2px;
+}
+
+.v-editortoolbar__select--size {
+  width: 56px;
+}
+
+.v-editortoolbar__color {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--gradient-button);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.v-editortoolbar__color span {
+  font-weight: 700;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.v-editortoolbar__color--hl span {
+  width: 14px;
+  height: 6px;
+  border-radius: 1px;
+}
+
+/* The native color input sits invisibly over the swatch. */
+.v-editortoolbar__color input[type="color"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+}
+
+.v-linkeditor {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-panel);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.v-linkeditor input {
+  flex: 1;
+  max-width: 360px;
+  padding: 3px 6px;
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+}
+
+.v-linkeditor button {
+  padding: 3px 10px;
+  font-size: var(--text-size-ui);
+  border: 1px solid var(--button-border);
+  border-radius: var(--radius-control);
+  background: var(--gradient-button);
+  cursor: pointer;
+}
+
+.v-linkeditor button:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
+}

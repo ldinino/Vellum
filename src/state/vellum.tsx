@@ -43,6 +43,7 @@ const initial: VellumState = {
 
 interface VellumActions {
   reload: () => Promise<void>;
+  refreshPages: () => Promise<void>;
   clearError: () => void;
   toggleNotebook: (id: string) => Promise<void>;
   selectSection: (notebookId: string, sectionId: string) => Promise<void>;
@@ -193,6 +194,7 @@ export function VellumProvider({ children }: { children: ReactNode }) {
 
   const actions: VellumActions = {
     reload,
+    refreshPages: refreshSelectedPages,
     clearError: () => setState((s) => ({ ...s, error: null })),
     toggleNotebook,
     selectSection,

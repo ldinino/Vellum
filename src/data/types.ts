@@ -24,4 +24,6 @@ export interface Page {
   title: string;
   sortOrder: number;
   updatedAt: string;
+  /** First line of content, for the page-list preview. */
+  preview: string;
 }

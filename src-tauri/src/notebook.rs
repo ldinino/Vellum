@@ -142,11 +142,13 @@ pub struct Page {
     pub title: String,
     pub sort_order: i64,
     pub updated_at: String,
+    /// First line of content, denormalized for the page-list preview.
+    pub preview: String,
 }
 
 pub async fn list_pages(pool: &Pool<Sqlite>, section_id: &str) -> Result<Vec<Page>, String> {
     sqlx::query_as::<_, Page>(
-        "SELECT id, section_id, title, sort_order, updated_at \
+        "SELECT id, section_id, title, sort_order, updated_at, preview \
          FROM pages WHERE section_id = ?1 ORDER BY sort_order, created_at",
     )
     .bind(section_id)
@@ -188,6 +190,7 @@ pub async fn create_page(
         title: title.to_string(),
         sort_order,
         updated_at: ts,
+        preview: String::new(),
     })
 }
 
@@ -213,14 +216,14 @@ pub async fn delete_page(pool: &Pool<Sqlite>, id: &str) -> Result<(), String> {
 
 /// Copy a page (title + content snapshot, if any) into the same section.
 pub async fn duplicate_page(pool: &Pool<Sqlite>, id: &str) -> Result<Page, String> {
-    let src: (String, String) =
-        sqlx::query_as("SELECT section_id, title FROM pages WHERE id = ?1")
+    let src: (String, String, String) =
+        sqlx::query_as("SELECT section_id, title, preview FROM pages WHERE id = ?1")
             .bind(id)
             .fetch_optional(pool)
             .await
             .map_err(|e| format!("read page for duplicate: {e}"))?
             .ok_or_else(|| format!("Unknown page id {id}"))?;
-    let (section_id, title) = src;
+    let (section_id, title, preview) = src;
 
     let mut tx = pool.begin().await.map_err(|e| format!("begin duplicate: {e}"))?;
     let new = new_id();
@@ -235,13 +238,14 @@ pub async fn duplicate_page(pool: &Pool<Sqlite>, id: &str) -> Result<Page, Strin
     .map_or(0, |m| m + 1);
 
     sqlx::query(
-        "INSERT INTO pages (id, section_id, title, sort_order, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+        "INSERT INTO pages (id, section_id, title, sort_order, preview, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
     )
     .bind(&new)
     .bind(&section_id)
     .bind(format!("{title} (copy)"))
     .bind(sort_order)
+    .bind(&preview)
     .bind(&ts)
     .execute(&mut *tx)
     .await
@@ -266,6 +270,7 @@ pub async fn duplicate_page(pool: &Pool<Sqlite>, id: &str) -> Result<Page, Strin
         title: format!("{title} (copy)"),
         sort_order,
         updated_at: ts,
+        preview,
     })
 }
 
@@ -308,6 +313,107 @@ pub async fn reorder_pages(pool: &Pool<Sqlite>, ordered_ids: &[String]) -> Resul
             .map_err(|e| format!("reorder pages: {e}"))?;
     }
     tx.commit().await.map_err(|e| format!("commit reorder pages: {e}"))
+}
+
+// ---------------------------------------------------------------------------
+// Page content & auto-save (spec Section 13)
+// ---------------------------------------------------------------------------
+//
+// Two tiers of full-document checkpoints, both crash-safe via WAL:
+//   page_ops     — appended frequently (~300ms) while editing; each row is a
+//                  full Tiptap doc, newer than the last snapshot.
+//   page_content — the durable snapshot (~3s); supersedes and prunes the ops
+//                  it incorporates.
+// Recovery prefers the newest surviving op (it is by construction newer than
+// the snapshot), else the snapshot. We store full docs rather than ProseMirror
+// steps: at our scale the writes are cheap and replay-free recovery is far more
+// robust (no step/schema-mismatch failure modes).
+
+/// Return the freshest saved document for a page, or None for a blank page.
+pub async fn load_page_content(
+    pool: &Pool<Sqlite>,
+    page_id: &str,
+) -> Result<Option<String>, String> {
+    if let Some(op) = sqlx::query_scalar::<_, String>(
+        "SELECT op_json FROM page_ops WHERE page_id = ?1 ORDER BY id DESC LIMIT 1",
+    )
+    .bind(page_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("load page op: {e}"))?
+    {
+        return Ok(Some(op));
+    }
+    sqlx::query_scalar::<_, String>("SELECT content_json FROM page_content WHERE page_id = ?1")
+        .bind(page_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("load page content: {e}"))
+}
+
+/// Append a frequent op-log checkpoint (full doc).
+pub async fn append_page_op(
+    pool: &Pool<Sqlite>,
+    page_id: &str,
+    op_json: &str,
+) -> Result<(), String> {
+    sqlx::query("INSERT INTO page_ops (page_id, op_json) VALUES (?1, ?2)")
+        .bind(page_id)
+        .bind(op_json)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("append page op: {e}"))?;
+    Ok(())
+}
+
+/// Write the durable snapshot, refresh the page-list preview/timestamp, and
+/// prune the ops this snapshot supersedes (those that existed when it started).
+pub async fn save_page_snapshot(
+    pool: &Pool<Sqlite>,
+    page_id: &str,
+    content_json: &str,
+    preview: &str,
+) -> Result<(), String> {
+    let ts = now();
+    let mut tx = pool.begin().await.map_err(|e| format!("begin snapshot: {e}"))?;
+
+    let max_op: i64 = sqlx::query_scalar::<_, Option<i64>>(
+        "SELECT MAX(id) FROM page_ops WHERE page_id = ?1",
+    )
+    .bind(page_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| format!("snapshot max op: {e}"))?
+    .unwrap_or(0);
+
+    sqlx::query(
+        "INSERT INTO page_content (page_id, content_json, updated_at) VALUES (?1, ?2, ?3) \
+         ON CONFLICT(page_id) DO UPDATE SET content_json = excluded.content_json, \
+         updated_at = excluded.updated_at",
+    )
+    .bind(page_id)
+    .bind(content_json)
+    .bind(&ts)
+    .execute(&mut *tx)
+    .await
+    .map_err(|e| format!("write snapshot: {e}"))?;
+
+    sqlx::query("UPDATE pages SET preview = ?1, updated_at = ?2 WHERE id = ?3")
+        .bind(preview)
+        .bind(&ts)
+        .bind(page_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("update page preview: {e}"))?;
+
+    sqlx::query("DELETE FROM page_ops WHERE page_id = ?1 AND id <= ?2")
+        .bind(page_id)
+        .bind(max_op)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("prune ops: {e}"))?;
+
+    tx.commit().await.map_err(|e| format!("commit snapshot: {e}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -396,6 +502,48 @@ mod tests {
         assert_eq!(a2.name, "A renamed");
         assert_eq!(a2.color.as_deref(), Some("#abc123"));
         assert_eq!(a2.page_template_id.as_deref(), Some("tmpl-1"));
+
+        pool.close().await;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn content_recovery_and_pruning() {
+        let (pool, dir) = temp_pool().await;
+        let s = create_section(&pool, "S").await.unwrap();
+        let p = create_page(&pool, &s.id, "P").await.unwrap();
+
+        // Blank page.
+        assert!(load_page_content(&pool, &p.id).await.unwrap().is_none());
+
+        // Snapshot becomes the loaded content and updates the list preview.
+        save_page_snapshot(&pool, &p.id, r#"{"v":1}"#, "v1 preview").await.unwrap();
+        assert_eq!(
+            load_page_content(&pool, &p.id).await.unwrap().as_deref(),
+            Some(r#"{"v":1}"#)
+        );
+        let listed = list_pages(&pool, &s.id).await.unwrap().pop().unwrap();
+        assert_eq!(listed.preview, "v1 preview");
+
+        // An op newer than the snapshot wins recovery (simulates a crash mid-edit).
+        append_page_op(&pool, &p.id, r#"{"v":2}"#).await.unwrap();
+        assert_eq!(
+            load_page_content(&pool, &p.id).await.unwrap().as_deref(),
+            Some(r#"{"v":2}"#)
+        );
+
+        // The next snapshot supersedes and prunes that op.
+        save_page_snapshot(&pool, &p.id, r#"{"v":3}"#, "v3").await.unwrap();
+        let remaining: i64 = sqlx::query_scalar("SELECT count(*) FROM page_ops WHERE page_id = ?1")
+            .bind(&p.id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(remaining, 0);
+        assert_eq!(
+            load_page_content(&pool, &p.id).await.unwrap().as_deref(),
+            Some(r#"{"v":3}"#)
+        );
 
         pool.close().await;
         let _ = std::fs::remove_dir_all(&dir);
