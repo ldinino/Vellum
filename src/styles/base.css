@@ -1,0 +1,108 @@
+/* Base styles: reset, typography, retro scrollbars, selection. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  color: var(--text-primary);
+  background: var(--surface-window);
+  -webkit-font-smoothing: antialiased;
+  user-select: none; /* chrome is not selectable; editor opts back in */
+  cursor: default;
+}
+
+img {
+  -webkit-user-drag: none;
+}
+
+::selection {
+  background: var(--accent-bright);
+  color: var(--text-on-accent);
+}
+
+/* ---- Retro scrollbars (Office 2007 style) ------------------------------ */
+
+::-webkit-scrollbar {
+  width: 15px;
+  height: 15px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface-panel);
+  border-left: 1px solid var(--border-faint);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(to right, #fdfdfe, #d8dde3);
+  border: 1px solid var(--border-default);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gradient-hover);
+  border-color: var(--hover-border);
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: var(--gradient-active);
+  border-color: var(--active-border);
+}
+
+::-webkit-scrollbar-corner {
+  background: var(--surface-panel);
+}
+
+/* ---- Feature underlines (custom Tiptap marks render these classes) ----- */
+
+.refine-suggestion {
+  text-decoration: underline;
+  text-decoration-color: var(--refine-underline);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+  background: var(--refine-underline-bg);
+  cursor: pointer;
+}
+
+.refine-suggestion:hover {
+  text-decoration-style: double;
+}
+
+.grammar-error {
+  text-decoration: underline wavy;
+  text-decoration-color: var(--grammar-underline);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+/* ---- Inline rename input (EditableLabel) ------------------------------- */
+
+.v-editable-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  padding: 1px 3px;
+  border: 1px solid var(--accent-bright);
+  border-radius: 2px;
+  background: var(--surface-content);
+  box-shadow: 0 0 3px rgba(68, 136, 229, 0.5);
+}
+
+.v-editable-input:focus {
+  outline: none;
+}

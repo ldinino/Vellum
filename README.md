@@ -12,8 +12,8 @@ See [docs/Vellum_spec.md](docs/Vellum_spec.md) for the full product specificatio
 | Frontend | React + TypeScript (Vite) |
 | Rich text | Tiptap |
 | Storage | SQLite per notebook (WAL, FTS5) |
-| Grammar | LanguageTool (bundled minimal JRE) |
-| Inference | Ollama (bundled, localhost only) |
+| Grammar | Harper (`harper-core`, embedded Rust crate — offline, real-time) |
+| Inference | Ollama (downloaded on first Refine-enable, localhost only) |
 | Styling | Bespoke retro CSS (7.css base) |
 
 ## Development

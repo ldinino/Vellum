@@ -1,0 +1,46 @@
+.v-attachbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  background: linear-gradient(#fbfcfd, #eef1f5);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.v-attachbar__label {
+  display: inline-flex;
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--border-faint);
+}
+
+.v-attachbar__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px 8px;
+  font-family: var(--font-ui);
+  font-size: var(--text-size-small);
+  color: var(--text-primary);
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--gradient-button);
+  box-shadow: var(--shadow-button);
+  cursor: pointer;
+}
+
+.v-attachbar__chip:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
+}
+
+.v-attachbar__name {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v-attachbar__size {
+  color: var(--text-muted);
+}

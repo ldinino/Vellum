@@ -1,0 +1,7 @@
+Icons in this directory are from Fugue Icons 3.5.6 by Yusuke Kamiyamane
+(https://p.yusukekamiyamane.com/), licensed under Creative Commons
+Attribution 3.0 (https://creativecommons.org/licenses/by/3.0/).
+
+This attribution must also appear in the app's About dialog (Phase 10).
+The full set lives in /assets/fugue-icons-3.5.6; copy more icons from there
+as needed.

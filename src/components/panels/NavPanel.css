@@ -1,0 +1,109 @@
+.v-nav {
+  display: flex;
+  flex-direction: column;
+  width: var(--nav-panel-width);
+  min-width: 160px;
+  height: 100%;
+  background: var(--gradient-panel);
+  border-right: 1px solid var(--border-default);
+  box-shadow: var(--shadow-panel);
+}
+
+.v-nav__header {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border-faint);
+}
+
+.v-nav__header .v-button {
+  width: 100%;
+  justify-content: center;
+}
+
+.v-nav__tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-2);
+}
+
+.v-nav__notebook,
+.v-nav__section {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 4px 6px;
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  color: var(--text-primary);
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  cursor: pointer;
+}
+
+.v-nav__notebook {
+  font-weight: 600;
+}
+
+.v-nav__section {
+  padding-left: 30px;
+}
+
+.v-nav__notebook:hover,
+.v-nav__section:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
+}
+
+.v-nav__section--selected,
+.v-nav__section--selected:hover {
+  border-color: var(--selected-border);
+  background: var(--selected-fill);
+}
+
+.v-nav__twisty {
+  width: 0;
+  height: 0;
+  flex: 0 0 auto;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--text-muted);
+}
+
+.v-nav__twisty--open {
+  transform: rotate(90deg);
+}
+
+.v-nav__swatch {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-radius: 2px;
+}
+
+.v-nav__swatch--section {
+  width: 8px;
+  height: 8px;
+}
+
+.v-nav__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v-nav__notebook:focus-visible,
+.v-nav__section:focus-visible {
+  outline: 1px dotted var(--text-secondary);
+  outline-offset: -2px;
+}
+
+.v-nav__empty {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--text-size-small);
+  color: var(--text-muted);
+  line-height: 1.5;
+}

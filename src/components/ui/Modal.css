@@ -1,0 +1,68 @@
+.v-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Glass frame per makeaero window-glass values */
+.v-modal {
+  background: var(--glass-tint);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  box-shadow:
+    var(--shadow-modal),
+    inset 0 0 0 1px var(--glass-inner-stroke);
+  padding: 0 6px 6px;
+}
+
+.v-modal__titlebar {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 2px 0 6px;
+  background: var(--glass-sheen);
+  margin: 0 -6px;
+  border-radius: 6px 6px 0 0;
+}
+
+.v-modal__title {
+  flex: 1;
+  font-size: var(--text-size-ui);
+  color: var(--text-primary);
+  text-shadow: var(--glass-text-shadow);
+}
+
+.v-modal__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+  background: linear-gradient(rgba(255, 255, 255, 0.5), rgba(218, 90, 90, 0.6));
+  cursor: pointer;
+}
+
+.v-modal__close:hover {
+  background: linear-gradient(#f2b8b0, #d54f3f 50%, #b8341f 50%);
+}
+
+.v-modal__body {
+  background: var(--surface-content);
+  border: 1px solid var(--border-default);
+  border-radius: 2px;
+  padding: var(--space-5);
+  user-select: text;
+}
+
+.v-modal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-3) 2px 0;
+}

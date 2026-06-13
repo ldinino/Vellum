@@ -1,0 +1,109 @@
+/*
+ * Vellum design tokens — retro Office 2007 aesthetic.
+ *
+ * Color and gradient values measured from vendor references (gitignored):
+ *  - Office-Ribbon-2010 (ribbon.css, soft_button.css): toolbar gradients,
+ *    button states, amber hover glow, blue accents.
+ *  - 7.css: window chrome, panel backgrounds, control states.
+ *  - makeaero window-glass generator: aero titlebar glass treatment.
+ * Values only — no code copied (Office-Ribbon-2010 has no code license).
+ */
+
+:root {
+  /* ---- Typography ------------------------------------------------------ */
+  --font-ui: "Segoe UI", "Segoe UI Variable", Tahoma, Arial, sans-serif;
+  --font-mono: Consolas, "Courier New", monospace;
+  --text-size-ui: 12px;       /* classic Office chrome size */
+  --text-size-editor: 14px;
+  --text-size-small: 11px;
+
+  /* ---- Text colors ----------------------------------------------------- */
+  --text-primary: #000000;
+  --text-secondary: #444444;
+  --text-muted: #5b626c;
+  --text-disabled: #888888;
+  --text-on-accent: #ffffff;
+
+  /* ---- Chrome & panels (Office-Ribbon-2010 + 7.css) -------------------- */
+  --surface-window: #eaedf1;          /* app background */
+  --surface-panel: #f1f3f4;           /* nav / page-list panels */
+  --surface-content: #ffffff;         /* editor canvas */
+  --gradient-toolbar: linear-gradient(#ffffff, #eaedf1);
+  --gradient-panel: linear-gradient(#fdfdfe, #f1f3f4);
+  --gradient-titlebar-fallback: linear-gradient(#dde6f1, #b6c8de);
+
+  /* ---- Borders ---------------------------------------------------------- */
+  --border-strong: #8b9097;
+  --border-default: #b6babf;
+  --border-soft: #c7c8c9;
+  --border-faint: #e0e0e0;
+  --radius-control: 3px;
+  --radius-panel: 4px;
+
+  /* ---- Buttons (soft_button.css) ---------------------------------------- */
+  --gradient-button: linear-gradient(#ffffff, #f0f2f3);
+  --button-border: var(--border-soft);
+  --shadow-button: 0 1px 3px #c6c9cd;
+
+  /* Amber hover/active glow — the signature Office 2007 highlight */
+  --hover-border: #f1c43f;
+  --gradient-hover: linear-gradient(#fef9c9, #fee486);
+  --active-border: #c28a30;
+  --gradient-active: linear-gradient(#fee486, #ffd86b);
+  --selected-fill: #fdeeb3;
+  --selected-border: #f1c43f;
+
+  /* ---- Blue accent (ribbon.css) ----------------------------------------- */
+  --accent: #2860b3;
+  --accent-bright: #4488e5;
+  --accent-deep: #1f48a1;
+  --accent-soft: #5498f5;
+  --gradient-accent: linear-gradient(#4488e5, #2860b3);
+  --gradient-accent-hover: linear-gradient(#5498f5, #3870c3);
+  --gradient-accent-pressed: linear-gradient(#2860b3, #4488e5);
+
+  /* ---- Shadows & depth --------------------------------------------------- */
+  --shadow-raised: 0 1px 3px #c6c9cd;
+  --shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --shadow-popup: 2px 2px 6px rgba(0, 0, 0, 0.3);
+  --shadow-modal: 2px 2px 10px 1px rgba(0, 0, 0, 0.55);
+
+  /* ---- Aero glass titlebar (makeaero window-glass) ----------------------- */
+  --glass-tint: rgba(190, 210, 235, 0.85);
+  --glass-border: rgba(0, 0, 0, 0.55);
+  --glass-inner-stroke: rgba(255, 255, 255, 0.98);
+  --glass-sheen:
+    linear-gradient(transparent 20%, rgba(255, 255, 255, 0.7) 40%, transparent 41%),
+    linear-gradient(to right, rgba(255, 255, 255, 0.4), rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.2));
+  --glass-text-shadow: 0 0 3px rgba(255, 255, 255, 0.9), 0 1px 0 rgba(255, 255, 255, 0.8);
+
+  /* ---- Spacing ----------------------------------------------------------- */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 24px;
+
+  /* ---- Component metrics -------------------------------------------------- */
+  --titlebar-height: 30px;
+  --toolbar-height: 34px;
+  --nav-panel-width: 220px;
+  --pagelist-panel-width: 240px;
+
+  /* ---- Feature underline colors (spec Sections 9/10) ---------------------- */
+  /* Distinct from each other and from WebView2's red spell-check squiggle. */
+  --refine-underline: #7a52c7;      /* purple — Refine suggestions */
+  --refine-underline-bg: rgba(122, 82, 199, 0.08);
+  --grammar-underline: #2e8b57;     /* green — Harper grammar */
+
+  /* ---- Notebook/section default palette (OneNote 2007-ish) ----------------- */
+  --nb-blue: #87a8e0;
+  --nb-purple: #b39bd6;
+  --nb-green: #9cc97e;
+  --nb-orange: #f0a86e;
+  --nb-red: #e08a8a;
+  --nb-teal: #76c5c0;
+  --nb-yellow: #e6d06e;
+  --nb-magenta: #d98ac2;
+}

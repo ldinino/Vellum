@@ -1,0 +1,81 @@
+/* Aero glass titlebar — gradient/sheen values referenced from makeaero. */
+
+.v-titlebar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--titlebar-height);
+  padding-left: var(--space-3);
+  background:
+    var(--glass-sheen),
+    var(--gradient-titlebar-fallback);
+  border-bottom: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-inner-stroke);
+  flex: 0 0 auto;
+}
+
+.v-titlebar__appicon {
+  width: 16px;
+  height: 16px;
+}
+
+.v-titlebar__title {
+  flex: 1;
+  font-size: var(--text-size-ui);
+  color: var(--text-primary);
+  text-shadow: var(--glass-text-shadow);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v-titlebar__controls {
+  display: flex;
+  align-self: flex-start;
+}
+
+/* Win7-style caption buttons: glassy, attached to the top edge. */
+.v-titlebar__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 21px;
+  color: rgba(0, 0, 0, 0.65);
+  background: linear-gradient(
+    rgba(255, 255, 255, 0.5),
+    rgba(255, 255, 255, 0.3) 45%,
+    rgba(0, 0, 0, 0.08) 50%,
+    rgba(0, 0, 0, 0.08) 75%,
+    rgba(255, 255, 255, 0.5)
+  );
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  border-top: none;
+  border-left-width: 0;
+  cursor: pointer;
+}
+
+.v-titlebar__btn:first-child {
+  border-left-width: 1px;
+  border-bottom-left-radius: 4px;
+}
+
+.v-titlebar__btn--close {
+  border-bottom-right-radius: 4px;
+  width: 42px;
+}
+
+.v-titlebar__btn:hover {
+  background: linear-gradient(#cfe5f7, #b6d9ee 50%, #1a6ca1 50%, #4f9fd3);
+  color: #ffffff;
+  box-shadow: 0 0 5px 1px #5dc4f0;
+}
+
+.v-titlebar__btn--close:hover {
+  background: linear-gradient(#f2b8b0, #e98379 50%, #b8341f 50%, #d54f3f);
+  box-shadow: 0 0 5px 1px #e98379;
+}
+
+.v-titlebar__btn:active {
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+}

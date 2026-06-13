@@ -21,7 +21,7 @@ There is no test suite or linter configured yet.
 Dev-machine copies of the runtime binaries and styling references are fetched (not committed) via:
 
 ```sh
-powershell scripts/fetch-binaries.ps1     # Ollama + LanguageTool → vendor/bin/
+powershell scripts/fetch-binaries.ps1     # Ollama → vendor/bin/
 powershell scripts/fetch-references.ps1   # Office-Ribbon-2010 + makeaero → vendor/reference/
 ```
 
@@ -38,12 +38,12 @@ powershell scripts/fetch-references.ps1   # Office-Ribbon-2010 + makeaero → ve
 - Tauri NSIS installer, per-user (`installMode: "currentUser"`), no admin elevation.
 - **No code signing.** SmartScreen warning is accepted for v1. Updater artifacts use a free local minisign key — that is not code signing.
 - In-app updates via `tauri-plugin-updater`; artifacts + `latest.json` on GitHub Releases (published by `tauri-action`). Repo is private until the first release, then flips public so the updater endpoint resolves.
-- Heavyweight runtimes (Ollama ~1.4 GB, LanguageTool+jlink JRE ~200 MB) are **not bundled**. The app downloads them on first feature-enable into `%LOCALAPPDATA%\Vellum\runtime\[component]\[version]\` with SHA-256 verification. They must never live in `Documents\Vellum`, which is deliberately OneDrive-synced user data (notebooks, SQLite DBs, attachments).
+- The Ollama runtime (~1.4 GB) is **not bundled**. The app downloads it on first Refine-enable into `%LOCALAPPDATA%\Vellum\runtime\[component]\[version]\` with SHA-256 verification. It must never live in `Documents\Vellum`, which is deliberately OneDrive-synced user data (notebooks, SQLite DBs, attachments). Grammar (Harper) is compiled in — no download.
 
 ## Architecture notes
 
-- Rust backend (`src-tauri/`) owns: per-notebook SQLite (WAL mode, FTS5 — confirmed compiled into tauri-plugin-sql's bundled SQLite), background process lifecycle for Ollama (port 11435, spawn-on-demand, kill on exit) and LanguageTool (random localhost port), hardware detection, and runtime component downloads.
-- Frontend (`src/`) is React + Tiptap. All Tiptap extensions from spec Section 6 are already installed. The word "AI" never appears in UI — the LLM feature is called "Refine" and is framed as an editing tool (spec Section 9).
+- Rust backend (`src-tauri/`) owns **all** per-notebook SQLite access (WAL mode, FTS5): creation/migrations in `db.rs`, sections/pages/content CRUD in `notebook.rs` exposed as Tauri commands. We deliberately do **not** query from the frontend via tauri-plugin-sql — its pooled connections make transactions unsafe and leave `foreign_keys` off, which would break `ON DELETE CASCADE`. Commands open a single-connection pool per call (`db::open_pool`, foreign keys on). The backend also owns: background process lifecycle for Ollama (port 11435, spawn-on-demand, kill on exit), grammar checking via the embedded `harper-core` crate (in-process, no subprocess — wired in Phase 4), hardware detection, and the Ollama runtime download.
+- Frontend (`src/`) is React + Tiptap. All Tiptap extensions from spec Section 6 are already installed. The word "AI" never appears in UI — the LLM feature is called "Refine" and is framed as an editing tool (spec Section 9). Grammar check is Harper (spec Section 10): real-time underlines, English-only v1.
 - Styling is bespoke retro CSS built on 7.css; no CSS framework. Tokens get defined in Phase 0 from the vendor references.
 - CI (`.github/workflows/ci.yml`) runs frontend build + `cargo check` on Windows/macOS/Linux for every push/PR to main. Keep all three green even though only Windows ships in v1.
 

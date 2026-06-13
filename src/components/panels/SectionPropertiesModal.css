@@ -1,0 +1,64 @@
+.v-secprops {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.v-secprops__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--text-size-ui);
+}
+
+.v-secprops__field > span {
+  font-weight: 600;
+}
+
+.v-secprops__field input[type="text"],
+.v-secprops__field select {
+  padding: 4px 6px;
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-content);
+}
+
+.v-secprops__field input:focus,
+.v-secprops__field select:focus {
+  outline: none;
+  border-color: var(--accent-bright);
+  box-shadow: 0 0 3px rgba(68, 136, 229, 0.5);
+}
+
+.v-secprops__swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.v-secprops__swatch {
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  padding: 0;
+}
+
+.v-secprops__swatch--selected {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 1px;
+}
+
+.v-secprops__swatch--none {
+  background:
+    linear-gradient(45deg, transparent 45%, #d54f3f 45%, #d54f3f 55%, transparent 55%),
+    var(--surface-content);
+}
+
+.v-secprops__hint {
+  color: var(--text-muted);
+  font-size: var(--text-size-small);
+}

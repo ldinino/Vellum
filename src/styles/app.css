@@ -1,0 +1,8 @@
+/* Top-level app frame: titlebar + content column filling the window. */
+
+.app-frame {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 1px solid var(--glass-border); /* window edge with decorations off */
+}

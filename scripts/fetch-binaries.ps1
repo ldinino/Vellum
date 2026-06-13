@@ -1,17 +1,16 @@
 # Fetches the runtime component binaries for local development
-# (see docs/Vellum_spec.md sections 3, 9, 10).
+# (see docs/Vellum_spec.md sections 3, 9).
 # Pinned versions — bump deliberately, not automatically.
 #   Ollama: standalone zip (no installer, no tray app — spec requires headless spawn)
-#   LanguageTool: open-source desktop release, includes languagetool-server.jar
-# These are NOT bundled in the installer: the app downloads them on demand into
-# %LOCALAPPDATA%\Vellum\runtime\ at first feature-enable. This local copy in
+# Ollama is NOT bundled in the installer: the app downloads it on demand into
+# %LOCALAPPDATA%\Vellum\runtime\ at first Refine-enable. This local copy in
 # vendor\bin\ (gitignored) is for dev work and as source material for the
-# component zips published to GitHub Releases.
+# component zip published to GitHub Releases.
+# Grammar (Harper) is an embedded Rust crate — nothing to fetch here.
 
 $ErrorActionPreference = 'Stop'
 
 $OllamaVersion = 'v0.30.8'
-$LanguageToolVersion = '6.6'
 
 $binDir = Join-Path $PSScriptRoot '..\vendor\bin'
 New-Item -ItemType Directory -Force $binDir | Out-Null
@@ -22,12 +21,6 @@ $downloads = @(
         Url  = "https://github.com/ollama/ollama/releases/download/$OllamaVersion/ollama-windows-amd64.zip"
         Zip  = Join-Path $binDir "ollama-windows-amd64-$OllamaVersion.zip"
         Dest = Join-Path $binDir 'ollama'
-    },
-    @{
-        Name = 'languagetool'
-        Url  = "https://languagetool.org/download/LanguageTool-$LanguageToolVersion.zip"
-        Zip  = Join-Path $binDir "LanguageTool-$LanguageToolVersion.zip"
-        Dest = Join-Path $binDir 'languagetool'
     }
 )
 
@@ -49,5 +42,4 @@ foreach ($d in $downloads) {
 }
 
 Write-Host 'Done.'
-Write-Host "Ollama:       vendor\bin\ollama\ollama.exe"
-Write-Host "LanguageTool: vendor\bin\languagetool\LanguageTool-$LanguageToolVersion\languagetool-server.jar"
+Write-Host "Ollama: vendor\bin\ollama\ollama.exe"

@@ -19,6 +19,10 @@ vendor/reference/
 # Bundled runtime binaries (large; fetched via scripts/fetch-binaries.ps1)
 vendor/bin/
 
+# Full Fugue icon set (~27 MB source material). The curated subset we ship
+# lives in src/assets/icons/ and IS committed; copy more from here as needed.
+/assets/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

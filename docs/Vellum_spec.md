@@ -18,7 +18,7 @@ A desktop note-taking application modeled on the layout and UX feel of Microsoft
 | Frontend | React | |
 | Rich text | Tiptap (free/MIT tier) | Built on ProseMirror |
 | Storage | SQLite (per-notebook) | WAL mode, FTS5 for search |
-| Grammar | LanguageTool | Downloaded component: JAR + minimal JRE via jlink |
+| Grammar | Harper (`harper-core`) | Rust crate, compiled in-process — no JRE, no server, no download |
 | LLM inference | Ollama (downloaded on demand) | Custom port 11435, custom model path |
 | Styling | Bespoke CSS component library | No framework — retro aesthetic requires hand-built components |
 
@@ -40,12 +40,13 @@ A desktop note-taking application modeled on the layout and UX feel of Microsoft
 
 **Runtime components (downloaded on demand, not bundled):**
 
-The heavyweight runtimes are not shipped in the installer — this keeps the installer and every in-app update small (~tens of MB instead of gigabytes). Each is downloaded once into `%LOCALAPPDATA%\Vellum\runtime\[component]\[version]\`, verified by SHA-256 against a pinned manifest, and reused across app updates. Local app data is used (not `Documents\Vellum`, which is deliberately OneDrive-synced; runtimes must not sync).
+Only the LLM runtime is downloaded on demand — it is too heavy to ship in the installer, and keeping it out keeps the installer and every in-app update small (~tens of MB instead of gigabytes). It is downloaded once into `%LOCALAPPDATA%\Vellum\runtime\[component]\[version]\`, verified by SHA-256 against a pinned manifest, and reused across app updates. Local app data is used (not `Documents\Vellum`, which is deliberately OneDrive-synced; runtimes must not sync).
 
-- `ollama.exe` — downloaded when the user first enables Refine. Started only when Refine is enabled, via `OLLAMA_HOST=127.0.0.1:11435`, `OLLAMA_MODELS` pointed to `%LOCALAPPDATA%\Vellum\runtime\models\`. Killed on app exit. No UI, no tray icon. If Refine is disabled in Settings, Ollama is never spawned.
-- LanguageTool + minimal JRE (built with `jlink` in CI, only required modules, roughly 50–80MB compressed) — published as a per-platform component zip on GitHub Releases, downloaded when grammar check is first enabled. Started as a background process while grammar check is on, bound to localhost.
+- `ollama.exe` — downloaded when the user first enables Refine. Started only when Refine is enabled, via `OLLAMA_HOST=127.0.0.1:11435`, `OLLAMA_MODELS` pointed to `%LOCALAPPDATA%\Vellum\runtime\models\`. Killed on app exit. No UI, no tray icon. If Refine is disabled in Settings, Ollama is never spawned. Spawned by the Tauri Rust backend and not visible to the user.
 
-Download flows show progress and handle failure/retry; each feature degrades gracefully (toggle stays off with an explanatory message) until its component is present. Both processes are spawned by the Tauri Rust backend and are not visible to the user.
+The Ollama download flow shows progress and handles failure/retry; Refine degrades gracefully (toggle stays off with an explanatory message) until the component is present.
+
+**Grammar check needs no runtime download** — Harper (`harper-core`) is a Rust crate compiled directly into the backend, with its dictionary embedded. Grammar check works immediately on first launch, fully offline, with no separate process, port, or component to fetch (see Section 10).
 
 ---
 
@@ -153,11 +154,11 @@ Built on Tiptap with the following extensions enabled:
 
 **Spell check:** WebView2 native via `spellcheck` attribute. No additional dependency.
 
-**Grammar check:** LanguageTool (see Section 11).
+**Grammar check:** Harper (see Section 10).
 
 **Custom marks:**
-- `refineSuggestion` — for Refine inline suggestions (see Section 10)
-- `grammarError` — for LanguageTool grammar underlines
+- `refineSuggestion` — for Refine inline suggestions (see Section 9)
+- `grammarError` — for Harper grammar underlines
 
 ---
 
@@ -242,6 +243,8 @@ Refine templates are named system prompts used by the Refine feature. They are i
 
 Hardware detection via Windows API in Rust backend (VRAM, RAM). Auto-selected on first run; user can override in Settings. Specific model identifiers are maintained in a bundled `models.json` manifest that can be updated independently of the app binary. System requirements are not finalized — the manifest and tier thresholds will be tuned during pre-release testing.
 
+**Acceleration is whatever Ollama supports — we do not manage backends.** Ollama owns hardware abstraction (CPU, and GPU via its bundled CUDA/ROCm/Vulkan/Metal backends); the tier system above maps onto what Ollama can offload to. On integrated-GPU laptops (e.g. Intel Lunar Lake / Arc 140V on Copilot+ machines), Ollama runs on the iGPU sharing system RAM, not the NPU. **The NPU is not used:** Ollama does not target Intel/Qualcomm NPUs (those need OpenVINO / QNN, a separate runtime), and NPU acceleration remains out of scope for v1 (see CPU-only fallback below). A pre-release task is to benchmark the three tiers on representative Copilot+ hardware (iGPU + shared memory) and set the manifest/threshold defaults from real numbers — on shared-memory iGPU machines the practical ceiling is likely Fast/Balanced; Thorough (13B+) may be memory-bound.
+
 **CPU-only fallback:** Viable with the Fast tier only. A Q4-quantized 3B model on a modern CPU (AVX2-capable) processes approximately 8–12 tokens/second. For a typical Refine request (200–400 words), expect 25–90 seconds. When CPU-only is detected, a persistent warning is shown in Settings and inline at point of use: "Refine on this machine may be slow. Requests may take 30–90 seconds." The feature remains usable — the user is informed, not blocked. NPU detection and acceleration are not in scope for v1 but noted for future evaluation.
 
 **Strict ↔ Liberal slider:** Surfaces in Settings → Refine and as an optional per-invocation override. Controls both the model temperature and injects modifier instructions into the system prompt:
@@ -272,23 +275,24 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 
 ### 10. Grammar Check
 
-**Engine:** LanguageTool, running on a minimal JRE produced by `jlink`, downloaded as a component on first enable.
+**Engine:** [Harper](https://writewithharper.com/) (`harper-core`), an offline, Rust-native grammar checker (Apache-2.0). It is compiled directly into the Tauri backend — no Java, no separate server, no on-demand download. Its dictionary is embedded in the binary, so grammar check is available immediately on first launch and works fully offline.
 
-**Distribution approach:**
-- LanguageTool JAR + a custom minimal JRE (built in CI using `jlink` with only the Java modules required by LanguageTool, ~50–80MB compressed) are packaged as a per-platform component zip attached to GitHub Releases.
-- The component is downloaded on demand into `%LOCALAPPDATA%\Vellum\runtime\` when grammar check is first enabled (see Section 3) — it is not part of the installer.
-- The Tauri Rust backend spawns LanguageTool as a local HTTP server (localhost, random available port). Port is passed to the renderer.
-- Killed on app exit.
+**Why Harper over LanguageTool:** Harper lints in milliseconds with a tiny memory footprint (built for keystroke-speed feedback), which is exactly what real-time, Word-style underlining needs. LanguageTool requires a JVM, gigabytes of RAM, and a large n-gram dataset to reach comparable quality, and is too slow for live linting without a heavyweight background server. Harper trades exhaustive rule coverage for speed, privacy, and zero-dependency embedding — the right balance for a notes app.
+
+**Integration:**
+- `harper-core` is a backend dependency. The renderer sends the current page's plain text to a Rust command (debounced); the backend returns spans (offset, length, suggestion, rule description).
+- No process lifecycle, no port, no component download to manage (contrast Ollama in Section 3).
+- Runs entirely in-process on every platform (Windows, Mac, Linux) with no host runtime required.
 
 **UI behavior:**
 - Grammar errors underlined in a distinct color (separate from Refine suggestions and spell check).
-- Hover underline: shows LanguageTool's suggested correction and rule description.
+- Hover underline: shows Harper's suggested correction and rule description.
 - Click suggestion to accept.
 - Right-click: Accept, Ignore, Ignore Rule.
 
 **Scope:** Runs on the current page only. Does not scan across pages or notebooks in the background.
 
-**Portability:** The downloaded JRE component makes grammar check self-contained on Windows, Mac, and Linux. No Java installation required on the host.
+**Language:** English only in v1 (Harper is currently English-only; its core is extensible to other languages upstream). This matches the v1 language decision and removes the earlier language-pack question.
 
 ---
 
@@ -370,9 +374,9 @@ No PDF export, no Markdown export, no HTML export in v1.
 | General | App data location (read-only, shows Documents path) |
 | Templates | Page template library: create, edit, delete |
 | Editor | Default font, default font size, spell check on/off |
-| Grammar | Grammar check on/off, LanguageTool language selection |
+| Grammar | Grammar check on/off (Harper, English) |
 | Refine | Enable toggle, Strict ↔ Liberal slider, model selector, Refine template manager, debug panel access |
-| About | Version, runtime component versions (Ollama, LanguageTool), check for updates |
+| About | Version, Harper version, Ollama runtime version, check for updates |
 
 ---
 
@@ -397,9 +401,18 @@ No PDF export, no Markdown export, no HTML export in v1.
 
 Phases are ordered by dependency. Each phase should be shippable/testable before the next begins. UI polish is applied incrementally from Phase 2 onward, with a dedicated final pass.
 
+**Progress:**
+
+| Phase | Status |
+|---|---|
+| 0 — Project Foundation | ✅ Complete |
+| 1 — Navigation Shell | ✅ Complete |
+| 2 — Editor Core + Auto-Save | ⏳ In progress |
+| 3–11 | ⬜ Not started |
+
 ---
 
-### Phase 0 — Project Foundation
+### Phase 0 — Project Foundation ✅
 
 **Goal:** Runnable Tauri + React shell. Nothing visible to a user yet.
 
@@ -408,7 +421,6 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 - Establish `Documents\Vellum\` file layout; implement `app.json` and `notebooks.json` with atomic writes
 - Implement per-notebook SQLite creation (WAL mode, schema migrations via versioned migration runner)
 - Implement Ollama background process: spawn conditionally (Refine enabled only), bind to port 11435, custom model path, kill on exit
-- Implement LanguageTool background process: spawn when grammar check is enabled and its component is present, bind to available localhost port, kill on exit
 - Define CSS custom property tokens: colors, gradients, spacing, border radii, shadow depths for retro theme. Color and gradient values sourced from Office-Ribbon-2010 LESS (toolbar gradients, button group borders, amber/orange hover glow) and 7.css (window chrome, panel backgrounds, control states)
 - Build core UI component library using 7.css (scoped via `7.scoped.css`, tree-shaken to required components) as the base. Office-Ribbon-2010 LESS serves as the measured color/gradient reference for toolbar and button states — extract values, convert to CSS custom properties, no jQuery dependency carried over
 - Components requiring bespoke work beyond 7.css: Toolbar (Office 2007–2010 gradient and button groups), left navigation panel, page list panel, attachment bar, Refine suggestion underlines, grammar underlines
@@ -418,7 +430,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 ---
 
-### Phase 1 — Navigation Shell
+### Phase 1 — Navigation Shell ✅
 
 **Goal:** Full Notebook → Section → Page hierarchy navigable. No real editor yet — pages show a placeholder.
 
@@ -473,20 +485,18 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 ### Phase 4 — Grammar Check
 
-**Goal:** LanguageTool grammar underlines working in editor.
+**Goal:** Harper grammar underlines working in editor.
 
-- Build jlink JRE + LanguageTool component zip in CI; implement on-demand download into `%LOCALAPPDATA%\Vellum\runtime\` (progress, SHA-256 verification, retry)
-- Verify downloaded JRE (`jlink` build) starts LanguageTool correctly on Windows
-- Implement Rust backend: spawn LanguageTool server, pass port to renderer at startup
+- Add `harper-core` as a backend dependency
+- Implement a Rust command that takes page plain text and returns lint spans (offset, length, suggestion(s), rule title/description)
 - Implement Tiptap `grammarError` mark and decoration
-- On page open and on save (debounced 2s after last keystroke), send page text to LanguageTool HTTP API
+- On page open and on change (debounced ~2s after last keystroke), send page text to the Harper command; map returned spans to document positions
 - Render grammar underlines with hover tooltip (suggestion + rule)
 - Click to accept, right-click for Accept / Ignore / Ignore Rule
+- Per-session "Ignore Rule" set so dismissed rules stay quiet
 - Settings toggle: grammar check on/off
-- Settings: language selection (LanguageTool supports multiple languages)
-- Test downloaded JRE + JAR on a clean Windows machine with no Java installed
 
-**Exit criteria:** Grammar errors underline correctly. Accept/ignore flows work. No Java dependency on host machine required.
+**Exit criteria:** Grammar errors underline in real time as the user types, no perceptible lag. Accept/ignore/ignore-rule flows work. Fully offline; no host runtime, no download. Phase no longer blocks on Java or a CI jlink build.
 
 ---
 
@@ -594,7 +604,8 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 **Goal:** Ship-ready on Windows. Mac/Linux builds verified.
 
-- Background process error handling: Ollama or LanguageTool fails to start, crashes mid-use, or port unavailable
+- Background process error handling: Ollama fails to start, crashes mid-use, or port unavailable
+- Grammar check robustness: Harper handles very large pages without blocking the UI thread (debounce/offload as needed)
 - SQLite integrity: run `PRAGMA integrity_check` on notebook open; surface error if DB is corrupt
 - Large notebook performance: test with 1000+ pages, 10+ notebooks
 - Search performance: verify <100ms at scale
@@ -604,7 +615,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 - Linux build (best effort): same checks
 - Installer: Tauri NSIS bundler, per-user install (`installMode: "currentUser"`, no admin elevation). No code signing — SmartScreen warning accepted for v1.
 - In-app updates: `tauri-plugin-updater` against GitHub Releases (`tauri-action` builds, signs with local minisign key, uploads artifacts + `latest.json`)
-- Runtime component download flows: failure, retry, disk-full, and offline behavior verified for Ollama and LanguageTool components
+- Runtime component download flows: failure, retry, disk-full, and offline behavior verified for the Ollama component
 
 **Exit criteria:** No data loss scenarios. Background processes are robust. Installer runs cleanly on a clean Windows 10 VM.
 
@@ -638,6 +649,6 @@ Phases 3, 4, 5, 6, and 7 can proceed in parallel after Phase 2 is stable.
 | App name | Undefined — placeholder throughout |
 | Model manifest (models.json) | TBD — requires testing across hardware tiers to determine viable models and thresholds |
 | System requirements | TBD — will be determined through pre-release model evaluation |
-| LanguageTool language packs to bundle | Decision needed before Phase 4 — English-only is the v1 default candidate |
+| Grammar engine | Resolved — Harper (`harper-core`), embedded Rust crate, English-only v1. Replaces LanguageTool/jlink (no JVM, no download, real-time capable) |
 | Code signing certificate (Windows) | Resolved — not doing for v1; unsigned NSIS installer, SmartScreen warning accepted |
 | Auto-updater infrastructure | Resolved — `tauri-plugin-updater` + GitHub Releases; repo flips public at first release |
