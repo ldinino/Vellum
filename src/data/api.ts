@@ -2,7 +2,28 @@
 // maps them to the snake_case Rust parameters automatically.
 
 import { invoke } from "@tauri-apps/api/core";
-import type { Notebook, Page, Section, SearchFilters, SearchHit } from "./types";
+import type {
+  AppConfig,
+  GrammarSpan,
+  Notebook,
+  Page,
+  Section,
+  SearchFilters,
+  SearchHit,
+} from "./types";
+
+// --- App config (app.json) --------------------------------------------------
+
+export const getAppConfig = () => invoke<AppConfig>("get_app_config");
+
+export const saveAppConfig = (config: AppConfig) =>
+  invoke<void>("save_app_config", { config });
+
+// --- Grammar (Harper, spec Section 10) --------------------------------------
+
+/** Lint plain text; offsets are UTF-16 code units into `text`. */
+export const grammarCheck = (text: string) =>
+  invoke<GrammarSpan[]>("grammar_check", { text });
 
 // --- Notebooks (notebooks.json registry) -----------------------------------
 

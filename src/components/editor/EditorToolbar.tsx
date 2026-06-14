@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import { Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator } from "../ui/Toolbar";
+import { useVellum } from "../../state/vellum";
 import "./EditorToolbar.css";
 
 const FONTS = [
@@ -24,6 +25,7 @@ interface EditorToolbarProps {
 export function EditorToolbar({ editor, onInsertImage }: EditorToolbarProps) {
   const [linkOpen, setLinkOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { grammarEnabled, actions } = useVellum();
   if (!editor) return <Toolbar>{null}</Toolbar>;
 
   const run = (fn: () => void) => () => fn();
@@ -245,6 +247,17 @@ export function EditorToolbar({ editor, onInsertImage }: EditorToolbarProps) {
             label="Link"
             active={editor.isActive("link")}
             onClick={() => setLinkOpen((v) => !v)}
+          />
+        </ToolbarGroup>
+
+        <ToolbarSeparator />
+
+        <ToolbarGroup>
+          <ToolbarButton
+            icon="spell-check"
+            label={grammarEnabled ? "Grammar check: on" : "Grammar check: off"}
+            active={grammarEnabled}
+            onClick={() => actions.setGrammarEnabled(!grammarEnabled)}
           />
         </ToolbarGroup>
       </Toolbar>

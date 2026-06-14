@@ -1,6 +1,7 @@
 mod commands;
 mod config;
 mod db;
+mod grammar;
 mod notebook;
 mod paths;
 mod process;
@@ -56,6 +57,7 @@ pub fn run() {
             commands::save_page_image,
             commands::search,
             commands::reindex_all,
+            commands::grammar_check,
             commands::ollama_start,
             commands::ollama_stop,
             commands::ollama_status,

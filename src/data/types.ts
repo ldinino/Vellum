@@ -39,6 +39,36 @@ export interface SearchFilters {
   hasAttachment?: boolean;
 }
 
+export interface GrammarSpan {
+  /** UTF-16 offsets into the submitted text (end exclusive). */
+  start: number;
+  end: number;
+  message: string;
+  /** Lint category (e.g. "Agreement", "Spelling") — the "Ignore Rule" identifier. */
+  kind: string;
+  /** Replacement strings; an empty string means "remove". */
+  suggestions: string[];
+}
+
+/** Subset of app.json settings the frontend reads/writes in v1. */
+export interface AppSettings {
+  refineEnabled: boolean;
+  grammarEnabled: boolean;
+  spellcheckEnabled: boolean;
+  defaultFont: string;
+  defaultFontSize: number;
+  refineAdherence: number;
+  refineModelTier: string | null;
+  grammarLanguage: string;
+}
+
+/** app.json. Template arrays are passed through untouched on save. */
+export interface AppConfig {
+  settings: AppSettings;
+  pageTemplates: unknown[];
+  refineTemplates: unknown[];
+}
+
 export interface SearchHit {
   pageId: string;
   notebookId: string;

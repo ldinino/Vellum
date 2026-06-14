@@ -32,6 +32,8 @@ interface VellumState {
   /** Query whose matches the open page should highlight (set when navigating
    * from a search result); empty when not arriving from search. */
   searchHighlight: string;
+  /** Harper grammar check on/off (persisted in app.json). */
+  grammarEnabled: boolean;
   error: string | null;
 }
 
@@ -42,6 +44,7 @@ const initial: VellumState = {
   selectedSectionId: null,
   selectedPageId: null,
   searchHighlight: "",
+  grammarEnabled: false,
   error: null,
 };
 
@@ -78,6 +81,8 @@ interface VellumActions {
   ) => Promise<void>;
   deleteSection: (notebookId: string, sectionId: string) => Promise<void>;
   reorderSections: (notebookId: string, orderedIds: string[]) => Promise<void>;
+
+  setGrammarEnabled: (enabled: boolean) => Promise<void>;
 
   createPage: (notebookId: string, sectionId: string, title?: string) => Promise<void>;
   setPageTitle: (notebookId: string, pageId: string, title: string) => Promise<void>;
@@ -159,6 +164,16 @@ export function VellumProvider({ children }: { children: ReactNode }) {
   // and self-heals any drift (deletes/edits made while the app was closed).
   useEffect(() => {
     api.reindexAll().catch((e) => console.error("reindex failed", e));
+  }, []);
+
+  // Load persisted settings (grammar on/off) once on startup.
+  useEffect(() => {
+    api
+      .getAppConfig()
+      .then((cfg) =>
+        setState((s) => ({ ...s, grammarEnabled: cfg.settings.grammarEnabled })),
+      )
+      .catch((e) => console.error("load app config failed", e));
   }, []);
 
   const toggleNotebook = useCallback(
@@ -245,6 +260,20 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     selectSection,
     selectPage,
     openPage,
+
+    setGrammarEnabled: async (enabled) => {
+      // Optimistic toggle, then persist into app.json (preserving other fields).
+      setState((s) => ({ ...s, grammarEnabled: enabled }));
+      try {
+        const cfg = await api.getAppConfig();
+        await api.saveAppConfig({
+          ...cfg,
+          settings: { ...cfg.settings, grammarEnabled: enabled },
+        });
+      } catch (e) {
+        fail(e);
+      }
+    },
 
     createNotebook: async (name) => {
       try {

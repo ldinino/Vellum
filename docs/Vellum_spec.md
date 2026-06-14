@@ -294,6 +294,12 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 
 **Language:** English only in v1 (Harper is currently English-only; its core is extensible to other languages upstream). This matches the v1 language decision and removes the earlier language-pack question.
 
+> **Design note (as built):**
+> - **Dependency footprint:** `harper-core` 2.5 runs its POS tagger on a small neural model via the **Burn** ML framework (`harper-brill` → `harper-pos-utils` → `burn`). Burn is compiled in (CPU `burn-ndarray` backend — **no GPU / `wgpu` is compiled**, it's CPU-only and fully offline), but it's heavier than "tiny footprint" implies: longer Rust build, larger binary. It works and is correct; if the binary size matters more than rule quality we can revisit by pinning an older, pre-Burn `harper-core`. Flagged as an open item rather than re-litigated here.
+> - **Offsets:** the command returns **UTF-16** offsets (Harper works in Unicode scalars) so they index a JS string directly. The renderer extracts the page's plain text — newline between blocks so Harper sees sentence boundaries — while recording each text node's offset→ProseMirror-position map, then maps spans back. Verified against multi-block docs.
+> - **Decorations, not a mark:** grammar errors are ProseMirror **decorations** (never stored in the doc or the search index); the set is mapped through edits between re-checks. The check is debounced ~2s after the last keystroke and runs on a `spawn_blocking` thread (linter is cached per thread — `LintGroup` isn't `Send`).
+> - **Ignore is per app-session** (module-level sets spanning page switches): "Ignore" keys on the lint's kind + message + matched text; "Ignore Rule" keys on the lint kind.
+
 ---
 
 ### 11. Search
@@ -420,7 +426,8 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 | 1 — Navigation Shell | ✅ Complete |
 | 2 — Editor Core + Auto-Save | ✅ Complete |
 | 3 — Search | ✅ Complete |
-| 4–11 | ⬜ Not started |
+| 4 — Grammar Check | ✅ Complete |
+| 5–11 | ⬜ Not started |
 
 ---
 
@@ -495,7 +502,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 ---
 
-### Phase 4 — Grammar Check
+### Phase 4 — Grammar Check ✅
 
 **Goal:** Harper grammar underlines working in editor.
 
@@ -661,6 +668,6 @@ Phases 3, 4, 5, 6, and 7 can proceed in parallel after Phase 2 is stable.
 | App name | Undefined — placeholder throughout |
 | Model manifest (models.json) | TBD — requires testing across hardware tiers to determine viable models and thresholds |
 | System requirements | TBD — will be determined through pre-release model evaluation |
-| Grammar engine | Resolved — Harper (`harper-core`), embedded Rust crate, English-only v1. Replaces LanguageTool/jlink (no JVM, no download, real-time capable) |
+| Grammar engine | Resolved — Harper (`harper-core`), embedded Rust crate, English-only v1. Replaces LanguageTool/jlink (no JVM, no download, real-time capable). **Open:** `harper-core` 2.5 compiles the Burn ML framework (CPU-only, no GPU) for its POS tagger — heavier build/binary than expected; revisit with a pre-Burn pin if size outweighs rule quality (see Section 10 design note) |
 | Code signing certificate (Windows) | Resolved — not doing for v1; unsigned NSIS installer, SmartScreen warning accepted |
 | Auto-updater infrastructure | Resolved — `tauri-plugin-updater` + GitHub Releases; repo flips public at first release |

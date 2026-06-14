@@ -82,6 +82,15 @@
   border-radius: 2px;
 }
 
+/* Grammar underline (spec Section 10) — green wavy, distinct from Refine
+ * (purple) and WebView2's red spell-check squiggle. */
+.v-grammar-error {
+  text-decoration: underline wavy var(--grammar-underline);
+  text-decoration-skip-ink: none;
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
 /* ---- Tables ------------------------------------------------------------ */
 
 .v-prose table {

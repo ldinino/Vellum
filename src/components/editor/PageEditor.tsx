@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEditor, EditorContent, Editor } from "@tiptap/react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { buildExtensions } from "./extensions";
 import { setImageSrcResolver } from "./ResizableImage";
 import { applySearchHighlight } from "./SearchHighlight";
+import { extractText, mapLints } from "./grammar";
+import { setGrammarLints, clearGrammarLints } from "./GrammarError";
+import { GrammarPopover } from "./GrammarPopover";
 import { EditorToolbar } from "./EditorToolbar";
 import { createDebouncer } from "../../lib/debounce";
 import { useVellum } from "../../state/vellum";
@@ -33,7 +36,7 @@ export function PageEditor({
   page: Page;
   highlightQuery?: string;
 }) {
-  const { actions } = useVellum();
+  const { actions, grammarEnabled } = useVellum();
   const [title, setTitle] = useState(page.title);
   const titleRef = useRef<HTMLInputElement>(null);
   const loadingRef = useRef(true);
@@ -42,9 +45,38 @@ export function PageEditor({
   // Stable per-mount debouncers and identifiers.
   const opSaver = useMemo(() => createDebouncer(300, 1000), []);
   const snapSaver = useMemo(() => createDebouncer(3000, 5000), []);
+  // Grammar checks fire ~2s after the user stops typing (spec Section 10).
+  const grammarSaver = useMemo(() => createDebouncer(2000, 8000), []);
+  const grammarReq = useRef(0);
+  const grammarEnabledRef = useRef(grammarEnabled);
+  grammarEnabledRef.current = grammarEnabled;
   const ids = useRef({ notebookId, pageId: page.id });
   ids.current = { notebookId, pageId: page.id };
   const editorRef = useRef<Editor | null>(null);
+
+  // Extract the page text, lint it via Harper, and apply the underlines. Guards
+  // against stale results: a superseding request or an edit during the await
+  // (positions would have moved) drops the result — a re-check is already queued.
+  const runGrammar = useCallback(async () => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    if (!grammarEnabledRef.current) {
+      clearGrammarLints(ed);
+      return;
+    }
+    const reqId = ++grammarReq.current;
+    const docAtStart = ed.state.doc;
+    const extracted = extractText(docAtStart);
+    try {
+      const spans = await api.grammarCheck(extracted.text);
+      if (grammarReq.current !== reqId || ed.state.doc !== docAtStart) return;
+      setGrammarLints(ed, mapLints(spans, extracted));
+    } catch (e) {
+      console.error("grammar check failed", e);
+    }
+  }, []);
+  const runGrammarRef = useRef(runGrammar);
+  runGrammarRef.current = runGrammar;
 
   // Store an image (pasted/dropped/inserted) and embed it by relative path.
   const insertImage = async (file: File) => {
@@ -120,6 +152,9 @@ export function PageEditor({
           .then(() => actions.refreshPages())
           .catch((e) => console.error("snapshot save failed", e));
       });
+      if (grammarEnabledRef.current) {
+        grammarSaver.schedule(() => void runGrammarRef.current());
+      }
     },
   });
   editorRef.current = editor;
@@ -177,18 +212,27 @@ export function PageEditor({
     applySearchHighlight(editor, terms);
   }, [editor, contentLoaded, highlightQuery]);
 
+  // Grammar check on open and whenever the toggle flips; clear underlines off.
+  useEffect(() => {
+    if (!editor || !contentLoaded) return;
+    if (grammarEnabled) void runGrammar();
+    else clearGrammarLints(editor);
+  }, [editor, contentLoaded, grammarEnabled, runGrammar]);
+
   // Focus the title of a freshly created (untitled) page.
   useEffect(() => {
     if (page.title === "") requestAnimationFrame(() => titleRef.current?.focus());
   }, [page.id, page.title]);
 
-  // Flush pending saves on unmount (page switch / app close path).
+  // Flush pending saves on unmount (page switch / app close path); drop any
+  // pending grammar check (the editor is going away).
   useEffect(() => {
     return () => {
       opSaver.flush();
       snapSaver.flush();
+      grammarSaver.cancel();
     };
-  }, [opSaver, snapSaver]);
+  }, [opSaver, snapSaver, grammarSaver]);
 
   const commitTitle = () => {
     const trimmed = title.trim();
@@ -214,6 +258,7 @@ export function PageEditor({
         }}
       />
       <EditorContent editor={editor} className="v-editor__content" />
+      <GrammarPopover editor={editor} onAfterAction={() => void runGrammarRef.current()} />
     </div>
   );
 }

@@ -9,6 +9,7 @@ use crate::config::{self, AppConfig, NotebookMeta};
 use crate::notebook::{self, Page, Section};
 use crate::process::ollama::{self, OllamaState};
 use crate::process::ProcessStatus;
+use crate::grammar::{self, GrammarSpan};
 use crate::search::{self, SearchFilters, SearchHit};
 use crate::{db, paths};
 
@@ -629,6 +630,20 @@ pub async fn reindex_all(app: AppHandle) -> Result<(), String> {
 
     master.close().await;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Grammar (spec Section 10) — Harper, in-process
+// ---------------------------------------------------------------------------
+
+/// Lint a page's plain text and return spans (UTF-16 offsets, message, kind,
+/// suggestions). Runs on a blocking thread: linting is CPU-bound and the first
+/// call loads the embedded dictionary + POS model.
+#[tauri::command]
+pub async fn grammar_check(text: String) -> Result<Vec<GrammarSpan>, String> {
+    tauri::async_runtime::spawn_blocking(move || grammar::check(&text))
+        .await
+        .map_err(|e| format!("grammar task join error: {e}"))
 }
 
 // ---------------------------------------------------------------------------
