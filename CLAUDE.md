@@ -16,6 +16,8 @@ cargo check              # in src-tauri/ — compile-check the Rust backend
 npm run tauri build      # production build + NSIS installer
 ```
 
+For ad-hoc manual testing, `powershell scripts/dev-run.ps1` preps (resolves the repo + tools machine-independently, `npm install` if needed), builds and launches the app in its own window, then asks "Are you done?" before stopping the dev server, freeing the Vite port, and reverting any temporary edits it made (see its `TEMP CHANGES` section). `-PrepOnly` checks the environment without building.
+
 There is no test suite or linter configured yet.
 
 Dev-machine copies of the runtime binaries and styling references are fetched (not committed) via:
