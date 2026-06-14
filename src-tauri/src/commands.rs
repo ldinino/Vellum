@@ -2,6 +2,7 @@
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager};
+use tauri_plugin_opener::OpenerExt;
 
 use sqlx::{Pool, Sqlite};
 
@@ -84,6 +85,34 @@ async fn pool_for(app: &AppHandle, notebook_id: &str) -> Result<Pool<Sqlite>, St
         return Err(format!("Notebook database missing: {}", path.display()));
     }
     db::open_pool(&path, false).await
+}
+
+/// Resolve a notebook id to its on-disk folder under `Documents\Vellum`.
+fn notebook_folder(app: &AppHandle, notebook_id: &str) -> Result<std::path::PathBuf, String> {
+    let registry = config::load_registry(app)?;
+    let meta = registry
+        .notebooks
+        .iter()
+        .find(|n| n.id == notebook_id)
+        .ok_or_else(|| format!("Unknown notebook id {notebook_id}"))?;
+    paths::notebook_dir(app, &meta.folder)
+}
+
+/// Reduce a dropped file's name to a safe base filename (no path, no Windows-
+/// invalid chars), preserving a readable name + extension for display/disk.
+fn sanitize_attachment_name(name: &str) -> String {
+    const INVALID: &[char] = &['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
+    let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
+    let cleaned: String = base
+        .chars()
+        .filter(|c| !INVALID.contains(c) && !c.is_control())
+        .collect();
+    let cleaned = cleaned.trim().trim_start_matches('.').trim().to_string();
+    if cleaned.is_empty() {
+        "file".to_string()
+    } else {
+        cleaned.chars().take(150).collect()
+    }
 }
 
 #[derive(Serialize)]
@@ -415,6 +444,10 @@ pub async fn delete_page(
     pool.close().await;
     r?;
     unindex_page(&app, &page_id).await;
+    // Remove the page's attachment files (the DB rows cascade, the files don't).
+    if let Ok(dir) = notebook_folder(&app, &notebook_id) {
+        let _ = std::fs::remove_dir_all(dir.join("attachments").join(&page_id));
+    }
     Ok(())
 }
 
@@ -508,6 +541,93 @@ pub fn save_page_image(
     }
     std::fs::write(&abs, &bytes).map_err(|e| format!("write {}: {e}", abs.display()))?;
     Ok(rel)
+}
+
+// ---------------------------------------------------------------------------
+// Attachments (spec Section 12)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn list_attachments(
+    app: AppHandle,
+    notebook_id: String,
+    page_id: String,
+) -> Result<Vec<notebook::Attachment>, String> {
+    let pool = pool_for(&app, &notebook_id).await?;
+    let r = notebook::list_attachments(&pool, &page_id).await;
+    pool.close().await;
+    r
+}
+
+/// Copy a dropped file into `attachments/<page-id>/<uuid>/<name>`, record it, and
+/// reindex the page so its filename + MIME type become searchable.
+#[tauri::command]
+pub async fn add_attachment(
+    app: AppHandle,
+    notebook_id: String,
+    page_id: String,
+    filename: String,
+    bytes: Vec<u8>,
+    mime_type: Option<String>,
+) -> Result<notebook::Attachment, String> {
+    let dir = notebook_folder(&app, &notebook_id)?;
+    let safe = sanitize_attachment_name(&filename);
+    // Per-attachment uuid folder keeps the original filename intact + collision-free.
+    let rel = format!("attachments/{page_id}/{}/{safe}", uuid::Uuid::new_v4());
+    let abs = dir.join(&rel);
+    if let Some(parent) = abs.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("create {}: {e}", parent.display()))?;
+    }
+    std::fs::write(&abs, &bytes).map_err(|e| format!("write {}: {e}", abs.display()))?;
+    let size = bytes.len() as i64;
+
+    let mime = mime_type.filter(|m| !m.is_empty());
+    let pool = pool_for(&app, &notebook_id).await?;
+    let r = notebook::add_attachment(&pool, &page_id, &safe, &rel, mime.as_deref(), size).await;
+    pool.close().await;
+    let att = r?;
+
+    index_page(&app, &notebook_id, &page_id).await;
+    Ok(att)
+}
+
+#[tauri::command]
+pub async fn remove_attachment(
+    app: AppHandle,
+    notebook_id: String,
+    attachment_id: String,
+) -> Result<(), String> {
+    let pool = pool_for(&app, &notebook_id).await?;
+    let r = notebook::remove_attachment(&pool, &attachment_id).await;
+    pool.close().await;
+
+    if let Some((page_id, rel)) = r? {
+        let abs = notebook_folder(&app, &notebook_id)?.join(&rel);
+        let _ = std::fs::remove_file(&abs);
+        // The file lived in its own uuid folder; clean it up if now empty.
+        if let Some(parent) = abs.parent() {
+            let _ = std::fs::remove_dir(parent);
+        }
+        index_page(&app, &notebook_id, &page_id).await;
+    }
+    Ok(())
+}
+
+/// Open an attachment with the system default application.
+#[tauri::command]
+pub fn open_attachment(app: AppHandle, notebook_id: String, path: String) -> Result<(), String> {
+    // The path comes from our own DB, but reject traversal defensively.
+    if path.split(['/', '\\']).any(|c| c == "..") {
+        return Err("Invalid attachment path".into());
+    }
+    let abs = notebook_folder(&app, &notebook_id)?.join(&path);
+    if !abs.is_file() {
+        return Err(format!("Attachment missing: {}", abs.display()));
+    }
+    app.opener()
+        .open_path(abs.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|e| format!("open attachment: {e}"))
 }
 
 // ---------------------------------------------------------------------------

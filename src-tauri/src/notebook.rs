@@ -442,6 +442,91 @@ pub async fn save_page_snapshot(
 }
 
 // ---------------------------------------------------------------------------
+// Attachments (spec Section 12)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct Attachment {
+    pub id: String,
+    pub page_id: String,
+    pub filename: String,
+    /// Notebook-relative path (forward slashes), under `attachments/<page-id>/`.
+    pub path: String,
+    pub mime_type: Option<String>,
+    pub size: i64,
+}
+
+pub async fn list_attachments(
+    pool: &Pool<Sqlite>,
+    page_id: &str,
+) -> Result<Vec<Attachment>, String> {
+    sqlx::query_as::<_, Attachment>(
+        "SELECT id, page_id, filename, path, mime_type, size \
+         FROM attachments WHERE page_id = ?1 ORDER BY created_at",
+    )
+    .bind(page_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("list attachments: {e}"))
+}
+
+pub async fn add_attachment(
+    pool: &Pool<Sqlite>,
+    page_id: &str,
+    filename: &str,
+    rel_path: &str,
+    mime_type: Option<&str>,
+    size: i64,
+) -> Result<Attachment, String> {
+    let id = new_id();
+    sqlx::query(
+        "INSERT INTO attachments (id, page_id, filename, path, mime_type, size) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+    )
+    .bind(&id)
+    .bind(page_id)
+    .bind(filename)
+    .bind(rel_path)
+    .bind(mime_type)
+    .bind(size)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("add attachment: {e}"))?;
+    Ok(Attachment {
+        id,
+        page_id: page_id.to_string(),
+        filename: filename.to_string(),
+        path: rel_path.to_string(),
+        mime_type: mime_type.map(str::to_string),
+        size,
+    })
+}
+
+/// Delete an attachment row, returning its (page_id, relative path) so the
+/// caller can delete the file and reindex the page. None if it doesn't exist.
+pub async fn remove_attachment(
+    pool: &Pool<Sqlite>,
+    attachment_id: &str,
+) -> Result<Option<(String, String)>, String> {
+    let row: Option<(String, String)> =
+        sqlx::query_as("SELECT page_id, path FROM attachments WHERE id = ?1")
+            .bind(attachment_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| format!("read attachment: {e}"))?;
+    let Some((page_id, path)) = row else {
+        return Ok(None);
+    };
+    sqlx::query("DELETE FROM attachments WHERE id = ?1")
+        .bind(attachment_id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("delete attachment: {e}"))?;
+    Ok(Some((page_id, path)))
+}
+
+// ---------------------------------------------------------------------------
 // Search indexing (spec Section 11)
 // ---------------------------------------------------------------------------
 
@@ -506,14 +591,22 @@ pub async fn reindex_page(
         .map(crate::search::flatten_text)
         .unwrap_or_default();
 
-    let attachment_names: Vec<String> =
-        sqlx::query_scalar("SELECT filename FROM attachments WHERE page_id = ?1")
+    // Index attachment filenames + MIME types (spec Section 12).
+    let attachments: Vec<(String, Option<String>)> =
+        sqlx::query_as("SELECT filename, mime_type FROM attachments WHERE page_id = ?1")
             .bind(page_id)
             .fetch_all(pool)
             .await
             .map_err(|e| format!("reindex attachments: {e}"))?;
-    let has_attachment = !attachment_names.is_empty();
-    let attachment_names = attachment_names.join(" ");
+    let has_attachment = !attachments.is_empty();
+    let attachment_names = attachments
+        .into_iter()
+        .map(|(name, mime)| match mime {
+            Some(m) => format!("{name} {m}"),
+            None => name,
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
 
     let mut tx = pool.begin().await.map_err(|e| format!("begin reindex: {e}"))?;
     sqlx::query("DELETE FROM fts_index WHERE page_id = ?1")
@@ -633,6 +726,48 @@ mod tests {
         assert_eq!(a2.name, "A renamed");
         assert_eq!(a2.color.as_deref(), Some("#abc123"));
         assert_eq!(a2.page_template_id.as_deref(), Some("tmpl-1"));
+
+        pool.close().await;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn attachments_crud_and_indexed_in_fts() {
+        let (pool, dir) = temp_pool().await;
+        let s = create_section(&pool, "S").await.unwrap();
+        let p = create_page(&pool, &s.id, "P").await.unwrap();
+
+        let att = add_attachment(
+            &pool,
+            &p.id,
+            "quarterly-report.pdf",
+            &format!("attachments/{}/abc/quarterly-report.pdf", p.id),
+            Some("application/pdf"),
+            2048,
+        )
+        .await
+        .unwrap();
+        assert_eq!(att.size, 2048);
+
+        let listed = list_attachments(&pool, &p.id).await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].filename, "quarterly-report.pdf");
+
+        // Reindexing surfaces the filename in the per-notebook FTS index.
+        reindex_page(&pool, &p.id).await.unwrap();
+        let hits: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM fts_index WHERE fts_index MATCH 'quarterly'",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(hits, 1, "attachment filename should be searchable");
+
+        // Remove returns (page_id, path) and clears the row.
+        let removed = remove_attachment(&pool, &att.id).await.unwrap().unwrap();
+        assert_eq!(removed.0, p.id);
+        assert!(list_attachments(&pool, &p.id).await.unwrap().is_empty());
+        assert!(remove_attachment(&pool, &att.id).await.unwrap().is_none());
 
         pool.close().await;
         let _ = std::fs::remove_dir_all(&dir);

@@ -4,6 +4,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AppConfig,
+  Attachment,
   GrammarSpan,
   Notebook,
   Page,
@@ -123,6 +124,26 @@ export const savePageImage = (
   bytes: number[],
   ext: string,
 ) => invoke<string>("save_page_image", { notebookId, pageId, bytes, ext });
+
+// --- Attachments (spec Section 12) ------------------------------------------
+
+export const listAttachments = (notebookId: string, pageId: string) =>
+  invoke<Attachment[]>("list_attachments", { notebookId, pageId });
+
+export const addAttachment = (
+  notebookId: string,
+  pageId: string,
+  filename: string,
+  bytes: number[],
+  mimeType: string | null,
+) => invoke<Attachment>("add_attachment", { notebookId, pageId, filename, bytes, mimeType });
+
+export const removeAttachment = (notebookId: string, attachmentId: string) =>
+  invoke<void>("remove_attachment", { notebookId, attachmentId });
+
+/** Open an attachment with the system default app. */
+export const openAttachment = (notebookId: string, path: string) =>
+  invoke<void>("open_attachment", { notebookId, path });
 
 // --- Search (spec Section 11) -----------------------------------------------
 

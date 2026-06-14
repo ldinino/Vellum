@@ -39,6 +39,17 @@ export interface SearchFilters {
   hasAttachment?: boolean;
 }
 
+export interface Attachment {
+  id: string;
+  pageId: string;
+  filename: string;
+  /** Notebook-relative path under attachments/<page-id>/. */
+  path: string;
+  mimeType: string | null;
+  /** Bytes. */
+  size: number;
+}
+
 export interface GrammarSpan {
   /** UTF-16 offsets into the submitted text (end exclusive). */
   start: number;

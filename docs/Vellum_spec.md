@@ -352,6 +352,12 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 
 **Image files dropped on page:** Treated as inline images if dropped into the editor body; treated as attachments if dropped above the content area into the attachment bar.
 
+> **Design note (as built):**
+> - **Drop routing:** dropping on the attachment bar attaches (any type); dropping in the editor body inserts images inline and attaches everything else (you can't inline a PDF). The bar is always shown as a stable drop target — when empty it's a slim "Drag files here to attach" hint.
+> - **Storage:** each file goes in its own `attachments/<page-id>/<uuid>/<original-name>` folder, so the display name stays pristine and two files with the same name never collide. The DB row stores filename, relative path, MIME type, and byte size (size added in migration 3). Deleting a page removes its whole attachment folder (the rows cascade, the files don't).
+> - **Open:** backend `open_attachment` resolves the path under the notebook dir (rejecting `..` traversal) and launches the system default app via the opener plugin.
+> - **Search:** filename + MIME type are written into both the per-notebook and master FTS indexes on every reindex; a hit sets the result's attachment indicator.
+
 ---
 
 ### 13. Auto-Save & Crash Recovery
@@ -427,7 +433,8 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 | 2 — Editor Core + Auto-Save | ✅ Complete |
 | 3 — Search | ✅ Complete |
 | 4 — Grammar Check | ✅ Complete |
-| 5–11 | ⬜ Not started |
+| 5 — Attachments | ✅ Complete |
+| 6–11 | ⬜ Not started |
 
 ---
 
@@ -519,7 +526,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 ---
 
-### Phase 5 — Attachments
+### Phase 5 — Attachments ✅
 
 **Goal:** File attachments on pages, pinned at top, search-indexed.
 

@@ -9,16 +9,39 @@ import { extractText, mapLints } from "./grammar";
 import { setGrammarLints, clearGrammarLints } from "./GrammarError";
 import { GrammarPopover } from "./GrammarPopover";
 import { EditorToolbar } from "./EditorToolbar";
+import { AttachmentBar, AttachmentItem } from "../panels/AttachmentBar";
 import { createDebouncer } from "../../lib/debounce";
 import { useVellum } from "../../state/vellum";
 import * as api from "../../data/api";
-import type { Page } from "../../data/types";
+import type { Attachment, Page } from "../../data/types";
 import "./editor.css";
 
 const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
 
 function derivePreview(text: string): string {
   return text.replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  const units = ["KB", "MB", "GB"];
+  let v = n / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(v < 10 ? 1 : 0)} ${units[i]}`;
+}
+
+function iconForMime(mime: string | null): string {
+  if (mime?.startsWith("image/")) return "image";
+  if (mime === "text/csv" || mime?.includes("spreadsheet")) return "table";
+  return "document";
+}
+
+function toAttachmentItem(a: Attachment): AttachmentItem {
+  return { id: a.id, filename: a.filename, size: formatBytes(a.size), icon: iconForMime(a.mimeType) };
 }
 
 /**
@@ -41,6 +64,7 @@ export function PageEditor({
   const titleRef = useRef<HTMLInputElement>(null);
   const loadingRef = useRef(true);
   const [contentLoaded, setContentLoaded] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
 
   // Stable per-mount debouncers and identifiers.
   const opSaver = useMemo(() => createDebouncer(300, 1000), []);
@@ -93,6 +117,22 @@ export function PageEditor({
     }
   };
 
+  // Copy one or more files into the page's attachments and pin them to the bar.
+  // Relies only on ids.current + the stable setter, so it's safe to close over
+  // from the editor's drop handler.
+  const attachFiles = async (files: FileList | File[]) => {
+    const { notebookId, pageId } = ids.current;
+    for (const file of Array.from(files)) {
+      try {
+        const bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+        const att = await api.addAttachment(notebookId, pageId, file.name, bytes, file.type || null);
+        setAttachments((prev) => [...prev, att]);
+      } catch (e) {
+        console.error("attach failed", e);
+      }
+    }
+  };
+
   const editor = useEditor({
     extensions: buildExtensions(),
     editorProps: {
@@ -123,17 +163,18 @@ export function PageEditor({
         return false;
       },
       handleDrop: (_view, event) => {
+        // Files dropped into the editor body: images go inline, everything else
+        // becomes an attachment (spec Section 12).
         const files = (event as DragEvent).dataTransfer?.files;
-        if (files) {
-          for (const f of files) {
-            if (f.type.startsWith("image/")) {
-              event.preventDefault();
-              void insertImage(f);
-              return true;
-            }
-          }
+        if (!files || files.length === 0) return false;
+        event.preventDefault();
+        const toAttach: File[] = [];
+        for (const f of Array.from(files)) {
+          if (f.type.startsWith("image/")) void insertImage(f);
+          else toAttach.push(f);
         }
-        return false;
+        if (toAttach.length) void attachFiles(toAttach);
+        return true;
       },
     },
     onUpdate: ({ editor }) => {
@@ -234,14 +275,54 @@ export function PageEditor({
     };
   }, [opSaver, snapSaver, grammarSaver]);
 
+  // Load this page's attachments.
+  useEffect(() => {
+    let active = true;
+    api
+      .listAttachments(notebookId, page.id)
+      .then((a) => active && setAttachments(a))
+      .catch((e) => console.error("list attachments failed", e));
+    return () => {
+      active = false;
+    };
+  }, [notebookId, page.id]);
+
+  const openAttachment = (id: string) => {
+    const a = attachments.find((x) => x.id === id);
+    if (a) {
+      api.openAttachment(ids.current.notebookId, a.path).catch((e) =>
+        console.error("open attachment failed", e),
+      );
+    }
+  };
+
+  const removeAttachment = (id: string) => {
+    api
+      .removeAttachment(ids.current.notebookId, id)
+      .then(() => setAttachments((prev) => prev.filter((x) => x.id !== id)))
+      .catch((e) => console.error("remove attachment failed", e));
+  };
+
   const commitTitle = () => {
     const trimmed = title.trim();
     if (trimmed !== page.title) actions.setPageTitle(notebookId, page.id, trimmed);
   };
 
   return (
-    <div className="v-editor">
+    <div
+      className="v-editor"
+      // Catch-all so a file dropped on a dead zone (padding, title) doesn't make
+      // the webview navigate to it; the bar and editor body handle real drops.
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => e.preventDefault()}
+    >
       <EditorToolbar editor={editor} onInsertImage={insertImage} />
+      <AttachmentBar
+        attachments={attachments.map(toAttachmentItem)}
+        onOpen={openAttachment}
+        onRemove={removeAttachment}
+        onAttachFiles={attachFiles}
+      />
       <input
         ref={titleRef}
         className="v-editor__title"

@@ -8,6 +8,23 @@
   border-bottom: 1px solid var(--border-default);
 }
 
+/* Empty state is a slimmer, muted drop hint. */
+.v-attachbar--empty {
+  padding: var(--space-1) var(--space-3);
+  background: var(--surface-panel);
+}
+
+.v-attachbar--dragover {
+  background: var(--gradient-hover);
+  box-shadow: inset 0 0 0 2px var(--hover-border);
+}
+
+.v-attachbar__hint {
+  font-size: var(--text-size-small);
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 .v-attachbar__label {
   display: inline-flex;
   padding-right: var(--space-2);

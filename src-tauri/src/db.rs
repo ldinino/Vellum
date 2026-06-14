@@ -82,6 +82,10 @@ const MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE pages ADD COLUMN preview TEXT NOT NULL DEFAULT '';
     "#,
+    // 3: attachment byte size, for the attachment-bar display (spec Section 12).
+    r#"
+    ALTER TABLE attachments ADD COLUMN size INTEGER NOT NULL DEFAULT 0;
+    "#,
 ];
 
 /// Open a single-connection pool to a notebook DB with foreign keys on and
