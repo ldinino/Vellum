@@ -92,6 +92,23 @@
   background: var(--gradient-hover);
 }
 
+.v-search__settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--gradient-button);
+  cursor: pointer;
+}
+
+.v-search__settings:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
+}
+
 /* ---- Filter panel ------------------------------------------------------- */
 
 .v-search__filters {

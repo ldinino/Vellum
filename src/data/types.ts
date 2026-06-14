@@ -73,10 +73,20 @@ export interface AppSettings {
   grammarLanguage: string;
 }
 
-/** app.json. Template arrays are passed through untouched on save. */
+/** A page template (spec Section 7) — a pre-formatted Tiptap doc, stored in app.json. */
+export interface PageTemplate {
+  id: string;
+  name: string;
+  /** Tiptap document JSON. */
+  contentJson: unknown;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** app.json. refineTemplates is passed through untouched until Phase 7. */
 export interface AppConfig {
   settings: AppSettings;
-  pageTemplates: unknown[];
+  pageTemplates: PageTemplate[];
   refineTemplates: unknown[];
 }
 

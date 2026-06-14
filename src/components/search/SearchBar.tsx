@@ -61,7 +61,7 @@ function formatDate(iso: string) {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString();
 }
 
-export function SearchBar() {
+export function SearchBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { notebooks, actions } = useVellum();
 
   const [query, setQuery] = useState("");
@@ -214,6 +214,16 @@ export function SearchBar() {
           aria-expanded={filterOpen}
         >
           Filters{filterCount > 0 ? ` (${filterCount})` : ""}
+        </button>
+
+        <button
+          type="button"
+          className="v-search__settings"
+          title="Settings"
+          aria-label="Settings"
+          onClick={onOpenSettings}
+        >
+          <Icon name="gear" />
         </button>
       </div>
 

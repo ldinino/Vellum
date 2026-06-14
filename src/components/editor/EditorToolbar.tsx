@@ -20,9 +20,15 @@ const SIZES = ["10", "11", "12", "14", "16", "18", "24", "36"];
 interface EditorToolbarProps {
   editor: Editor | null;
   onInsertImage: (file: File) => void;
+  /** Show the grammar on/off toggle (off in the template editor). */
+  showGrammarToggle?: boolean;
 }
 
-export function EditorToolbar({ editor, onInsertImage }: EditorToolbarProps) {
+export function EditorToolbar({
+  editor,
+  onInsertImage,
+  showGrammarToggle = true,
+}: EditorToolbarProps) {
   const [linkOpen, setLinkOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { grammarEnabled, actions } = useVellum();
@@ -250,16 +256,19 @@ export function EditorToolbar({ editor, onInsertImage }: EditorToolbarProps) {
           />
         </ToolbarGroup>
 
-        <ToolbarSeparator />
-
-        <ToolbarGroup>
-          <ToolbarButton
-            icon="spell-check"
-            label={grammarEnabled ? "Grammar check: on" : "Grammar check: off"}
-            active={grammarEnabled}
-            onClick={() => actions.setGrammarEnabled(!grammarEnabled)}
-          />
-        </ToolbarGroup>
+        {showGrammarToggle && (
+          <>
+            <ToolbarSeparator />
+            <ToolbarGroup>
+              <ToolbarButton
+                icon="spell-check"
+                label={grammarEnabled ? "Grammar check: on" : "Grammar check: off"}
+                active={grammarEnabled}
+                onClick={() => actions.setGrammarEnabled(!grammarEnabled)}
+              />
+            </ToolbarGroup>
+          </>
+        )}
       </Toolbar>
 
       <input

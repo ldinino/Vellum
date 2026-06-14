@@ -15,7 +15,7 @@ import {
   useState,
 } from "react";
 import * as api from "../data/api";
-import type { Notebook, Page, Section } from "../data/types";
+import type { Notebook, Page, PageTemplate, Section } from "../data/types";
 
 export interface TreeNotebook extends Notebook {
   expanded: boolean;
@@ -34,6 +34,8 @@ interface VellumState {
   searchHighlight: string;
   /** Harper grammar check on/off (persisted in app.json). */
   grammarEnabled: boolean;
+  /** Page template library (app.json). */
+  pageTemplates: PageTemplate[];
   error: string | null;
 }
 
@@ -45,6 +47,7 @@ const initial: VellumState = {
   selectedPageId: null,
   searchHighlight: "",
   grammarEnabled: false,
+  pageTemplates: [],
   error: null,
 };
 
@@ -83,6 +86,8 @@ interface VellumActions {
   reorderSections: (notebookId: string, orderedIds: string[]) => Promise<void>;
 
   setGrammarEnabled: (enabled: boolean) => Promise<void>;
+  /** Persist the page-template library to app.json. */
+  savePageTemplates: (templates: PageTemplate[]) => Promise<void>;
 
   createPage: (notebookId: string, sectionId: string, title?: string) => Promise<void>;
   setPageTitle: (notebookId: string, pageId: string, title: string) => Promise<void>;
@@ -166,12 +171,16 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     api.reindexAll().catch((e) => console.error("reindex failed", e));
   }, []);
 
-  // Load persisted settings (grammar on/off) once on startup.
+  // Load persisted app config (grammar on/off, page templates) once on startup.
   useEffect(() => {
     api
       .getAppConfig()
       .then((cfg) =>
-        setState((s) => ({ ...s, grammarEnabled: cfg.settings.grammarEnabled })),
+        setState((s) => ({
+          ...s,
+          grammarEnabled: cfg.settings.grammarEnabled,
+          pageTemplates: cfg.pageTemplates ?? [],
+        })),
       )
       .catch((e) => console.error("load app config failed", e));
   }, []);
@@ -270,6 +279,16 @@ export function VellumProvider({ children }: { children: ReactNode }) {
           ...cfg,
           settings: { ...cfg.settings, grammarEnabled: enabled },
         });
+      } catch (e) {
+        fail(e);
+      }
+    },
+    savePageTemplates: async (templates) => {
+      // Optimistic, then persist into app.json (preserving other fields).
+      setState((s) => ({ ...s, pageTemplates: templates }));
+      try {
+        const cfg = await api.getAppConfig();
+        await api.saveAppConfig({ ...cfg, pageTemplates: templates });
       } catch (e) {
         fail(e);
       }

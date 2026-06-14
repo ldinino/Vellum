@@ -14,21 +14,23 @@ interface Props {
 
 /**
  * Section Properties (spec Section 5 / Phase 1). The page-template dropdown is
- * present but only offers "None" until the template library exists (Phase 6).
+ * populated from the app-level template library (spec Section 7 / Phase 6).
  */
 export function SectionPropertiesModal({ notebookId, sectionId, open, onClose }: Props) {
-  const { notebooks, actions } = useVellum();
+  const { notebooks, pageTemplates, actions } = useVellum();
   const section = notebooks
     .find((n) => n.id === notebookId)
     ?.sections?.find((s) => s.id === sectionId);
 
   const [name, setName] = useState("");
   const [color, setColor] = useState<string | null>(null);
+  const [templateId, setTemplateId] = useState<string | null>(null);
 
   useEffect(() => {
     if (open && section) {
       setName(section.name);
       setColor(section.color);
+      setTemplateId(section.pageTemplateId);
     }
   }, [open, section]);
 
@@ -37,7 +39,7 @@ export function SectionPropertiesModal({ notebookId, sectionId, open, onClose }:
   const save = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    actions.updateSection(notebookId, sectionId, trimmed, color, section.pageTemplateId);
+    actions.updateSection(notebookId, sectionId, trimmed, color, templateId);
     onClose();
   };
 
@@ -100,11 +102,19 @@ export function SectionPropertiesModal({ notebookId, sectionId, open, onClose }:
 
         <label className="v-secprops__field">
           <span>New Page Template</span>
-          <select value="none" disabled>
-            <option value="none">None</option>
+          <select
+            value={templateId ?? ""}
+            onChange={(e) => setTemplateId(e.target.value || null)}
+          >
+            <option value="">None</option>
+            {pageTemplates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
           </select>
           <small className="v-secprops__hint">
-            Page templates arrive in a later phase.
+            New pages in this section start from the chosen template.
           </small>
         </label>
       </div>

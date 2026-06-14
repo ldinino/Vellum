@@ -180,6 +180,8 @@ Page templates are pre-formatted Tiptap documents that are automatically inserte
 - If the section has no template: new page opens blank.
 - If the section has a template: the template's content_json is copied into the new page's content. The template itself is not modified.
 
+> **Design note (as built):** apply-on-create happens in the backend `create_page` command — it reads the section's `page_template_id`, loads that template from app.json, and writes its content_json as the new page's first snapshot (so the editor loads it on open). A blank section writes no snapshot, so the page opens empty. The library + editor live in a **Settings** dialog (reached via the gear in the top bar); Phase 6 implements its Templates section (left-nav shell ready for Phase 8 to add General/Editor/Grammar/Refine/About). The template editor reuses the page editor's toolbar (minus the global grammar toggle); edits are committed with Save / thrown away with Discard.
+
 ---
 
 ### 8. Refine Templates
@@ -434,7 +436,8 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 | 3 — Search | ✅ Complete |
 | 4 — Grammar Check | ✅ Complete |
 | 5 — Attachments | ✅ Complete |
-| 6–11 | ⬜ Not started |
+| 6 — Page Templates | ✅ Complete |
+| 7–11 | ⬜ Not started |
 
 ---
 
@@ -541,7 +544,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 ---
 
-### Phase 6 — Page Templates
+### Phase 6 — Page Templates ✅
 
 **Goal:** Page template library and per-section assignment working.
 

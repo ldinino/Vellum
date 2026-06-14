@@ -1,0 +1,49 @@
+/* Settings dialog shell: left tab nav + content panel. */
+
+.v-settings {
+  display: flex;
+  height: 70vh;
+  min-height: 360px;
+  margin: calc(var(--space-3) * -1);
+}
+
+.v-settings__nav {
+  flex: 0 0 170px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2);
+  background: var(--surface-panel);
+  border-right: 1px solid var(--border-default);
+}
+
+.v-settings__tab {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.v-settings__tab:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
+}
+
+.v-settings__tab.is-active {
+  border-color: var(--selected-border);
+  background: var(--selected-fill);
+  font-weight: 600;
+}
+
+.v-settings__panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+}

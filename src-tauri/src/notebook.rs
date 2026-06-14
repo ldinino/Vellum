@@ -136,6 +136,21 @@ pub async fn delete_section(pool: &Pool<Sqlite>, id: &str) -> Result<Vec<String>
     Ok(page_ids)
 }
 
+/// The page-template id assigned to a section (spec Section 7), if any.
+pub async fn section_template_id(
+    pool: &Pool<Sqlite>,
+    section_id: &str,
+) -> Result<Option<String>, String> {
+    sqlx::query_scalar::<_, Option<String>>(
+        "SELECT page_template_id FROM sections WHERE id = ?1",
+    )
+    .bind(section_id)
+    .fetch_optional(pool)
+    .await
+    .map(Option::flatten)
+    .map_err(|e| format!("section template id: {e}"))
+}
+
 pub async fn reorder_sections(pool: &Pool<Sqlite>, ordered_ids: &[String]) -> Result<(), String> {
     let mut tx = pool.begin().await.map_err(|e| format!("begin reorder: {e}"))?;
     for (order, id) in ordered_ids.iter().enumerate() {

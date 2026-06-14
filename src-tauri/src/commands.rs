@@ -405,6 +405,19 @@ pub async fn list_pages(
     r
 }
 
+/// Page-template content (serialized doc JSON + a preview) for a template id, or
+/// None if it's missing or not a usable document (spec Section 7).
+fn template_content(app: &AppHandle, template_id: &str) -> Option<(String, String)> {
+    let cfg = config::load_app_config(app).ok()?;
+    let tmpl = cfg.page_templates.iter().find(|t| t.id == template_id)?;
+    if !tmpl.content_json.is_object() {
+        return None;
+    }
+    let json = serde_json::to_string(&tmpl.content_json).ok()?;
+    let preview: String = crate::search::flatten_text(&json).chars().take(120).collect();
+    Some((json, preview))
+}
+
 #[tauri::command]
 pub async fn create_page(
     app: AppHandle,
@@ -413,9 +426,34 @@ pub async fn create_page(
     title: String,
 ) -> Result<Page, String> {
     let pool = pool_for(&app, &notebook_id).await?;
-    let r = notebook::create_page(&pool, &section_id, &title).await;
+    let page = match notebook::create_page(&pool, &section_id, &title).await {
+        Ok(p) => p,
+        Err(e) => {
+            pool.close().await;
+            return Err(e);
+        }
+    };
+
+    // If the section has a page template, seed the new page with its content.
+    // The template itself is never modified (we copy its JSON).
+    let template = notebook::section_template_id(&pool, &section_id)
+        .await
+        .ok()
+        .flatten()
+        .and_then(|tid| template_content(&app, &tid));
+    let applied = if let Some((json, preview)) = template {
+        notebook::save_page_snapshot(&pool, &page.id, &json, &preview)
+            .await
+            .is_ok()
+    } else {
+        false
+    };
     pool.close().await;
-    r
+
+    if applied {
+        index_page(&app, &notebook_id, &page.id).await;
+    }
+    Ok(page)
 }
 
 #[tauri::command]

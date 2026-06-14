@@ -4,6 +4,7 @@ import { PageList } from "./panels/PageList";
 import { EditorArea } from "./panels/EditorArea";
 import { SectionPropertiesModal } from "./panels/SectionPropertiesModal";
 import { SearchBar } from "./search/SearchBar";
+import { SettingsModal } from "./settings/SettingsModal";
 import { useVellum } from "../state/vellum";
 import { Icon } from "./ui/Icon";
 import "./VellumShell.css";
@@ -14,10 +15,11 @@ export function VellumShell() {
   const [secProps, setSecProps] = useState<{ notebookId: string; sectionId: string } | null>(
     null,
   );
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   return (
     <div className="v-shell">
-      <SearchBar />
+      <SearchBar onOpenSettings={() => setSettingsOpen(true)} />
       {error && (
         <div className="v-shell__error" role="alert">
           <Icon name="exclamation" />
@@ -45,6 +47,8 @@ export function VellumShell() {
           onClose={() => setSecProps(null)}
         />
       )}
+
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }
