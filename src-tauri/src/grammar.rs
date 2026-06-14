@@ -1,6 +1,6 @@
 //! Grammar checking via Harper (`harper-core`), compiled in-process (spec
-//! Section 10). No JVM, no server, no download — the curated dictionary and the
-//! rule set are embedded in the binary.
+//! Section 10). No separate runtime, no server, no download — the curated
+//! dictionary and the rule set are embedded in the binary.
 //!
 //! The renderer sends the current page's plain text; we return lint spans the
 //! frontend maps back onto ProseMirror positions. Offsets are returned in

@@ -18,7 +18,7 @@ A desktop note-taking application modeled on the layout and UX feel of Microsoft
 | Frontend | React | |
 | Rich text | Tiptap (free/MIT tier) | Built on ProseMirror |
 | Storage | SQLite (per-notebook) | WAL mode, FTS5 for search |
-| Grammar | Harper (`harper-core`) | Rust crate, compiled in-process — no JRE, no server, no download |
+| Grammar | Harper (`harper-core`) | Rust crate, compiled in-process — no server, no download |
 | LLM inference | Ollama (downloaded on demand) | Custom port 11435, custom model path |
 | Styling | Bespoke CSS component library | No framework — retro aesthetic requires hand-built components |
 
@@ -275,14 +275,14 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 
 ### 10. Grammar Check
 
-**Engine:** [Harper](https://writewithharper.com/) (`harper-core`), an offline, Rust-native grammar checker (Apache-2.0). It is compiled directly into the Tauri backend — no Java, no separate server, no on-demand download. Its dictionary is embedded in the binary, so grammar check is available immediately on first launch and works fully offline.
+**Engine:** [Harper](https://writewithharper.com/) (`harper-core`), an offline, Rust-native grammar checker (Apache-2.0). It is compiled directly into the Tauri backend — no separate server, no on-demand download. Its dictionary is embedded in the binary, so grammar check is available immediately on first launch and works fully offline.
 
-**Why Harper over LanguageTool:** Harper lints in milliseconds with a tiny memory footprint (built for keystroke-speed feedback), which is exactly what real-time, Word-style underlining needs. LanguageTool requires a JVM, gigabytes of RAM, and a large n-gram dataset to reach comparable quality, and is too slow for live linting without a heavyweight background server. Harper trades exhaustive rule coverage for speed, privacy, and zero-dependency embedding — the right balance for a notes app.
+**Why Harper:** It lints in milliseconds and is built for keystroke-speed feedback, which is exactly what real-time, Word-style underlining needs. It runs in-process with no background service and no model to fetch, keeping the app self-contained and private — the right balance for a notes app.
 
 **Integration:**
 - `harper-core` is a backend dependency. The renderer sends the current page's plain text to a Rust command (debounced); the backend returns spans (offset, length, suggestion, rule description).
 - No process lifecycle, no port, no component download to manage (contrast Ollama in Section 3).
-- Runs entirely in-process on every platform (Windows, Mac, Linux) with no host runtime required.
+- Runs entirely in-process on every platform (Windows, Mac, Linux) with no separate runtime required.
 
 **UI behavior:**
 - Grammar errors underlined in a distinct color (separate from Refine suggestions and spell check).
@@ -295,7 +295,7 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 **Language:** English only in v1 (Harper is currently English-only; its core is extensible to other languages upstream). This matches the v1 language decision and removes the earlier language-pack question.
 
 > **Design note (as built):**
-> - **Dependency footprint:** `harper-core` 2.5 runs its POS tagger on a small neural model via the **Burn** ML framework (`harper-brill` → `harper-pos-utils` → `burn`). Burn is compiled in (CPU `burn-ndarray` backend — **no GPU / `wgpu` is compiled**, it's CPU-only and fully offline), but it's heavier than "tiny footprint" implies: longer Rust build, larger binary. It works and is correct; if the binary size matters more than rule quality we can revisit by pinning an older, pre-Burn `harper-core`. Flagged as an open item rather than re-litigated here.
+> - **Dependency footprint (decided):** `harper-core` 2.5 runs its POS tagger on a small neural model via the **Burn** ML framework (`harper-brill` → `harper-pos-utils` → `burn`), compiled in on the CPU `burn-ndarray` backend — **no GPU / `wgpu` is compiled**, fully offline. This adds a few MB to the binary and some Rust build time, which we accept: grammar quality is what users feel, a slightly larger binary is not. No revisit planned.
 > - **Offsets:** the command returns **UTF-16** offsets (Harper works in Unicode scalars) so they index a JS string directly. The renderer extracts the page's plain text — newline between blocks so Harper sees sentence boundaries — while recording each text node's offset→ProseMirror-position map, then maps spans back. Verified against multi-block docs.
 > - **Decorations, not a mark:** grammar errors are ProseMirror **decorations** (never stored in the doc or the search index); the set is mapped through edits between re-checks. The check is debounced ~2s after the last keystroke and runs on a `spawn_blocking` thread (linter is cached per thread — `LintGroup` isn't `Send`).
 > - **Ignore is per app-session** (module-level sets spanning page switches): "Ignore" keys on the lint's kind + message + matched text; "Ignore Rule" keys on the lint kind.
@@ -515,7 +515,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 - Per-session "Ignore Rule" set so dismissed rules stay quiet
 - Settings toggle: grammar check on/off
 
-**Exit criteria:** Grammar errors underline in real time as the user types, no perceptible lag. Accept/ignore/ignore-rule flows work. Fully offline; no host runtime, no download. Phase no longer blocks on Java or a CI jlink build.
+**Exit criteria:** Grammar errors underline in real time as the user types, no perceptible lag. Accept/ignore/ignore-rule flows work. Fully offline — no separate runtime, no download.
 
 ---
 
@@ -668,6 +668,6 @@ Phases 3, 4, 5, 6, and 7 can proceed in parallel after Phase 2 is stable.
 | App name | Undefined — placeholder throughout |
 | Model manifest (models.json) | TBD — requires testing across hardware tiers to determine viable models and thresholds |
 | System requirements | TBD — will be determined through pre-release model evaluation |
-| Grammar engine | Resolved — Harper (`harper-core`), embedded Rust crate, English-only v1. Replaces LanguageTool/jlink (no JVM, no download, real-time capable). **Open:** `harper-core` 2.5 compiles the Burn ML framework (CPU-only, no GPU) for its POS tagger — heavier build/binary than expected; revisit with a pre-Burn pin if size outweighs rule quality (see Section 10 design note) |
+| Grammar engine | Resolved — Harper (`harper-core`), embedded Rust crate, English-only v1. Compiled in-process; real-time, fully offline, no separate runtime or download. (Pulls in the Burn ML framework on a CPU backend for its POS tagger — a few MB accepted in exchange for grammar quality; see Section 10 design note) |
 | Code signing certificate (Windows) | Resolved — not doing for v1; unsigned NSIS installer, SmartScreen warning accepted |
 | Auto-updater infrastructure | Resolved — `tauri-plugin-updater` + GitHub Releases; repo flips public at first release |
