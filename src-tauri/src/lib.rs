@@ -24,6 +24,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .manage(OllamaState::default())
         .manage(refine::logbuf::LogBuffer::default())
+        .manage(refine::runtime::InstallState::default())
         .setup(|app| {
             paths::ensure_data_layout(&app.handle().clone())?;
             Ok(())
@@ -70,6 +71,10 @@ pub fn run() {
             commands::refine_get_manifest,
             commands::refine_detect_hardware,
             commands::refine_ollama_log,
+            commands::refine_runtime_status,
+            commands::refine_install_runtime,
+            commands::refine_cancel_install,
+            commands::refine_pull_model,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

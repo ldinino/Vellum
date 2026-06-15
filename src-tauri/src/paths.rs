@@ -24,6 +24,13 @@ pub fn runtime_dir(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(local.join("Vellum").join("runtime"))
 }
 
+/// Root for the downloaded Ollama component: `runtime\ollama`. Each pinned
+/// version installs into a `<version>\` subdir (newest wins; see
+/// `process::ollama::resolve_binary`).
+pub fn ollama_component_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(runtime_dir(app)?.join("ollama"))
+}
+
 pub fn app_json_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(data_dir(app)?.join("app.json"))
 }

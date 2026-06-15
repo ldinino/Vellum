@@ -17,6 +17,10 @@ use crate::{config, paths};
 
 pub const OLLAMA_PORT: u16 = 11435;
 
+/// Returned when no Ollama binary is installed yet (nor a dev vendor copy). The
+/// renderer matches on this to route the user to the runtime download flow.
+pub const ERR_RUNTIME_NOT_INSTALLED: &str = "Ollama runtime component is not installed";
+
 #[derive(Default)]
 pub struct OllamaState(pub Mutex<Option<ManagedChild>>);
 
@@ -45,7 +49,7 @@ fn resolve_binary(app: &AppHandle) -> Result<PathBuf, String> {
         }
     }
 
-    Err("Ollama runtime component is not installed".into())
+    Err(ERR_RUNTIME_NOT_INSTALLED.into())
 }
 
 fn exe_name() -> &'static str {

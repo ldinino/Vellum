@@ -910,6 +910,36 @@ pub fn refine_ollama_log(app: AppHandle) -> Result<Vec<String>, String> {
     Ok(app.state::<crate::refine::logbuf::LogBuffer>().snapshot())
 }
 
+/// Whether the pinned Ollama runtime is installed under %LOCALAPPDATA%.
+#[tauri::command]
+pub fn refine_runtime_status(
+    app: AppHandle,
+) -> Result<crate::refine::runtime::RuntimeStatus, String> {
+    crate::refine::runtime::runtime_status(&app)
+}
+
+/// Download + SHA-256 verify + extract the pinned Ollama runtime (idempotent).
+/// Emits `refine://runtime-progress`.
+#[tauri::command]
+pub async fn refine_install_runtime(
+    app: AppHandle,
+) -> Result<crate::refine::runtime::RuntimeStatus, String> {
+    crate::refine::runtime::install_runtime(app).await
+}
+
+/// Request cancellation of an in-progress runtime download.
+#[tauri::command]
+pub fn refine_cancel_install(app: AppHandle) -> Result<(), String> {
+    crate::refine::runtime::cancel_install(&app);
+    Ok(())
+}
+
+/// Pull a model via the running Ollama daemon. Emits `refine://model-progress`.
+#[tauri::command]
+pub async fn refine_pull_model(app: AppHandle, model: String) -> Result<(), String> {
+    crate::refine::models::pull_model(app, model).await
+}
+
 /// Detect RAM + GPUs and recommend a model tier. Runs on a blocking thread:
 /// DXGI enumeration uses COM and sysinfo reads the OS.
 #[tauri::command]

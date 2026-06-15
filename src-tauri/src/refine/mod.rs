@@ -8,6 +8,8 @@
 pub mod hardware;
 pub mod logbuf;
 pub mod manifest;
+pub mod models;
+pub mod runtime;
 
 /// Tauri event channels. Payloads are serde camelCase; the renderer subscribes
 /// via `@tauri-apps/api/event`. Best-effort — a dropped progress event must
