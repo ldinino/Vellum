@@ -56,6 +56,52 @@ async fn index_page_inner(app: &AppHandle, notebook_id: &str, page_id: &str) -> 
     r
 }
 
+/// Re-mirror a set of a notebook's pages into the master index. Used after a
+/// rename, where a denormalized breadcrumb (`section_name` / `notebook_name`)
+/// changed but the page content didn't. Best effort: failures are logged.
+async fn reindex_pages(app: &AppHandle, notebook_id: &str, page_ids: &[String]) {
+    if page_ids.is_empty() {
+        return;
+    }
+    for pid in page_ids {
+        index_page(app, notebook_id, pid).await;
+    }
+}
+
+/// Reindex every page in a section (its `section_name` is denormalized into the
+/// master search rows, so a section rename must refresh them).
+async fn reindex_section(app: &AppHandle, notebook_id: &str, section_id: &str) {
+    let ids = match pool_for(app, notebook_id).await {
+        Ok(pool) => {
+            let r = notebook::section_page_ids(&pool, section_id).await;
+            pool.close().await;
+            r
+        }
+        Err(e) => Err(e),
+    };
+    match ids {
+        Ok(ids) => reindex_pages(app, notebook_id, &ids).await,
+        Err(e) => eprintln!("reindex_section {section_id}: {e}"),
+    }
+}
+
+/// Reindex every page in a notebook (its `notebook_name` is denormalized into the
+/// master search rows, so a notebook rename must refresh them).
+async fn reindex_notebook(app: &AppHandle, notebook_id: &str) {
+    let ids = match pool_for(app, notebook_id).await {
+        Ok(pool) => {
+            let r = notebook::all_page_ids(&pool).await;
+            pool.close().await;
+            r
+        }
+        Err(e) => Err(e),
+    };
+    match ids {
+        Ok(ids) => reindex_pages(app, notebook_id, &ids).await,
+        Err(e) => eprintln!("reindex_notebook {notebook_id}: {e}"),
+    }
+}
+
 /// Drop a page's row from the master index (used on delete, where the
 /// per-notebook row is already gone with the page).
 async fn unindex_page(app: &AppHandle, page_id: &str) {
@@ -163,28 +209,28 @@ pub async fn create_notebook(app: AppHandle, name: String) -> Result<NotebookMet
     if trimmed.is_empty() {
         return Err("Notebook name cannot be empty".into());
     }
-    let folder = paths::sanitize_folder_name(trimmed)
-        .ok_or_else(|| "Notebook name contains no usable characters".to_string())?;
 
     let mut registry = config::load_registry(&app)?;
-    if registry
-        .notebooks
-        .iter()
-        .any(|n| n.folder.eq_ignore_ascii_case(&folder))
-    {
-        return Err(format!("A notebook folder named \"{folder}\" already exists"));
-    }
 
-    let dir = paths::notebook_dir(&app, &folder)?;
+    // The folder is the notebook's id (a UUID), not its display name: display
+    // names can repeat freely, and a rename never has to move a OneDrive-synced
+    // database. UUIDs don't collide, so there's no "already exists" rejection.
+    let id = uuid::Uuid::new_v4().to_string();
+    let dir = paths::notebook_dir(&app, &id)?;
     std::fs::create_dir_all(dir.join("attachments"))
         .map_err(|e| format!("create {}: {e}", dir.display()))?;
 
-    db::create_or_migrate(&dir.join("notebook.db")).await?;
+    // Past this point the folder exists; on any failure roll it back so a failed
+    // create can't leave an orphaned directory behind.
+    if let Err(e) = db::create_or_migrate(&dir.join("notebook.db")).await {
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err(e);
+    }
 
     let meta = NotebookMeta {
-        id: uuid::Uuid::new_v4().to_string(),
+        id: id.clone(),
         name: trimmed.to_string(),
-        folder,
+        folder: id,
         color: None,
         sort_order: registry
             .notebooks
@@ -195,7 +241,10 @@ pub async fn create_notebook(app: AppHandle, name: String) -> Result<NotebookMet
         created_at: chrono::Utc::now().to_rfc3339(),
     };
     registry.notebooks.push(meta.clone());
-    config::save_registry(&app, &registry)?;
+    if let Err(e) = config::save_registry(&app, &registry) {
+        let _ = std::fs::remove_dir_all(&dir);
+        return Err(e);
+    }
     Ok(meta)
 }
 
@@ -227,7 +276,7 @@ pub async fn open_notebook(app: AppHandle, notebook_id: String) -> Result<String
 /// Rename a notebook (display name only). The folder name stays fixed so we
 /// never move a OneDrive-synced database; `name` and `folder` may diverge.
 #[tauri::command]
-pub fn rename_notebook(app: AppHandle, notebook_id: String, name: String) -> Result<NotebookMeta, String> {
+pub async fn rename_notebook(app: AppHandle, notebook_id: String, name: String) -> Result<NotebookMeta, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err("Notebook name cannot be empty".into());
@@ -241,6 +290,8 @@ pub fn rename_notebook(app: AppHandle, notebook_id: String, name: String) -> Res
     meta.name = trimmed.to_string();
     let updated = meta.clone();
     config::save_registry(&app, &registry)?;
+    // The notebook name is denormalized into every page's search breadcrumb.
+    reindex_notebook(&app, &notebook_id).await;
     Ok(updated)
 }
 
@@ -339,7 +390,10 @@ pub async fn rename_section(
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::rename_section(&pool, &section_id, &name).await;
     pool.close().await;
-    r
+    r?;
+    // The section name is denormalized into search breadcrumbs — refresh them.
+    reindex_section(&app, &notebook_id, &section_id).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -354,7 +408,10 @@ pub async fn update_section(
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::update_section(&pool, &section_id, &name, color, page_template_id).await;
     pool.close().await;
-    r
+    r?;
+    // A rename via Properties changes the denormalized search breadcrumb.
+    reindex_section(&app, &notebook_id, &section_id).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -484,7 +541,12 @@ pub async fn delete_page(
     unindex_page(&app, &page_id).await;
     // Remove the page's attachment files (the DB rows cascade, the files don't).
     if let Ok(dir) = notebook_folder(&app, &notebook_id) {
-        let _ = std::fs::remove_dir_all(dir.join("attachments").join(&page_id));
+        let att = dir.join("attachments").join(&page_id);
+        if att.is_dir() {
+            if let Err(e) = std::fs::remove_dir_all(&att) {
+                eprintln!("delete_page: remove attachments {}: {e}", att.display());
+            }
+        }
     }
     Ok(())
 }

@@ -568,6 +568,16 @@ pub async fn all_page_ids(pool: &Pool<Sqlite>) -> Result<Vec<String>, String> {
         .map_err(|e| format!("all page ids: {e}"))
 }
 
+/// Page ids in one section (for reindexing after a section rename, whose name is
+/// denormalized into every page's search row).
+pub async fn section_page_ids(pool: &Pool<Sqlite>, section_id: &str) -> Result<Vec<String>, String> {
+    sqlx::query_scalar("SELECT id FROM pages WHERE section_id = ?1")
+        .bind(section_id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("section page ids: {e}"))
+}
+
 /// Rebuild a page's row in the per-notebook `fts_index` from its current title,
 /// content snapshot, and attachment filenames, and return the data needed to
 /// mirror it into the master index. `None` if the page no longer exists.

@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { useEditorState } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
 import { Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator } from "../ui/Toolbar";
 import { useVellum } from "../../state/vellum";
@@ -32,7 +33,51 @@ export function EditorToolbar({
   const [linkOpen, setLinkOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { grammarEnabled, actions } = useVellum();
-  if (!editor) return <Toolbar>{null}</Toolbar>;
+
+  // Tiptap v3's `useEditor` no longer re-renders on every transaction, so the
+  // toolbar must subscribe explicitly to keep active states / select values in
+  // sync with the caret. The selector is deep-compared, so it only re-renders
+  // when one of these derived values actually changes.
+  const s = useEditorState({
+    editor,
+    selector: ({ editor }) => {
+      if (!editor) return null;
+      const style = editor.getAttributes("textStyle");
+      return {
+        bold: editor.isActive("bold"),
+        italic: editor.isActive("italic"),
+        underline: editor.isActive("underline"),
+        strike: editor.isActive("strike"),
+        headings: {
+          1: editor.isActive("heading", { level: 1 }),
+          2: editor.isActive("heading", { level: 2 }),
+          3: editor.isActive("heading", { level: 3 }),
+          4: editor.isActive("heading", { level: 4 }),
+        } as Record<1 | 2 | 3 | 4, boolean>,
+        fontFamily: (style.fontFamily as string | undefined) ?? "",
+        fontSize: ((style.fontSize as string | undefined) ?? "").replace("px", ""),
+        color: (style.color as string | undefined) ?? "#000000",
+        highlight: (editor.getAttributes("highlight").color as string | undefined) ?? "#ffe600",
+        alignLeft: editor.isActive({ textAlign: "left" }),
+        alignCenter: editor.isActive({ textAlign: "center" }),
+        alignRight: editor.isActive({ textAlign: "right" }),
+        alignJustify: editor.isActive({ textAlign: "justify" }),
+        superscript: editor.isActive("superscript"),
+        subscript: editor.isActive("subscript"),
+        bulletList: editor.isActive("bulletList"),
+        orderedList: editor.isActive("orderedList"),
+        blockquote: editor.isActive("blockquote"),
+        codeBlock: editor.isActive("codeBlock"),
+        link: editor.isActive("link"),
+        canAddRow: editor.can().addRowAfter(),
+        canDeleteRow: editor.can().deleteRow(),
+        canAddColumn: editor.can().addColumnAfter(),
+        canDeleteColumn: editor.can().deleteColumn(),
+      };
+    },
+  });
+
+  if (!editor || !s) return <Toolbar>{null}</Toolbar>;
 
   const run = (fn: () => void) => () => fn();
 
@@ -43,25 +88,25 @@ export function EditorToolbar({
           <ToolbarButton
             icon="edit-bold"
             label="Bold (Ctrl+B)"
-            active={editor.isActive("bold")}
+            active={s.bold}
             onClick={run(() => editor.chain().focus().toggleBold().run())}
           />
           <ToolbarButton
             icon="edit-italic"
             label="Italic (Ctrl+I)"
-            active={editor.isActive("italic")}
+            active={s.italic}
             onClick={run(() => editor.chain().focus().toggleItalic().run())}
           />
           <ToolbarButton
             icon="edit-underline"
             label="Underline (Ctrl+U)"
-            active={editor.isActive("underline")}
+            active={s.underline}
             onClick={run(() => editor.chain().focus().toggleUnderline().run())}
           />
           <ToolbarButton
             icon="edit-strike"
             label="Strikethrough"
-            active={editor.isActive("strike")}
+            active={s.strike}
             onClick={run(() => editor.chain().focus().toggleStrike().run())}
           />
         </ToolbarGroup>
@@ -74,7 +119,7 @@ export function EditorToolbar({
               key={level}
               icon={`edit-heading-${level}`}
               label={`Heading ${level}`}
-              active={editor.isActive("heading", { level })}
+              active={s.headings[level]}
               onClick={run(() => editor.chain().focus().toggleHeading({ level }).run())}
             />
           ))}
@@ -86,7 +131,7 @@ export function EditorToolbar({
           <select
             className="v-editortoolbar__select"
             title="Font"
-            value={editor.getAttributes("textStyle").fontFamily ?? ""}
+            value={s.fontFamily}
             onChange={(e) => {
               const v = e.target.value;
               if (v) editor.chain().focus().setFontFamily(v).run();
@@ -103,7 +148,7 @@ export function EditorToolbar({
           <select
             className="v-editortoolbar__select v-editortoolbar__select--size"
             title="Font size"
-            value={(editor.getAttributes("textStyle").fontSize ?? "").replace("px", "")}
+            value={s.fontSize}
             onChange={(e) => {
               const v = e.target.value;
               if (v) editor.chain().focus().setFontSize(`${v}px`).run();
@@ -118,20 +163,18 @@ export function EditorToolbar({
             ))}
           </select>
           <label className="v-editortoolbar__color" title="Text color">
-            <span style={{ color: editor.getAttributes("textStyle").color ?? "#000" }}>A</span>
+            <span style={{ color: s.color }}>A</span>
             <input
               type="color"
-              value={editor.getAttributes("textStyle").color ?? "#000000"}
+              value={s.color}
               onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
             />
           </label>
           <label className="v-editortoolbar__color v-editortoolbar__color--hl" title="Highlight">
-            <span
-              style={{ background: editor.getAttributes("highlight").color ?? "#ffe600" }}
-            />
+            <span style={{ background: s.highlight }} />
             <input
               type="color"
-              value={editor.getAttributes("highlight").color ?? "#ffe600"}
+              value={s.highlight}
               onChange={(e) =>
                 editor.chain().focus().setHighlight({ color: e.target.value }).run()
               }
@@ -145,25 +188,25 @@ export function EditorToolbar({
           <ToolbarButton
             icon="edit-alignment"
             label="Align left"
-            active={editor.isActive({ textAlign: "left" })}
+            active={s.alignLeft}
             onClick={run(() => editor.chain().focus().setTextAlign("left").run())}
           />
           <ToolbarButton
             icon="edit-alignment-center"
             label="Align center"
-            active={editor.isActive({ textAlign: "center" })}
+            active={s.alignCenter}
             onClick={run(() => editor.chain().focus().setTextAlign("center").run())}
           />
           <ToolbarButton
             icon="edit-alignment-right"
             label="Align right"
-            active={editor.isActive({ textAlign: "right" })}
+            active={s.alignRight}
             onClick={run(() => editor.chain().focus().setTextAlign("right").run())}
           />
           <ToolbarButton
             icon="edit-alignment-justify"
             label="Justify"
-            active={editor.isActive({ textAlign: "justify" })}
+            active={s.alignJustify}
             onClick={run(() => editor.chain().focus().setTextAlign("justify").run())}
           />
         </ToolbarGroup>
@@ -174,13 +217,13 @@ export function EditorToolbar({
           <ToolbarButton
             icon="edit-superscript"
             label="Superscript"
-            active={editor.isActive("superscript")}
+            active={s.superscript}
             onClick={run(() => editor.chain().focus().toggleSuperscript().run())}
           />
           <ToolbarButton
             icon="edit-subscript"
             label="Subscript"
-            active={editor.isActive("subscript")}
+            active={s.subscript}
             onClick={run(() => editor.chain().focus().toggleSubscript().run())}
           />
           <ToolbarButton
@@ -196,25 +239,25 @@ export function EditorToolbar({
           <ToolbarButton
             icon="edit-list"
             label="Bullet list"
-            active={editor.isActive("bulletList")}
+            active={s.bulletList}
             onClick={run(() => editor.chain().focus().toggleBulletList().run())}
           />
           <ToolbarButton
             icon="edit-list-order"
             label="Numbered list"
-            active={editor.isActive("orderedList")}
+            active={s.orderedList}
             onClick={run(() => editor.chain().focus().toggleOrderedList().run())}
           />
           <ToolbarButton
             icon="edit-quotation"
             label="Blockquote"
-            active={editor.isActive("blockquote")}
+            active={s.blockquote}
             onClick={run(() => editor.chain().focus().toggleBlockquote().run())}
           />
           <ToolbarButton
             icon="edit-code"
             label="Code block"
-            active={editor.isActive("codeBlock")}
+            active={s.codeBlock}
             onClick={run(() => editor.chain().focus().toggleCodeBlock().run())}
           />
           <ToolbarButton
@@ -234,10 +277,10 @@ export function EditorToolbar({
               editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
             )}
           />
-          <ToolbarButton icon="table-insert-row" label="Add row below" disabled={!editor.can().addRowAfter()} onClick={run(() => editor.chain().focus().addRowAfter().run())} />
-          <ToolbarButton icon="table-delete-row" label="Delete row" disabled={!editor.can().deleteRow()} onClick={run(() => editor.chain().focus().deleteRow().run())} />
-          <ToolbarButton icon="table-insert-column" label="Add column after" disabled={!editor.can().addColumnAfter()} onClick={run(() => editor.chain().focus().addColumnAfter().run())} />
-          <ToolbarButton icon="table-delete-column" label="Delete column" disabled={!editor.can().deleteColumn()} onClick={run(() => editor.chain().focus().deleteColumn().run())} />
+          <ToolbarButton icon="table-insert-row" label="Add row below" disabled={!s.canAddRow} onClick={run(() => editor.chain().focus().addRowAfter().run())} />
+          <ToolbarButton icon="table-delete-row" label="Delete row" disabled={!s.canDeleteRow} onClick={run(() => editor.chain().focus().deleteRow().run())} />
+          <ToolbarButton icon="table-insert-column" label="Add column after" disabled={!s.canAddColumn} onClick={run(() => editor.chain().focus().addColumnAfter().run())} />
+          <ToolbarButton icon="table-delete-column" label="Delete column" disabled={!s.canDeleteColumn} onClick={run(() => editor.chain().focus().deleteColumn().run())} />
         </ToolbarGroup>
 
         <ToolbarSeparator />
@@ -251,7 +294,7 @@ export function EditorToolbar({
           <ToolbarButton
             icon="chain"
             label="Link"
-            active={editor.isActive("link")}
+            active={s.link}
             onClick={() => setLinkOpen((v) => !v)}
           />
         </ToolbarGroup>

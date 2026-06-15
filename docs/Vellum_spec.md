@@ -646,6 +646,14 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 - In-app updates: `tauri-plugin-updater` against GitHub Releases (`tauri-action` builds, signs with local minisign key, uploads artifacts + `latest.json`)
 - Runtime component download flows: failure, retry, disk-full, and offline behavior verified for the Ollama component
 
+> **Deferred from the Phase 0–6 debug pass (known issues, intentionally not fixed earlier):**
+> A debug pass after Phase 6 fixed the felt/correctness bugs (toolbar reactivity, duplicate-notebook creation via UUID folders, the section color menu wiping its page template, and stale search breadcrumbs on rename) and deferred the following hardening items to here:
+> - **Atomic notebook create/delete.** `create_notebook` now rolls back its folder on failure, but `delete_notebook` (`src-tauri/src/commands.rs`) still removes the registry entry *before* the folder, so a failed `remove_dir_all` (file locked / OneDrive sync) leaves an orphaned folder with no registry entry. Make create/delete fully transactional (or add an orphan-folder sweep on startup). Folders are now UUID-named, so an orphan no longer blocks creation — it just leaks disk.
+> - **App-close save-flush guarantee.** `Debouncer.flush()` ([src/lib/debounce.ts]) dispatches the async IPC save without awaiting it; the `PageEditor` unmount cleanup returns immediately. Page *switches* are safe (Tauri invokes complete after unmount), but window teardown can drop an in-flight save — up to ~1s of edits (mostly covered by the 300ms `page_ops` checkpoint). Make the close path await pending saves. Fold into "Crash recovery: systematic testing of crash at various save states."
+> - **FTS5 punctuation-only query guard.** `fts_query` (`src-tauri/src/search.rs`) quotes tokens (so operators are literal), but a token with no alphanumerics (e.g. searching just `*` or `.`) yields an empty FTS phrase and a query error surfaced to the user. Drop alphanumeric-empty tokens, or catch and treat the error as "no results."
+> - **Attachment size backfill.** Migration 3 added `attachments.size` with `DEFAULT 0`; rows written before it show `0 B`. Backfill from on-disk file sizes (cosmetic only).
+> - **Title not committed on programmatic page switch.** `commitTitle` fires on input blur/Enter; a page switch that doesn't blur the title input (e.g. keyboard/programmatic navigation) can drop an uncommitted title edit. Commit the title in the `PageEditor` unmount cleanup.
+
 **Exit criteria:** No data loss scenarios. Background processes are robust. Installer runs cleanly on a clean Windows 10 VM.
 
 ---

@@ -56,27 +56,3 @@ pub fn vendor_bin_dir() -> Option<PathBuf> {
         .join("bin");
     dir.is_dir().then_some(dir)
 }
-
-/// Turn a user-facing notebook name into a safe Windows folder name.
-/// Returns None if nothing usable remains.
-pub fn sanitize_folder_name(name: &str) -> Option<String> {
-    const INVALID: &[char] = &['<', '>', ':', '"', '/', '\\', '|', '?', '*'];
-    let cleaned: String = name
-        .chars()
-        .filter(|c| !INVALID.contains(c) && !c.is_control())
-        .collect();
-    let cleaned = cleaned.trim().trim_end_matches('.').trim().to_string();
-    if cleaned.is_empty() {
-        return None;
-    }
-    // Reserved device names on Windows (CON, PRN, AUX, NUL, COM1-9, LPT1-9).
-    let upper = cleaned.to_uppercase();
-    let reserved = matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL")
-        || (upper.len() == 4
-            && (upper.starts_with("COM") || upper.starts_with("LPT"))
-            && upper.ends_with(|c: char| c.is_ascii_digit()));
-    if reserved {
-        return Some(format!("{cleaned}_"));
-    }
-    Some(cleaned)
-}

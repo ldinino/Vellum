@@ -80,6 +80,7 @@ export function NavPanel({ onOpenSectionProperties }: { onOpenSectionProperties:
     sectionId: string,
     name: string,
     color: string | null,
+    pageTemplateId: string | null,
   ): MenuItem[] => [
     {
       label: "Add Page",
@@ -90,8 +91,10 @@ export function NavPanel({ onOpenSectionProperties }: { onOpenSectionProperties:
     {
       label: "Change color",
       icon: "edit-color",
+      // Preserve the section's page-template assignment — update_section writes
+      // every column, so passing null here would silently clear it.
       submenu: colorSubmenu(color, (c) =>
-        actions.updateSection(nbId, sectionId, name, c, null),
+        actions.updateSection(nbId, sectionId, name, c, pageTemplateId),
       ),
     },
     {
@@ -233,7 +236,7 @@ export function NavPanel({ onOpenSectionProperties }: { onOpenSectionProperties:
                   }}
                   tabIndex={0}
                   onContextMenu={(e) =>
-                    openMenu(e, sectionMenu(nb.id, s.id, s.name, s.color))
+                    openMenu(e, sectionMenu(nb.id, s.id, s.name, s.color, s.pageTemplateId))
                   }
                 >
                   <span
