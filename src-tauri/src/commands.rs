@@ -902,3 +902,14 @@ pub fn ollama_status(app: AppHandle) -> Result<ProcessStatus, String> {
 pub fn refine_get_manifest(app: AppHandle) -> Result<crate::refine::manifest::Manifest, String> {
     crate::refine::manifest::load_manifest(&app)
 }
+
+/// Detect RAM + GPUs and recommend a model tier. Runs on a blocking thread:
+/// DXGI enumeration uses COM and sysinfo reads the OS.
+#[tauri::command]
+pub async fn refine_detect_hardware(
+    app: AppHandle,
+) -> Result<crate::refine::hardware::DetectedHardware, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::refine::hardware::detect(&app))
+        .await
+        .map_err(|e| format!("hardware detect task join error: {e}"))?
+}

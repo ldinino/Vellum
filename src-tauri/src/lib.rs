@@ -67,6 +67,7 @@ pub fn run() {
             commands::ollama_stop,
             commands::ollama_status,
             commands::refine_get_manifest,
+            commands::refine_detect_hardware,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

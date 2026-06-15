@@ -5,6 +5,7 @@
 //! hardware detection + tier mapping, the runtime download/verify/install, model
 //! pulling, and the debug-panel inference path.
 
+pub mod hardware;
 pub mod manifest;
 
 /// Tauri event channels. Payloads are serde camelCase; the renderer subscribes
