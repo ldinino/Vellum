@@ -23,6 +23,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(OllamaState::default())
+        .manage(refine::logbuf::LogBuffer::default())
         .setup(|app| {
             paths::ensure_data_layout(&app.handle().clone())?;
             Ok(())
@@ -68,6 +69,7 @@ pub fn run() {
             commands::ollama_status,
             commands::refine_get_manifest,
             commands::refine_detect_hardware,
+            commands::refine_ollama_log,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

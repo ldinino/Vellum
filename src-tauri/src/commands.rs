@@ -903,6 +903,13 @@ pub fn refine_get_manifest(app: AppHandle) -> Result<crate::refine::manifest::Ma
     crate::refine::manifest::load_manifest(&app)
 }
 
+/// Snapshot of Ollama's recent stderr for the debug panel (spec Section 9).
+/// Live lines also arrive on the `refine://ollama-log` event.
+#[tauri::command]
+pub fn refine_ollama_log(app: AppHandle) -> Result<Vec<String>, String> {
+    Ok(app.state::<crate::refine::logbuf::LogBuffer>().snapshot())
+}
+
 /// Detect RAM + GPUs and recommend a model tier. Runs on a blocking thread:
 /// DXGI enumeration uses COM and sysinfo reads the OS.
 #[tauri::command]

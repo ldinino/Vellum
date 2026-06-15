@@ -8,9 +8,11 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter, Manager};
 
-use super::{ManagedChild, ProcessStatus};
+use super::{ManagedChild, LogSink, ProcessStatus};
+use crate::refine::events;
+use crate::refine::logbuf::{LogBuffer, LogLine};
 use crate::{config, paths};
 
 pub const OLLAMA_PORT: u16 = 11435;
@@ -83,7 +85,17 @@ pub fn start(app: &AppHandle, state: &OllamaState) -> Result<ProcessStatus, Stri
         .env("OLLAMA_HOST", format!("127.0.0.1:{OLLAMA_PORT}"))
         .env("OLLAMA_MODELS", &models_dir);
 
-    let child = ManagedChild::spawn(cmd)?;
+    // Capture stderr into the ring buffer and tail it via an event, for the
+    // debug panel (spec Section 9). Fresh buffer per serve session.
+    let buffer = app.state::<LogBuffer>().inner().clone();
+    buffer.clear();
+    let app_for_log = app.clone();
+    let sink: LogSink = Box::new(move |line: String| {
+        buffer.push(line.clone());
+        let _ = app_for_log.emit(events::OLLAMA_LOG, LogLine { line });
+    });
+
+    let child = ManagedChild::spawn_with_stderr(cmd, Some(sink))?;
     let pid = child.pid;
     *guard = Some(child);
     drop(guard);
