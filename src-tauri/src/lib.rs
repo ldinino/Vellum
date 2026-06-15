@@ -5,6 +5,7 @@ mod grammar;
 mod notebook;
 mod paths;
 mod process;
+mod refine;
 mod search;
 
 use process::ollama::{self, OllamaState};
@@ -65,6 +66,7 @@ pub fn run() {
             commands::ollama_start,
             commands::ollama_stop,
             commands::ollama_status,
+            commands::refine_get_manifest,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

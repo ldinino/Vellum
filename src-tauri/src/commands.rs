@@ -890,3 +890,15 @@ pub fn ollama_stop(app: AppHandle) -> Result<ProcessStatus, String> {
 pub fn ollama_status(app: AppHandle) -> Result<ProcessStatus, String> {
     ollama::status(&app.state::<OllamaState>())
 }
+
+// ---------------------------------------------------------------------------
+// Refine infrastructure (spec Sections 8, 9) — Phase 7
+// ---------------------------------------------------------------------------
+
+/// The bundled model manifest: pinned Ollama runtime + tier→model defaults +
+/// hardware thresholds. The renderer reads it to populate the model-tier
+/// selector and to know which model a tier pulls.
+#[tauri::command]
+pub fn refine_get_manifest(app: AppHandle) -> Result<crate::refine::manifest::Manifest, String> {
+    crate::refine::manifest::load_manifest(&app)
+}

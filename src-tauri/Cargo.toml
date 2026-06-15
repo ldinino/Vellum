@@ -34,7 +34,26 @@ sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 harper-core = "2.5.0"
+# Phase 7 (Refine infrastructure). All already resolved transitively at these
+# versions in Cargo.lock, so adding them is additive and must NOT move `time`
+# off 0.3.47 (re-pin with `cargo update time --precise 0.3.47` if it drifts).
+#   - reqwest: rustls-tls (matches the in-tree rustls node; no native-tls/OpenSSL)
+#   - zip: default features OFF — the default set pulls `time`; we only need deflate
+tokio = { version = "1", features = ["rt", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
+futures-util = "0.3"
+sha2 = "0.10"
+zip = { version = "8", default-features = false, features = ["deflate"] }
+sysinfo = { version = "0.36", default-features = false, features = ["system"] }
+
+# DXGI hardware detection is Windows-only; never compiled on macOS/Linux CI.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Dxgi",
+  "Win32_Graphics_Dxgi_Common",
+] }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["macros", "rt"] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
 
