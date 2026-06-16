@@ -940,6 +940,44 @@ pub async fn refine_pull_model(app: AppHandle, model: String) -> Result<(), Stri
     crate::refine::models::pull_model(app, model).await
 }
 
+/// Persist the Refine on/off setting and start/stop Ollama accordingly. When
+/// enabling before the runtime is installed, this is a no-op start (the install
+/// flow handles fetching it), so toggling on never errors.
+#[tauri::command]
+pub async fn refine_enable(app: AppHandle, enabled: bool) -> Result<ProcessStatus, String> {
+    let mut cfg = config::load_app_config(&app)?;
+    cfg.settings.refine_enabled = enabled;
+    config::save_app_config(&app, &cfg)?;
+
+    if !enabled {
+        return ollama::stop(&app.state::<OllamaState>());
+    }
+
+    let app2 = app.clone();
+    let started = tauri::async_runtime::spawn_blocking(move || {
+        let state = app2.state::<OllamaState>();
+        ollama::start(&app2, &state)
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?;
+    match started {
+        Ok(status) => Ok(status),
+        // Not installed yet — leave it for the download flow.
+        Err(e) if e == ollama::ERR_RUNTIME_NOT_INSTALLED => Ok(ProcessStatus::default()),
+        Err(e) => Err(e),
+    }
+}
+
+/// Debug panel (spec Section 9): run one /api/generate with arbitrary model and
+/// parameters; returns the raw request/response and latency (TTFT + total).
+#[tauri::command]
+pub async fn refine_debug_generate(
+    app: AppHandle,
+    req: crate::refine::inference::DebugGenerateRequest,
+) -> Result<crate::refine::inference::DebugGenerateResult, String> {
+    crate::refine::inference::debug_generate(app, req).await
+}
+
 /// Detect RAM + GPUs and recommend a model tier. Runs on a blocking thread:
 /// DXGI enumeration uses COM and sysinfo reads the OS.
 #[tauri::command]

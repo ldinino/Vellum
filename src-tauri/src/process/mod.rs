@@ -26,11 +26,6 @@ pub struct ProcessStatus {
 }
 
 impl ManagedChild {
-    /// Spawn hidden with all stdio discarded.
-    pub fn spawn(command: Command) -> Result<Self, String> {
-        Self::spawn_with_stderr(command, None)
-    }
-
     /// Spawn hidden. When `on_line` is `Some`, stderr is piped and each line is
     /// delivered to the callback on a detached reader thread (the thread ends at
     /// EOF when the child dies). With `None`, stderr is discarded — identical to

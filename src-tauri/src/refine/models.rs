@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 
 use super::events;
+use super::ndjson::take_lines;
 use crate::process::ollama::{self, OllamaState, OLLAMA_PORT};
 
 #[derive(Debug, Clone, Serialize)]
@@ -103,22 +104,6 @@ pub async fn pull_model(app: AppHandle, model: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Drain complete newline-terminated lines from `buf`, leaving any partial tail.
-fn take_lines(buf: &mut Vec<u8>) -> Vec<Vec<u8>> {
-    let mut lines = Vec::new();
-    while let Some(pos) = buf.iter().position(|&b| b == b'\n') {
-        let mut line: Vec<u8> = buf.drain(..=pos).collect();
-        line.pop(); // drop '\n'
-        if line.last() == Some(&b'\r') {
-            line.pop();
-        }
-        if !line.is_empty() {
-            lines.push(line);
-        }
-    }
-    lines
-}
-
 fn parse_line(line: &[u8]) -> Result<Option<PullLine>, String> {
     if line.iter().all(|b| b.is_ascii_whitespace()) {
         return Ok(None);
@@ -131,30 +116,6 @@ fn parse_line(line: &[u8]) -> Result<Option<PullLine>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn take_lines_handles_chunk_boundaries() {
-        let mut buf = Vec::new();
-        buf.extend_from_slice(b"{\"a\":1}\n{\"b\":2}\n{\"c\"");
-        let lines = take_lines(&mut buf);
-        assert_eq!(lines.len(), 2);
-        assert_eq!(buf, b"{\"c\""); // partial tail retained
-
-        buf.extend_from_slice(b":3}\n");
-        let more = take_lines(&mut buf);
-        assert_eq!(more.len(), 1);
-        assert_eq!(more[0], b"{\"c\":3}");
-        assert!(buf.is_empty());
-    }
-
-    #[test]
-    fn take_lines_strips_crlf_and_skips_blanks() {
-        let mut buf = b"{\"x\":1}\r\n\n{\"y\":2}\n".to_vec();
-        let lines = take_lines(&mut buf);
-        assert_eq!(lines.len(), 2);
-        assert_eq!(lines[0], b"{\"x\":1}");
-        assert_eq!(lines[1], b"{\"y\":2}");
-    }
 
     #[test]
     fn parse_line_reads_progress_and_errors() {

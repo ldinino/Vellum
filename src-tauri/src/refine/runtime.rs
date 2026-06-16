@@ -26,7 +26,6 @@ use tauri::{AppHandle, Emitter, Manager};
 use super::events;
 use super::manifest;
 use crate::paths;
-use crate::process::ollama;
 
 const MAX_ATTEMPTS: u32 = 3;
 
@@ -410,7 +409,7 @@ fn emit(app: &AppHandle, p: RuntimeProgress) {
     let _ = app.emit(events::RUNTIME_PROGRESS, p);
 }
 
-/// Removes its directory on drop unless the install moved everything out. Cheap
+/// Removes its directory on drop. Cheap
 /// insurance against leaving multi-hundred-MB partials behind on any error path.
 struct PartialCleanup(PathBuf);
 impl Drop for PartialCleanup {
@@ -418,9 +417,6 @@ impl Drop for PartialCleanup {
         let _ = std::fs::remove_dir_all(&self.0);
     }
 }
-
-// re-exported sentinel for callers that need to detect "not installed".
-pub use ollama::ERR_RUNTIME_NOT_INSTALLED;
 
 #[cfg(test)]
 mod tests {

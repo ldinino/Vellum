@@ -6,9 +6,11 @@
 //! pulling, and the debug-panel inference path.
 
 pub mod hardware;
+pub mod inference;
 pub mod logbuf;
 pub mod manifest;
 pub mod models;
+pub mod ndjson;
 pub mod runtime;
 
 /// Tauri event channels. Payloads are serde camelCase; the renderer subscribes

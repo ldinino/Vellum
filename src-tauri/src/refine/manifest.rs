@@ -56,16 +56,6 @@ pub struct Thresholds {
     pub integrated_balanced_min_ram_bytes: u64,
 }
 
-impl Manifest {
-    /// Ollama model id for a tier ("Fast"|"Balanced"|"Thorough"), if defined.
-    pub fn model_for_tier(&self, tier: &str) -> Option<&str> {
-        self.tiers
-            .iter()
-            .find(|t| t.id.eq_ignore_ascii_case(tier))
-            .map(|t| t.model.as_str())
-    }
-}
-
 /// Resolve and parse the manifest (override → bundled resource → debug source).
 pub fn load_manifest(app: &AppHandle) -> Result<Manifest, String> {
     let path = resolve_path(app)?;
@@ -119,10 +109,10 @@ mod tests {
         assert_eq!(m.schema_version, 1);
         assert!(m.ollama.url.contains(&m.ollama.version));
         assert_eq!(m.ollama.sha256.len(), 64, "sha256 is 64 hex chars");
-        assert_eq!(m.model_for_tier("Fast"), Some("llama3.2:3b"));
-        assert_eq!(m.model_for_tier("balanced"), Some("qwen2.5:7b")); // case-insensitive
-        assert_eq!(m.model_for_tier("Thorough"), Some("gemma2:27b"));
-        assert_eq!(m.model_for_tier("nope"), None);
+        let model = |id: &str| m.tiers.iter().find(|t| t.id == id).map(|t| t.model.as_str());
+        assert_eq!(model("Fast"), Some("llama3.2:3b"));
+        assert_eq!(model("Balanced"), Some("qwen2.5:7b"));
+        assert_eq!(model("Thorough"), Some("gemma2:27b"));
         let t = &m.thresholds;
         assert!(t.discrete_thorough_min_vram_bytes > t.discrete_balanced_min_vram_bytes);
         assert!(t.discrete_balanced_min_vram_bytes > t.discrete_min_vram_bytes);
