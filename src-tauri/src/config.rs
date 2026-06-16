@@ -35,6 +35,9 @@ pub struct AppSettings {
     /// Fast | Balanced | Thorough; None until first-run detection picks one.
     pub refine_model_tier: Option<String>,
     pub grammar_language: String,
+    /// Cleared until the user completes the first-run setup screen (spec
+    /// Section 9 / Phase 7).
+    pub first_run_complete: bool,
 }
 
 impl Default for AppSettings {
@@ -48,6 +51,7 @@ impl Default for AppSettings {
             refine_adherence: 0.5,
             refine_model_tier: None,
             grammar_language: "en-US".into(),
+            first_run_complete: false,
         }
     }
 }

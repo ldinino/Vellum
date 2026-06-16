@@ -5,6 +5,7 @@ import { EditorArea } from "./panels/EditorArea";
 import { SectionPropertiesModal } from "./panels/SectionPropertiesModal";
 import { SearchBar } from "./search/SearchBar";
 import { SettingsModal } from "./settings/SettingsModal";
+import { FirstRunModal } from "./settings/FirstRunModal";
 import { useVellum } from "../state/vellum";
 import { Icon } from "./ui/Icon";
 import "./VellumShell.css";
@@ -49,6 +50,7 @@ export function VellumShell() {
       )}
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <FirstRunModal />
     </div>
   );
 }

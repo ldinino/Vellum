@@ -15,7 +15,13 @@ import {
   useState,
 } from "react";
 import * as api from "../data/api";
-import type { Notebook, Page, PageTemplate, Section } from "../data/types";
+import type {
+  Notebook,
+  Page,
+  PageTemplate,
+  RefineTemplate,
+  Section,
+} from "../data/types";
 
 export interface TreeNotebook extends Notebook {
   expanded: boolean;
@@ -36,6 +42,16 @@ interface VellumState {
   grammarEnabled: boolean;
   /** Page template library (app.json). */
   pageTemplates: PageTemplate[];
+  /** Refine settings + library (app.json; spec Sections 8, 9). */
+  refineEnabled: boolean;
+  refineAdherence: number;
+  refineModelTier: string | null;
+  refineTemplates: RefineTemplate[];
+  /** Whether first-run setup has been completed (gates the setup screen). */
+  firstRunComplete: boolean;
+  /** False until app.json has been read once, so the first-run screen doesn't
+   * flash before we know whether setup is already done. */
+  configLoaded: boolean;
   error: string | null;
 }
 
@@ -48,6 +64,12 @@ const initial: VellumState = {
   searchHighlight: "",
   grammarEnabled: false,
   pageTemplates: [],
+  refineEnabled: false,
+  refineAdherence: 0.5,
+  refineModelTier: null,
+  refineTemplates: [],
+  firstRunComplete: false,
+  configLoaded: false,
   error: null,
 };
 
@@ -88,6 +110,15 @@ interface VellumActions {
   setGrammarEnabled: (enabled: boolean) => Promise<void>;
   /** Persist the page-template library to app.json. */
   savePageTemplates: (templates: PageTemplate[]) => Promise<void>;
+
+  /** Toggle Refine: persists the setting and starts/stops Ollama (backend). */
+  setRefineEnabled: (enabled: boolean) => Promise<void>;
+  setRefineAdherence: (value: number) => Promise<void>;
+  setRefineModelTier: (tier: string | null) => Promise<void>;
+  /** Persist the Refine template library to app.json. */
+  saveRefineTemplates: (templates: RefineTemplate[]) => Promise<void>;
+  /** Mark first-run setup done (optionally also persisting the chosen tier). */
+  completeFirstRun: (tier: string | null) => Promise<void>;
 
   createPage: (notebookId: string, sectionId: string, title?: string) => Promise<void>;
   setPageTitle: (notebookId: string, pageId: string, title: string) => Promise<void>;
@@ -171,7 +202,7 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     api.reindexAll().catch((e) => console.error("reindex failed", e));
   }, []);
 
-  // Load persisted app config (grammar on/off, page templates) once on startup.
+  // Load persisted app config (grammar, templates, Refine) once on startup.
   useEffect(() => {
     api
       .getAppConfig()
@@ -180,9 +211,19 @@ export function VellumProvider({ children }: { children: ReactNode }) {
           ...s,
           grammarEnabled: cfg.settings.grammarEnabled,
           pageTemplates: cfg.pageTemplates ?? [],
+          refineEnabled: cfg.settings.refineEnabled,
+          refineAdherence: cfg.settings.refineAdherence,
+          refineModelTier: cfg.settings.refineModelTier,
+          refineTemplates: cfg.refineTemplates ?? [],
+          firstRunComplete: cfg.settings.firstRunComplete,
+          configLoaded: true,
         })),
       )
-      .catch((e) => console.error("load app config failed", e));
+      .catch((e) => {
+        console.error("load app config failed", e);
+        // Don't trap the app behind a never-loading first-run gate.
+        setState((s) => ({ ...s, configLoaded: true }));
+      });
   }, []);
 
   const toggleNotebook = useCallback(
@@ -289,6 +330,71 @@ export function VellumProvider({ children }: { children: ReactNode }) {
       try {
         const cfg = await api.getAppConfig();
         await api.saveAppConfig({ ...cfg, pageTemplates: templates });
+      } catch (e) {
+        fail(e);
+      }
+    },
+
+    setRefineEnabled: async (enabled) => {
+      // refine_enable persists the setting AND starts/stops Ollama on the
+      // backend, so we don't write app.json here ourselves.
+      setState((s) => ({ ...s, refineEnabled: enabled }));
+      try {
+        await api.refineEnable(enabled);
+      } catch (e) {
+        setState((s) => ({ ...s, refineEnabled: !enabled }));
+        fail(e);
+      }
+    },
+    setRefineAdherence: async (value) => {
+      setState((s) => ({ ...s, refineAdherence: value }));
+      try {
+        const cfg = await api.getAppConfig();
+        await api.saveAppConfig({
+          ...cfg,
+          settings: { ...cfg.settings, refineAdherence: value },
+        });
+      } catch (e) {
+        fail(e);
+      }
+    },
+    setRefineModelTier: async (tier) => {
+      setState((s) => ({ ...s, refineModelTier: tier }));
+      try {
+        const cfg = await api.getAppConfig();
+        await api.saveAppConfig({
+          ...cfg,
+          settings: { ...cfg.settings, refineModelTier: tier },
+        });
+      } catch (e) {
+        fail(e);
+      }
+    },
+    saveRefineTemplates: async (templates) => {
+      setState((s) => ({ ...s, refineTemplates: templates }));
+      try {
+        const cfg = await api.getAppConfig();
+        await api.saveAppConfig({ ...cfg, refineTemplates: templates });
+      } catch (e) {
+        fail(e);
+      }
+    },
+    completeFirstRun: async (tier) => {
+      setState((s) => ({
+        ...s,
+        firstRunComplete: true,
+        refineModelTier: tier ?? s.refineModelTier,
+      }));
+      try {
+        const cfg = await api.getAppConfig();
+        await api.saveAppConfig({
+          ...cfg,
+          settings: {
+            ...cfg.settings,
+            firstRunComplete: true,
+            refineModelTier: tier ?? cfg.settings.refineModelTier,
+          },
+        });
       } catch (e) {
         fail(e);
       }

@@ -1,0 +1,183 @@
+/* Settings → Refine: sub-nav + setup view (cards), or templates / debug. */
+
+.v-refine {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.v-refine__subnav {
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--surface-panel);
+}
+
+.v-refine__subtab {
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  cursor: pointer;
+}
+
+.v-refine__subtab:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
+}
+
+.v-refine__subtab.is-active {
+  border-color: var(--selected-border);
+  background: var(--selected-fill);
+  font-weight: 600;
+}
+
+.v-refine__setup {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.v-refine__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.v-refine__hint {
+  font-size: var(--text-size-small);
+  color: var(--text-muted);
+}
+
+.v-refine__off {
+  font-size: var(--text-size-ui);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.v-refine__card {
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-panel);
+  background: var(--surface-content);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.v-refine__h {
+  margin: 0;
+  font-size: var(--text-size-small);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.v-refine__hw {
+  font-size: var(--text-size-ui);
+}
+
+.v-refine__rec {
+  font-size: var(--text-size-ui);
+  color: var(--text-secondary);
+}
+
+.v-refine__warn {
+  font-size: var(--text-size-ui);
+  color: #8a5a00;
+  background: #fdf3d6;
+  border: 1px solid #e6cf8a;
+  border-radius: var(--radius-control);
+  padding: var(--space-2) var(--space-3);
+}
+
+.v-refine__sub {
+  margin: 0;
+  font-size: var(--text-size-small);
+  color: var(--text-muted);
+}
+
+.v-refine__tiers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+}
+
+.v-refine__tier {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--gradient-button);
+  cursor: pointer;
+  text-align: left;
+}
+
+.v-refine__tier:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
+}
+
+.v-refine__tier.is-active {
+  border-color: var(--selected-border);
+  background: var(--selected-fill);
+}
+
+.v-refine__tier-name {
+  font-size: var(--text-size-ui);
+  font-weight: 600;
+}
+
+.v-refine__tier-model {
+  font-family: var(--font-mono);
+  font-size: var(--text-size-small);
+  color: var(--text-muted);
+}
+
+.v-refine__tier-badge {
+  align-self: flex-start;
+  margin-top: 2px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent-deep);
+}
+
+.v-refine__ok {
+  font-size: var(--text-size-ui);
+  color: #2e7d32;
+}
+
+.v-refine__progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.v-refine__progress-label {
+  font-size: var(--text-size-small);
+  color: var(--text-muted);
+}
+
+.v-refine__error {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid #d9a0a0;
+  border-radius: var(--radius-control);
+  background: #fbeaea;
+  color: #8a2b2b;
+  font-size: var(--text-size-ui);
+}

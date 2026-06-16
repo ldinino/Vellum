@@ -1,0 +1,109 @@
+/* Refine debug panel: parameter grid, prompt fields, request/response, log. */
+
+.v-dbg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--surface-content);
+}
+
+.v-dbg__controls {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-3);
+}
+
+.v-dbg__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.v-dbg__field--wide {
+  grid-column: 1 / -1;
+}
+
+.v-dbg__label {
+  font-size: var(--text-size-small);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.v-dbg__input {
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+}
+
+.v-dbg__area {
+  padding: var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  font-family: var(--font-mono);
+  font-size: var(--text-size-ui);
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.v-dbg__run {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.v-dbg__metrics {
+  font-size: var(--text-size-small);
+  color: var(--text-muted);
+}
+
+.v-dbg__error {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid #d9a0a0;
+  border-radius: var(--radius-control);
+  background: #fbeaea;
+  color: #8a2b2b;
+  font-size: var(--text-size-ui);
+}
+
+.v-dbg__io {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.v-dbg__col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.v-dbg__pre {
+  margin: 0;
+  height: 150px;
+  overflow: auto;
+  padding: var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-panel);
+  font-family: var(--font-mono);
+  font-size: var(--text-size-small);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.v-dbg__pre--log {
+  height: 120px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  white-space: pre;
+  word-break: normal;
+}

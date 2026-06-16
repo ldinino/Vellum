@@ -5,9 +5,15 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AppConfig,
   Attachment,
+  DebugGenerateRequest,
+  DebugGenerateResult,
+  DetectedHardware,
   GrammarSpan,
+  Manifest,
   Notebook,
   Page,
+  ProcessStatus,
+  RuntimeStatus,
   Section,
   SearchFilters,
   SearchHit,
@@ -153,3 +159,38 @@ export const search = (query: string, filters: SearchFilters = {}) =>
 
 /** Rebuild the master index from every notebook (run once on startup). */
 export const reindexAll = () => invoke<void>("reindex_all");
+
+// --- Refine infrastructure (spec Sections 8, 9 / Phase 7) -------------------
+
+/** Bundled model manifest: pinned runtime + tier→model defaults + thresholds. */
+export const refineGetManifest = () => invoke<Manifest>("refine_get_manifest");
+
+/** Detect RAM + GPUs and recommend a model tier. */
+export const refineDetectHardware = () =>
+  invoke<DetectedHardware>("refine_detect_hardware");
+
+/** Whether the pinned Ollama runtime is installed. */
+export const refineRuntimeStatus = () =>
+  invoke<RuntimeStatus>("refine_runtime_status");
+
+/** Download + verify + extract the runtime; emits `refine://runtime-progress`. */
+export const refineInstallRuntime = () =>
+  invoke<RuntimeStatus>("refine_install_runtime");
+
+/** Cancel an in-progress runtime download. */
+export const refineCancelInstall = () => invoke<void>("refine_cancel_install");
+
+/** Pull a model; emits `refine://model-progress`. */
+export const refinePullModel = (model: string) =>
+  invoke<void>("refine_pull_model", { model });
+
+/** Persist the Refine on/off setting and start/stop Ollama accordingly. */
+export const refineEnable = (enabled: boolean) =>
+  invoke<ProcessStatus>("refine_enable", { enabled });
+
+/** Snapshot of Ollama's recent stderr (debug panel backfill). */
+export const refineOllamaLog = () => invoke<string[]>("refine_ollama_log");
+
+/** Debug panel: one /api/generate call with full parameter control. */
+export const refineDebugGenerate = (req: DebugGenerateRequest) =>
+  invoke<DebugGenerateResult>("refine_debug_generate", { req });
