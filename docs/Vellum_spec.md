@@ -437,7 +437,8 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 | 4 — Grammar Check | ✅ Complete |
 | 5 — Attachments | ✅ Complete |
 | 6 — Page Templates | ✅ Complete |
-| 7–11 | ⬜ Not started |
+| 7 — Refine Templates + Refine Infrastructure | ✅ Complete |
+| 8–11 | ⬜ Not started |
 
 ---
 
@@ -574,6 +575,15 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 **Exit criteria:** Templates persist. Hardware detection correctly identifies tier. Ollama spawns/kills cleanly. CPU-only warning surfaces correctly. Debug panel shows raw Ollama interaction.
 
+> **Design note (as built):**
+> - **`refine/` backend module.** All Phase 7 logic lives under `src-tauri/src/refine/` (manifest, hardware, runtime install, model pull, debug inference, the stderr ring buffer, a shared NDJSON splitter); `process::ollama` stays the lifecycle owner. Thin `#[tauri::command]` wrappers in `commands.rs` mirror the existing `ollama_*` pattern. Events use a `refine://` namespace (`runtime-progress`, `model-progress`, `ollama-log`).
+> - **Manifest (`models.json`).** Bundled as a Tauri resource (`src-tauri/resources/`), resolved override → resource → (debug) source-tree, so `tauri dev` works without a full bundle and a power user can drop an override into `Documents\Vellum`. It pins the Ollama runtime (version + URL + **real SHA-256** + size) and the tier→model defaults + hardware thresholds, so all of it is tunable without recompiling.
+> - **Runtime install.** The pinned `ollama-windows-amd64.zip` (~1.4 GB) streams into `%LOCALAPPDATA%\Vellum\runtime\ollama\<version>\`; SHA-256 is verified **before** extraction; extraction is zip-slip-guarded. The flow is idempotent (skips if installed), atomic-ish (downloads/extracts in a temp dir then renames into place; a guard removes partials on any failure), retry-tolerant (3 attempts, backoff on transient errors), and cancellable. Models are pulled via Ollama's own `/api/pull` (it verifies its own blobs).
+> - **Hardware tiering.** RAM via `sysinfo`; GPUs via DXGI (`windows` crate, Windows-only `#[cfg]`, with a non-Windows no-GPU fallback so macOS/Linux CI builds). The classifier distinguishes a **discrete** GPU (tier by dedicated VRAM) from an **integrated** one (Intel Arc 140V / Lunar Lake — tiny dedicated VRAM but shared system memory, so tier by RAM, **capped at Balanced**) from **CPU-only** (only the Basic Render Driver → Fast + the slow-machine warning). Thresholds come from the manifest. Detection is side-effect-free; the renderer persists the chosen tier.
+> - **Models (decided defaults, tunable).** Fast `llama3.2:3b`, Balanced `qwen2.5:7b`, Thorough `gemma2:27b`. Ollama pinned at `v0.30.8`. These are pre-release defaults; real numbers come from benchmarking the tiers on representative Copilot+ hardware.
+> - **Debug panel = benchmark hook.** `/api/generate` with arbitrary model + full params; returns the exact request, raw response, time-to-first-token, total time, eval count, and tokens/sec, plus a live tail of Ollama's stderr (captured via an opt-in `ManagedChild::spawn_with_stderr` into a bounded ring buffer).
+> - **Verification.** Download/verify/retry/zip-slip are unit-tested against an in-process HTTP server with a known-SHA zip; tier mapping (incl. the Lunar Lake case) and NDJSON parsing are pure-function tests; the stderr capture has a structural test. The real 1.4 GB download, model pull, inference latency, and live DXGI enumeration require manual verification in the user's desktop session (the sandboxed CI/tool environment exposes only WARP software adapters).
+
 ---
 
 ### Phase 8 — Refine (Full Feature)
@@ -684,8 +694,8 @@ Phases 3, 4, 5, 6, and 7 can proceed in parallel after Phase 2 is stable.
 | Item | Status |
 |---|---|
 | App name | Undefined — placeholder throughout |
-| Model manifest (models.json) | TBD — requires testing across hardware tiers to determine viable models and thresholds |
-| System requirements | TBD — will be determined through pre-release model evaluation |
+| Model manifest (models.json) | Defaults shipped (Phase 7) — Fast `llama3.2:3b`, Balanced `qwen2.5:7b`, Thorough `gemma2:27b`; Ollama pinned `v0.30.8`. Bundled resource, tunable without a rebuild. Final models/thresholds still pending hardware benchmarking. |
+| System requirements | TBD — will be determined through pre-release model evaluation (use the debug panel's latency/tok-s readout as the benchmark hook) |
 | Grammar engine | Resolved — Harper (`harper-core`), embedded Rust crate, English-only v1. Compiled in-process; real-time, fully offline, no separate runtime or download. (Pulls in the Burn ML framework on a CPU backend for its POS tagger — a few MB accepted in exchange for grammar quality; see Section 10 design note) |
 | Code signing certificate (Windows) | Resolved — not doing for v1; unsigned NSIS installer, SmartScreen warning accepted |
 | Auto-updater infrastructure | Resolved — `tauri-plugin-updater` + GitHub Releases; repo flips public at first release |
