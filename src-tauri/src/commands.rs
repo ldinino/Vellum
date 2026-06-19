@@ -940,6 +940,20 @@ pub async fn refine_pull_model(app: AppHandle, model: String) -> Result<(), Stri
     crate::refine::models::pull_model(app, model).await
 }
 
+/// List models already pulled into the local store.
+#[tauri::command]
+pub async fn refine_list_models(
+    app: AppHandle,
+) -> Result<Vec<crate::refine::models::InstalledModel>, String> {
+    crate::refine::models::list_models(app).await
+}
+
+/// Delete a pulled model and reclaim its disk.
+#[tauri::command]
+pub async fn refine_delete_model(app: AppHandle, model: String) -> Result<(), String> {
+    crate::refine::models::delete_model(app, model).await
+}
+
 /// Persist the Refine on/off setting and start/stop Ollama accordingly. When
 /// enabling before the runtime is installed, this is a no-op start (the install
 /// flow handles fetching it), so toggling on never errors.

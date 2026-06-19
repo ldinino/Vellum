@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../ui/Button";
 import { Icon } from "../ui/Icon";
-import { Slider } from "../ui/Slider";
+import { AdherenceControl } from "../ui/AdherenceControl";
 import { useVellum } from "../../state/vellum";
 import type { RefineTemplate } from "../../data/types";
 import "./RefineTemplatesManager.css";
@@ -200,11 +200,9 @@ export function RefineTemplatesManager() {
                   <span>Override the global Strict ↔ Liberal setting</span>
                 </label>
                 {selected.adherenceOverride != null && (
-                  <Slider
+                  <AdherenceControl
                     value={selected.adherenceOverride}
                     onChange={(v) => patch(selected.id, { adherenceOverride: v })}
-                    leftLabel="Strict"
-                    rightLabel="Liberal"
                   />
                 )}
               </div>

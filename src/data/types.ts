@@ -110,8 +110,22 @@ export interface AppConfig {
 export interface ManifestTier {
   /** "Fast" | "Balanced" | "Thorough". */
   id: string;
-  /** Ollama model identifier, e.g. "qwen2.5:7b". */
+  /** Ollama model identifier, e.g. "qwen3:14b". */
   model: string;
+  /** Approximate download size shown before pulling, e.g. "~9 GB". */
+  sizeLabel: string;
+  /** Recommended system RAM, e.g. "16 GB". */
+  targetRamLabel: string;
+  /** One-line guidance on when the tier fits. */
+  useFor: string;
+  /** Lighter model for tight memory (Phase 8 auto-selection). */
+  fallback: { model: string; sizeLabel: string } | null;
+}
+
+/** An installed Ollama model (from /api/tags). */
+export interface InstalledModel {
+  name: string;
+  sizeBytes: number;
 }
 
 /** The bundled models.json manifest. */

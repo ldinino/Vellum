@@ -40,8 +40,24 @@ pub struct OllamaPin {
 pub struct TierEntry {
     /// "Fast" | "Balanced" | "Thorough" — matches `AppSettings.refineModelTier`.
     pub id: String,
-    /// Ollama model identifier, e.g. "qwen2.5:7b".
+    /// Ollama model identifier, e.g. "qwen3:14b".
     pub model: String,
+    /// Approximate on-disk download size, shown before pulling (e.g. "~9 GB").
+    pub size_label: String,
+    /// Recommended system RAM for this tier (e.g. "16 GB").
+    pub target_ram_label: String,
+    /// One-line guidance on when this tier fits.
+    pub use_for: String,
+    /// Lighter model to fall back to on tight memory (Phase 8 auto-selection).
+    #[serde(default)]
+    pub fallback: Option<TierFallback>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TierFallback {
+    pub model: String,
+    pub size_label: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -109,10 +125,13 @@ mod tests {
         assert_eq!(m.schema_version, 1);
         assert!(m.ollama.url.contains(&m.ollama.version));
         assert_eq!(m.ollama.sha256.len(), 64, "sha256 is 64 hex chars");
-        let model = |id: &str| m.tiers.iter().find(|t| t.id == id).map(|t| t.model.as_str());
-        assert_eq!(model("Fast"), Some("llama3.2:3b"));
-        assert_eq!(model("Balanced"), Some("qwen2.5:7b"));
-        assert_eq!(model("Thorough"), Some("gemma2:27b"));
+        let tier = |id: &str| m.tiers.iter().find(|t| t.id == id);
+        assert_eq!(tier("Fast").map(|t| t.model.as_str()), Some("qwen3:4b"));
+        assert_eq!(tier("Balanced").map(|t| t.model.as_str()), Some("qwen3:14b"));
+        assert_eq!(tier("Thorough").map(|t| t.model.as_str()), Some("gpt-oss:20b"));
+        // Every tier advertises a size + RAM target; Fast/Balanced have fallbacks.
+        assert!(m.tiers.iter().all(|t| !t.size_label.is_empty() && !t.target_ram_label.is_empty()));
+        assert!(tier("Fast").unwrap().fallback.is_some());
         let t = &m.thresholds;
         assert!(t.discrete_thorough_min_vram_bytes > t.discrete_balanced_min_vram_bytes);
         assert!(t.discrete_balanced_min_vram_bytes > t.discrete_min_vram_bytes);

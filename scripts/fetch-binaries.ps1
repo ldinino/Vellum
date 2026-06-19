@@ -10,7 +10,7 @@
 
 $ErrorActionPreference = 'Stop'
 
-$OllamaVersion = 'v0.30.8'
+$OllamaVersion = 'v0.30.10'
 
 $binDir = Join-Path $PSScriptRoot '..\vendor\bin'
 New-Item -ItemType Directory -Force $binDir | Out-Null

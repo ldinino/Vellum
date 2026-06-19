@@ -1,0 +1,36 @@
+.v-adh {
+  display: inline-flex;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+  box-shadow: var(--shadow-button);
+}
+
+.v-adh__opt {
+  padding: 5px 14px;
+  border: none;
+  border-left: 1px solid var(--border-soft);
+  background: var(--gradient-button);
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  cursor: pointer;
+}
+
+.v-adh__opt:first-child {
+  border-left: none;
+}
+
+.v-adh__opt:not(:disabled):hover {
+  background: var(--gradient-hover);
+}
+
+.v-adh__opt.is-active {
+  background: var(--gradient-accent);
+  color: var(--text-on-accent);
+  font-weight: 600;
+}
+
+.v-adh__opt:disabled {
+  opacity: 0.55;
+  cursor: default;
+}

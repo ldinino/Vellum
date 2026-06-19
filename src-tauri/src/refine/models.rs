@@ -5,11 +5,32 @@
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 
+use super::ensure_ollama_running;
 use super::events;
 use super::ndjson::take_lines;
-use crate::process::ollama::{self, OllamaState, OLLAMA_PORT};
+use crate::process::ollama::OLLAMA_PORT;
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledModel {
+    pub name: String,
+    pub size_bytes: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct TagsResponse {
+    #[serde(default)]
+    models: Vec<TagModel>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TagModel {
+    name: String,
+    #[serde(default)]
+    size: u64,
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,14 +55,7 @@ struct PullLine {
 /// Ensure Ollama is running, then pull `model`, streaming progress. Surfaces the
 /// "runtime not installed" sentinel verbatim so the UI can route to the download.
 pub async fn pull_model(app: AppHandle, model: String) -> Result<(), String> {
-    // start() hard-gates on refine_enabled and blocks polling the port.
-    let app2 = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app2.state::<OllamaState>();
-        ollama::start(&app2, &state)
-    })
-    .await
-    .map_err(|e| format!("ollama start task join error: {e}"))??;
+    ensure_ollama_running(&app).await?;
 
     let client = reqwest::Client::new();
     let url = format!("http://127.0.0.1:{OLLAMA_PORT}/api/pull");
@@ -101,6 +115,49 @@ pub async fn pull_model(app: AppHandle, model: String) -> Result<(), String> {
             done: true,
         },
     );
+    Ok(())
+}
+
+/// List models already pulled into the local store (Ollama `/api/tags`).
+pub async fn list_models(app: AppHandle) -> Result<Vec<InstalledModel>, String> {
+    ensure_ollama_running(&app).await?;
+    let client = reqwest::Client::new();
+    let url = format!("http://127.0.0.1:{OLLAMA_PORT}/api/tags");
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Ollama is not responding: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("Listing models failed: HTTP {}", resp.status()));
+    }
+    let tags: TagsResponse = resp.json().await.map_err(|e| format!("parse tags: {e}"))?;
+    let mut models: Vec<InstalledModel> = tags
+        .models
+        .into_iter()
+        .map(|m| InstalledModel {
+            name: m.name,
+            size_bytes: m.size,
+        })
+        .collect();
+    models.sort_by(|a, b| a.name.cmp(&b.name));
+    Ok(models)
+}
+
+/// Delete a pulled model and reclaim its disk (Ollama `/api/delete`).
+pub async fn delete_model(app: AppHandle, model: String) -> Result<(), String> {
+    ensure_ollama_running(&app).await?;
+    let client = reqwest::Client::new();
+    let url = format!("http://127.0.0.1:{OLLAMA_PORT}/api/delete");
+    let resp = client
+        .delete(&url)
+        .json(&serde_json::json!({ "name": model }))
+        .send()
+        .await
+        .map_err(|e| format!("Ollama is not responding: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("Deleting {model} failed: HTTP {}", resp.status()));
+    }
     Ok(())
 }
 

@@ -9,6 +9,7 @@ import type {
   DebugGenerateResult,
   DetectedHardware,
   GrammarSpan,
+  InstalledModel,
   Manifest,
   Notebook,
   Page,
@@ -183,6 +184,14 @@ export const refineCancelInstall = () => invoke<void>("refine_cancel_install");
 /** Pull a model; emits `refine://model-progress`. */
 export const refinePullModel = (model: string) =>
   invoke<void>("refine_pull_model", { model });
+
+/** List models already pulled into the local store. */
+export const refineListModels = () =>
+  invoke<InstalledModel[]>("refine_list_models");
+
+/** Delete a pulled model and reclaim its disk. */
+export const refineDeleteModel = (model: string) =>
+  invoke<void>("refine_delete_model", { model });
 
 /** Persist the Refine on/off setting and start/stop Ollama accordingly. */
 export const refineEnable = (enabled: boolean) =>

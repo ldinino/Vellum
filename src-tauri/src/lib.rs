@@ -75,6 +75,8 @@ pub fn run() {
             commands::refine_install_runtime,
             commands::refine_cancel_install,
             commands::refine_pull_model,
+            commands::refine_list_models,
+            commands::refine_delete_model,
             commands::refine_enable,
             commands::refine_debug_generate,
         ])

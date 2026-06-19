@@ -148,6 +148,104 @@
   color: var(--text-muted);
 }
 
+.v-refine__tier-check {
+  margin-left: 6px;
+  color: #2e7d32;
+  font-weight: 700;
+}
+
+.v-refine__tier-size {
+  font-size: var(--text-size-small);
+  color: var(--text-secondary);
+}
+
+.v-refine__tier-use {
+  font-size: var(--text-size-small);
+  color: var(--text-muted);
+}
+
+.v-refine__installed {
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--border-faint);
+  padding-top: var(--space-2);
+}
+
+.v-refine__installed-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: var(--text-size-small);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2);
+}
+
+.v-refine__refresh {
+  display: inline-flex;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--gradient-button);
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.v-refine__refresh:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
+}
+
+.v-refine__models {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.v-refine__model {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-control);
+  background: var(--surface-panel);
+}
+
+.v-refine__model-name {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: var(--text-size-small);
+}
+
+.v-refine__model-size {
+  font-size: var(--text-size-small);
+  color: var(--text-muted);
+}
+
+.v-refine__model-del {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--gradient-button);
+  font-size: var(--text-size-small);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.v-refine__model-del:not(:disabled):hover {
+  border-color: #d9a0a0;
+  background: #fbeaea;
+  color: #8a2b2b;
+}
+
+.v-refine__model-del:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .v-refine__tier-badge {
   align-self: flex-start;
   margin-top: 2px;

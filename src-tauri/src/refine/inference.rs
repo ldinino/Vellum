@@ -7,10 +7,11 @@ use std::time::Instant;
 
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 
+use super::ensure_ollama_running;
 use super::ndjson::take_lines;
-use crate::process::ollama::{self, OllamaState, OLLAMA_PORT};
+use crate::process::ollama::OLLAMA_PORT;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -51,13 +52,7 @@ pub async fn debug_generate(
     req: DebugGenerateRequest,
 ) -> Result<DebugGenerateResult, String> {
     // Ensure Ollama is running (hard-gates on refine_enabled, blocks on port).
-    let app2 = app.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let state = app2.state::<OllamaState>();
-        ollama::start(&app2, &state)
-    })
-    .await
-    .map_err(|e| format!("ollama start task join error: {e}"))??;
+    ensure_ollama_running(&app).await?;
 
     let body = build_body(&req);
     let request_preview = serde_json::to_string_pretty(&body).unwrap_or_default();

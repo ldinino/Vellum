@@ -13,6 +13,23 @@ pub mod models;
 pub mod ndjson;
 pub mod runtime;
 
+use tauri::{AppHandle, Manager};
+
+use crate::process::ollama::{self, OllamaState};
+
+/// Ensure Ollama is running (start() hard-gates on refine_enabled and blocks
+/// polling the port). Shared by model pull, model management, and debug
+/// inference, so they all surface the not-installed sentinel identically.
+pub(crate) async fn ensure_ollama_running(app: &AppHandle) -> Result<(), String> {
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app2.state::<OllamaState>();
+        ollama::start(&app2, &state).map(|_| ())
+    })
+    .await
+    .map_err(|e| format!("ollama start task join error: {e}"))?
+}
+
 /// Tauri event channels. Payloads are serde camelCase; the renderer subscribes
 /// via `@tauri-apps/api/event`. Best-effort — a dropped progress event must
 /// never fail the operation reporting it.

@@ -32,6 +32,7 @@ export function RefineDebugPanel({ defaultModel }: { defaultModel?: string }) {
   const [numPredict, setNumPredict] = useState("");
   const [numCtx, setNumCtx] = useState("");
 
+  const [showHelp, setShowHelp] = useState(false);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<DebugGenerateResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +84,42 @@ export function RefineDebugPanel({ defaultModel }: { defaultModel?: string }) {
 
   return (
     <div className="v-dbg">
+      <div className="v-dbg__help-bar">
+        <span className="v-dbg__help-title">
+          Advanced — send a prompt straight to the model
+        </span>
+        <button
+          type="button"
+          className="v-dbg__help-toggle"
+          aria-expanded={showHelp}
+          onClick={() => setShowHelp((v) => !v)}
+        >
+          {showHelp ? "Hide help" : "What do these do?"}
+        </button>
+      </div>
+      {showHelp && (
+        <dl className="v-dbg__help">
+          <dt>Model</dt>
+          <dd>Any model you've downloaded (bypasses the tier system), e.g. <code>qwen3:14b</code>.</dd>
+          <dt>Temperature</dt>
+          <dd>Randomness of word choice. Lower = more consistent. Leave blank for the model's default; avoid 0 (these models degrade at greedy decoding).</dd>
+          <dt>top_p / top_k</dt>
+          <dd>Limit sampling to the most likely words (by cumulative probability / by count). Blank = model default.</dd>
+          <dt>num_predict</dt>
+          <dd>Maximum tokens to generate. Blank = model default.</dd>
+          <dt>context size</dt>
+          <dd>How much text the model reads (num_ctx). <strong>Anything past this is silently dropped from the start</strong>, so size it to your prompt + expected output. Larger uses more memory.</dd>
+          <dt>System prompt</dt>
+          <dd>Instructions/role for the model (sent in the system role). Blank to omit.</dd>
+          <dt>User text</dt>
+          <dd>The text the model acts on (sent in the user role).</dd>
+          <dt>Readouts</dt>
+          <dd>TTFT = time to the first token; total = full generation time; tok/s = generation speed — the benchmark number for comparing tiers on this machine.</dd>
+          <dt>Ollama log</dt>
+          <dd>Live stderr from the local engine — useful when a model fails to load or a request errors.</dd>
+        </dl>
+      )}
+
       <div className="v-dbg__controls">
         <label className="v-dbg__field v-dbg__field--wide">
           <span className="v-dbg__label">Model</span>
