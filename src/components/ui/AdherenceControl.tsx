@@ -3,7 +3,7 @@ import "./AdherenceControl.css";
 /** Three discrete adherence stops stored as a 0..1 float (so the backend
  * `refineAdherence` / per-template override schema is unchanged). */
 const STEPS = [0, 0.5, 1] as const;
-const LABELS = ["Strict", "Middle", "Liberal"] as const;
+const LABELS = ["Strict", "Moderate", "Liberal"] as const;
 
 interface AdherenceControlProps {
   value: number;
@@ -11,8 +11,8 @@ interface AdherenceControlProps {
   disabled?: boolean;
 }
 
-/** A 3-notch Strict / Middle / Liberal slider (spec Section 9). Snaps to the
- * nearest stop; renders notches on the track and labels beneath. */
+/** A 3-stop Strict / Moderate / Liberal slider (spec Section 9). Snaps to the
+ * nearest stop; the labels beneath mark the positions. */
 export function AdherenceControl({ value, onChange, disabled }: AdherenceControlProps) {
   // Snap the stored float to the nearest stop index.
   let idx = 0;
