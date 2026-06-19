@@ -2,7 +2,6 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  max-width: 300px;
 }
 
 .v-adh.is-disabled {
@@ -22,20 +21,14 @@
   cursor: default;
 }
 
-/* Track: retro inset groove with three notches (left / middle / right). */
+/* Track: retro inset groove. The three stops are conveyed by the labels below
+ * and the snap, not painted notches (they can't align with the thumb stops). */
 .v-adh__input::-webkit-slider-runnable-track {
   height: 8px;
   border: 1px solid var(--border-strong);
   border-radius: 3px;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
-  background-image:
-    linear-gradient(var(--border-strong), var(--border-strong)),
-    linear-gradient(var(--border-strong), var(--border-strong)),
-    linear-gradient(var(--border-strong), var(--border-strong)),
-    linear-gradient(#d7dadf, #eceef0);
-  background-repeat: no-repeat;
-  background-size: 2px 8px, 2px 8px, 2px 8px, 100% 100%;
-  background-position: 7% center, 50% center, 93% center, 0 0;
+  background: linear-gradient(#d7dadf, #eceef0);
 }
 
 .v-adh__input::-webkit-slider-thumb {
