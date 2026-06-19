@@ -1,12 +1,9 @@
 import "./AdherenceControl.css";
 
-/** Three discrete adherence levels stored as a 0..1 float (so the backend
+/** Three discrete adherence stops stored as a 0..1 float (so the backend
  * `refineAdherence` / per-template override schema is unchanged). */
-const LEVELS = [
-  { label: "Strict", value: 0 },
-  { label: "Middle", value: 0.5 },
-  { label: "Liberal", value: 1 },
-] as const;
+const STEPS = [0, 0.5, 1] as const;
+const LABELS = ["Strict", "Middle", "Liberal"] as const;
 
 interface AdherenceControlProps {
   value: number;
@@ -14,27 +11,41 @@ interface AdherenceControlProps {
   disabled?: boolean;
 }
 
-/** A 3-click Strict / Middle / Liberal segmented control (spec Section 9). */
+/** A 3-notch Strict / Middle / Liberal slider (spec Section 9). Snaps to the
+ * nearest stop; renders notches on the track and labels beneath. */
 export function AdherenceControl({ value, onChange, disabled }: AdherenceControlProps) {
-  // Snap the stored float to the nearest level for the active state.
-  const active = LEVELS.reduce((a, b) =>
-    Math.abs(b.value - value) < Math.abs(a.value - value) ? b : a,
-  ).value;
+  // Snap the stored float to the nearest stop index.
+  let idx = 0;
+  let best = Infinity;
+  STEPS.forEach((s, i) => {
+    const d = Math.abs(s - value);
+    if (d < best) {
+      best = d;
+      idx = i;
+    }
+  });
 
   return (
-    <div className="v-adh" role="group" aria-label="Adherence">
-      {LEVELS.map((l) => (
-        <button
-          key={l.label}
-          type="button"
-          disabled={disabled}
-          aria-pressed={l.value === active}
-          className={`v-adh__opt${l.value === active ? " is-active" : ""}`}
-          onClick={() => onChange(l.value)}
-        >
-          {l.label}
-        </button>
-      ))}
+    <div className={`v-adh${disabled ? " is-disabled" : ""}`}>
+      <input
+        type="range"
+        className="v-adh__input"
+        min={0}
+        max={2}
+        step={1}
+        value={idx}
+        disabled={disabled}
+        aria-label="Adherence"
+        aria-valuetext={LABELS[idx]}
+        onChange={(e) => onChange(STEPS[parseInt(e.target.value, 10)])}
+      />
+      <div className="v-adh__labels" aria-hidden="true">
+        {LABELS.map((l, i) => (
+          <span key={l} className={`v-adh__label${i === idx ? " is-active" : ""}`}>
+            {l}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

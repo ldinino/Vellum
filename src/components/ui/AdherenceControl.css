@@ -1,36 +1,76 @@
 .v-adh {
-  display: inline-flex;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-control);
-  overflow: hidden;
-  box-shadow: var(--shadow-button);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 300px;
 }
 
-.v-adh__opt {
-  padding: 5px 14px;
-  border: none;
-  border-left: 1px solid var(--border-soft);
-  background: var(--gradient-button);
-  font-family: var(--font-ui);
-  font-size: var(--text-size-ui);
+.v-adh.is-disabled {
+  opacity: 0.55;
+}
+
+.v-adh__input {
+  width: 100%;
+  height: 18px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
   cursor: pointer;
 }
 
-.v-adh__opt:first-child {
-  border-left: none;
+.v-adh__input:disabled {
+  cursor: default;
 }
 
-.v-adh__opt:not(:disabled):hover {
+/* Track: retro inset groove with three notches (left / middle / right). */
+.v-adh__input::-webkit-slider-runnable-track {
+  height: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+  background-image:
+    linear-gradient(var(--border-strong), var(--border-strong)),
+    linear-gradient(var(--border-strong), var(--border-strong)),
+    linear-gradient(var(--border-strong), var(--border-strong)),
+    linear-gradient(#d7dadf, #eceef0);
+  background-repeat: no-repeat;
+  background-size: 2px 8px, 2px 8px, 2px 8px, 100% 100%;
+  background-position: 7% center, 50% center, 93% center, 0 0;
+}
+
+.v-adh__input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -5px;
+  width: 14px;
+  height: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  background: var(--gradient-button);
+  box-shadow: var(--shadow-button);
+}
+
+.v-adh__input:not(:disabled)::-webkit-slider-thumb:hover {
+  border-color: var(--hover-border);
   background: var(--gradient-hover);
 }
 
-.v-adh__opt.is-active {
-  background: var(--gradient-accent);
-  color: var(--text-on-accent);
-  font-weight: 600;
+.v-adh__input:not(:disabled)::-webkit-slider-thumb:active {
+  border-color: var(--active-border);
+  background: var(--gradient-active);
 }
 
-.v-adh__opt:disabled {
-  opacity: 0.55;
-  cursor: default;
+.v-adh__labels {
+  display: flex;
+  justify-content: space-between;
+}
+
+.v-adh__label {
+  font-size: var(--text-size-small);
+  color: var(--text-muted);
+}
+
+.v-adh__label.is-active {
+  color: var(--text-primary);
+  font-weight: 600;
 }
