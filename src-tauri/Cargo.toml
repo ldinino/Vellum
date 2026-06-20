@@ -57,3 +57,12 @@ windows = { version = "0.61", features = [
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }
 
+# Harper's grammar/spell checker runs a neural POS tagger via the Burn ML
+# framework (see CLAUDE.md / spec §10). At the default dev opt-level (0) that
+# inference is glacial — multi-second lints that scale with text length. Optimize
+# all *dependencies* even in dev so `tauri dev` lints in milliseconds like a
+# release build; our own crate stays at opt-level 0 for fast incremental
+# rebuilds. One-time cost: the first dev build after this compiles deps at -O3.
+[profile.dev.package."*"]
+opt-level = 3
+
