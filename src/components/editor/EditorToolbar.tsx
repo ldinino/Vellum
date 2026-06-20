@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useEditorState } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
 import { Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator } from "../ui/Toolbar";
-import { Icon } from "../ui/Icon";
 import { useActiveEditor } from "../../state/activeEditor";
 import { SearchBox } from "../search/SearchBar";
 import "./EditorToolbar.css";
@@ -19,6 +18,14 @@ const FONTS = [
   "Comic Sans MS",
 ];
 const SIZES = ["10", "11", "12", "14", "16", "18", "24", "36"];
+
+// Effective defaults for text with no explicit textStyle mark: such text renders
+// via .v-prose CSS (--font-ui's first family / --text-size-editor in
+// styles/tokens.css), so the selects fall back to these to always show the
+// current font/size at a glance — OneNote-style — instead of a blank
+// "Font"/"Size" placeholder. Keep in sync with those tokens.
+const DEFAULT_FONT = "Segoe UI";
+const DEFAULT_SIZE = "14";
 
 interface FormattingGroupsProps {
   editor: Editor | null;
@@ -76,6 +83,17 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
   const disabled = !editor || !s;
   const colorClass = `v-editortoolbar__color${disabled ? " is-disabled" : ""}`;
 
+  // Show the effective font/size: the caret's textStyle mark if any, otherwise
+  // the document default (so unstyled text reads as "Segoe UI 14", not blank).
+  // An out-of-list value (e.g. from pasted content) is added as an option so the
+  // box never goes unexpectedly empty.
+  const displayFont = disabled ? "" : s?.fontFamily || DEFAULT_FONT;
+  const displaySize = disabled ? "" : s?.fontSize || DEFAULT_SIZE;
+  const fontOptions =
+    displayFont && !FONTS.includes(displayFont) ? [displayFont, ...FONTS] : FONTS;
+  const sizeOptions =
+    displaySize && !SIZES.includes(displaySize) ? [displaySize, ...SIZES] : SIZES;
+
   return (
     <>
       <ToolbarGroup>
@@ -130,7 +148,7 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
         <select
           className="v-editortoolbar__select"
           title="Font"
-          value={s?.fontFamily ?? ""}
+          value={displayFont}
           disabled={disabled}
           onChange={(e) => {
             const v = e.target.value;
@@ -139,7 +157,7 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
           }}
         >
           <option value="">Font</option>
-          {FONTS.map((f) => (
+          {fontOptions.map((f) => (
             <option key={f} value={f} style={{ fontFamily: f }}>
               {f}
             </option>
@@ -148,7 +166,7 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
         <select
           className="v-editortoolbar__select v-editortoolbar__select--size"
           title="Font size"
-          value={s?.fontSize ?? ""}
+          value={displaySize}
           disabled={disabled}
           onChange={(e) => {
             const v = e.target.value;
@@ -157,7 +175,7 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
           }}
         >
           <option value="">Size</option>
-          {SIZES.map((size) => (
+          {sizeOptions.map((size) => (
             <option key={size} value={size}>
               {size}
             </option>
@@ -339,7 +357,7 @@ export function EditorToolbar({
  * compact search + settings at the right. Operates on the active page editor
  * shared up via ActiveEditorProvider; controls disable when no page is open.
  */
-export function TopToolbar({ onOpenSettings }: { onOpenSettings: () => void }) {
+export function TopToolbar() {
   const { active } = useActiveEditor();
   const editor = active?.editor ?? null;
   const insertImage = active?.insertImage ?? (() => {});
@@ -363,15 +381,6 @@ export function TopToolbar({ onOpenSettings }: { onOpenSettings: () => void }) {
         </div>
         <div className="v-toptoolbar__right">
           <SearchBox />
-          <button
-            type="button"
-            className="v-toptoolbar__gear"
-            title="Settings"
-            aria-label="Settings"
-            onClick={onOpenSettings}
-          >
-            <Icon name="gear" />
-          </button>
         </div>
       </div>
       {linkOpen && editor && <LinkEditor editor={editor} onClose={() => setLinkOpen(false)} />}

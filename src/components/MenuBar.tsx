@@ -65,6 +65,52 @@ export function MenuBar({ onOpenSettings }: { onOpenSettings: () => void }) {
     },
   ];
 
+  // Clipboard ops act on the editor selection. Clicking a menu item blurs the
+  // contenteditable, but ProseMirror keeps its selection, so we focus() first to
+  // restore the matching DOM selection before invoking the clipboard.
+  const hasSelection = !!editor && !editor.state.selection.empty;
+
+  const copySelection = () => {
+    if (!editor) return;
+    editor.commands.focus();
+    try {
+      document.execCommand("copy");
+    } catch {
+      /* clipboard unavailable — no-op */
+    }
+  };
+  const cutSelection = () => {
+    if (!editor) return;
+    editor.commands.focus();
+    try {
+      document.execCommand("cut");
+    } catch {
+      /* clipboard unavailable — no-op */
+    }
+  };
+  const pasteClipboard = async () => {
+    if (!editor) return;
+    editor.commands.focus();
+    try {
+      // Prefer rich HTML (matches Ctrl+V); fall back to plain text. insertContent
+      // parses through the schema, so only allowed nodes/marks survive.
+      if (navigator.clipboard?.read) {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          if (item.types.includes("text/html")) {
+            const html = await (await item.getType("text/html")).text();
+            editor.chain().focus().insertContent(html).run();
+            return;
+          }
+        }
+      }
+      const text = await navigator.clipboard.readText();
+      if (text) editor.chain().focus().insertContent(text).run();
+    } catch {
+      /* clipboard read blocked/unavailable — no-op */
+    }
+  };
+
   const editItems = (): MenuItem[] => [
     {
       label: "Undo",
@@ -75,6 +121,25 @@ export function MenuBar({ onOpenSettings }: { onOpenSettings: () => void }) {
       label: "Redo",
       disabled: !editor?.can().redo(),
       onSelect: () => editor?.chain().focus().redo().run(),
+      separatorAfter: true,
+    },
+    {
+      label: "Cut",
+      icon: "scissors",
+      disabled: !hasSelection,
+      onSelect: cutSelection,
+    },
+    {
+      label: "Copy",
+      icon: "documents-stack",
+      disabled: !hasSelection,
+      onSelect: copySelection,
+    },
+    {
+      label: "Paste",
+      icon: "clipboard-paste",
+      disabled: !editor,
+      onSelect: pasteClipboard,
       separatorAfter: true,
     },
     {

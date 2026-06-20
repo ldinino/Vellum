@@ -61,7 +61,7 @@ export function VellumShell() {
   return (
     <div className="v-shell" style={{ ["--section-color" as string]: sectionColor }}>
       <MenuBar onOpenSettings={() => setSettingsOpen(true)} />
-      <TopToolbar onOpenSettings={() => setSettingsOpen(true)} />
+      <TopToolbar />
 
       {error && (
         <div className="v-shell__error" role="alert">

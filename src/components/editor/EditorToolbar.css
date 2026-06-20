@@ -49,23 +49,6 @@
   padding-left: var(--space-2);
 }
 
-.v-toptoolbar__gear {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-control);
-  background: var(--gradient-button);
-  cursor: pointer;
-}
-
-.v-toptoolbar__gear:hover {
-  border-color: var(--hover-border);
-  background: var(--gradient-hover);
-}
-
 .v-editortoolbar__select {
   height: 24px;
   max-width: 130px;

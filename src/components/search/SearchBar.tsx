@@ -5,15 +5,19 @@
  * debounce); clicking a result opens its page and highlights the matches there.
  */
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "../ui/Icon";
+import { ContextMenu, type MenuItem } from "../ui/ContextMenu";
 import { useVellum } from "../../state/vellum";
 import * as api from "../../data/api";
 import type { SearchFilters, SearchHit } from "../../data/types";
 import "./SearchBar.css";
 
-const HL_OPEN = "";
-const HL_CLOSE = "";
+// The backend wraps matched runs with these control chars (see search.rs
+// HL_OPEN/HL_CLOSE); the snippet renderer splits on them to emit <mark>.
+const HL_OPEN = "";
+const HL_CLOSE = "";
 
 type Scope = "all" | "notebook" | "section";
 
@@ -43,14 +47,26 @@ function renderSnippet(snippet: string) {
   return out;
 }
 
-/** Highlight whole-query terms inside a plain string (used for the title). */
+/**
+ * Highlight whole words that start with any query term, mirroring the backend's
+ * prefix-on-token matching (search.rs fts_query builds `"term"*`). Matching the
+ * backend keeps title and snippet highlights consistent and, crucially, avoids
+ * fragmenting a word into many padded single-character <mark>s for short queries
+ * (the "bizarre letter spacing" a query like "s" otherwise produced).
+ */
 function highlightTitle(text: string, terms: string[]) {
-  if (terms.length === 0) return text;
-  const escaped = terms.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-  const re = new RegExp(`(${escaped.join("|")})`, "i");
-  return text.split(re).map((part, i) => {
-    if (part === "") return null;
-    return i % 2 === 1 ? <mark key={i}>{part}</mark> : <Fragment key={i}>{part}</Fragment>;
+  const needles = terms.map((t) => t.toLowerCase()).filter(Boolean);
+  if (needles.length === 0) return text;
+  // Split into alternating word / non-word runs (FTS tokens are alphanumeric).
+  const chunks = text.match(/[\p{L}\p{N}]+|[^\p{L}\p{N}]+/gu) ?? [text];
+  return chunks.map((chunk, i) => {
+    const isWord = /[\p{L}\p{N}]/u.test(chunk);
+    const lower = chunk.toLowerCase();
+    return isWord && needles.some((n) => lower.startsWith(n)) ? (
+      <mark key={i}>{chunk}</mark>
+    ) : (
+      <Fragment key={i}>{chunk}</Fragment>
+    );
   });
 }
 
@@ -58,6 +74,12 @@ function formatDate(iso: string) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString();
 }
+
+const SCOPE_LABEL: Record<Scope, string> = {
+  all: "All Notebooks",
+  notebook: "This Notebook",
+  section: "This Section",
+};
 
 export function SearchBox() {
   const { actions, selectedNotebookId, selectedSectionId } = useVellum();
@@ -68,8 +90,15 @@ export function SearchBox() {
   const [results, setResults] = useState<SearchHit[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  // The scope picker (a ContextMenu under the magnifier) and the results overlay
+  // both render with fixed positioning so they escape the top toolbar's
+  // overflow:hidden clip — otherwise the dropdown is cut off below the bar.
+  const [scopeMenu, setScopeMenu] = useState<{ x: number; y: number } | null>(null);
+  const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const fieldRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   // Debounced search whenever the query, scope, or current selection changes.
   // Scope is relative to the open notebook/section (OneNote-style); an invalid
@@ -98,19 +127,64 @@ export function SearchBox() {
     return () => window.clearTimeout(handle);
   }, [query, scope, selectedNotebookId, selectedSectionId]);
 
-  // Close the results overlay on outside click.
+  // Close the results overlay on outside click. Skip while the scope menu is
+  // open: the results are ducked then, and that menu (portaled to <body>) would
+  // otherwise count as "outside" and tear down `open`, so picking a scope
+  // wouldn't bring the suggestions back. The ContextMenu handles its own close.
   useEffect(() => {
-    if (!open) return;
+    if (!open || scopeMenu) return;
     const onDown = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      const t = e.target as Node;
+      // The overlay is portaled to <body>, so it's not inside containerRef —
+      // exclude it explicitly or clicking a result would close before it fires.
+      if (containerRef.current?.contains(t) || overlayRef.current?.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
+  }, [open, scopeMenu]);
+
+  // Pin the results overlay just under the field (fixed coords, right-aligned to
+  // the field's right edge), recomputed each time it opens.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const r = fieldRef.current?.getBoundingClientRect();
+    if (r) setAnchor({ top: r.bottom + 3, right: window.innerWidth - r.right });
   }, [open]);
 
   const terms = useMemo(() => query.split(/\s+/).filter(Boolean), [query]);
+
+  const toggleScopeMenu = (e: React.MouseEvent<HTMLButtonElement>) => {
+    if (scopeMenu) {
+      setScopeMenu(null);
+      return;
+    }
+    const r = e.currentTarget.getBoundingClientRect();
+    setScopeMenu({ x: r.left, y: r.bottom + 2 });
+  };
+
+  // OneNote's "Search In:" list: a disabled header, then the three scopes with a
+  // tick on the active one. This/Notebook/Section disable when nothing's open.
+  const scopeItems: MenuItem[] = [
+    { label: "Search In:", disabled: true, separatorAfter: true },
+    {
+      label: SCOPE_LABEL.section,
+      checked: scope === "section",
+      disabled: !selectedSectionId,
+      onSelect: () => setScope("section"),
+    },
+    {
+      label: SCOPE_LABEL.notebook,
+      checked: scope === "notebook",
+      disabled: !selectedNotebookId,
+      onSelect: () => setScope("notebook"),
+    },
+    {
+      label: SCOPE_LABEL.all,
+      checked: scope === "all",
+      onSelect: () => setScope("all"),
+    },
+  ];
 
   const onPick = (hit: SearchHit) => {
     setOpen(false);
@@ -119,12 +193,11 @@ export function SearchBox() {
 
   return (
     <div className="v-search" ref={containerRef}>
-      <div className="v-search__field">
-        <Icon name="magnifier" className="v-search__field-icon" />
+      <div className="v-search__field" ref={fieldRef}>
         <input
           type="text"
           className="v-search__input"
-          placeholder="Search notebooks…"
+          placeholder={`Search ${SCOPE_LABEL[scope]}`}
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);
@@ -149,26 +222,47 @@ export function SearchBox() {
             <Icon name="cross-small" />
           </button>
         )}
-        <select
-          className="v-search__scope"
-          value={scope}
-          onChange={(e) => setScope(e.target.value as Scope)}
+        {/* Magnifier doubles as the scope dropdown (OneNote combo): click to
+            pick This Section / This Notebook / All Notebooks. */}
+        <button
+          type="button"
+          className="v-search__menu"
           aria-label="Search scope"
-          title="Search in"
+          title={`Search in: ${SCOPE_LABEL[scope]}`}
+          onClick={toggleScopeMenu}
         >
-          <option value="section" disabled={!selectedSectionId}>
-            This Section
-          </option>
-          <option value="notebook" disabled={!selectedNotebookId}>
-            This Notebook
-          </option>
-          <option value="all">All Notebooks</option>
-        </select>
+          <Icon name="magnifier" className="v-search__menu-icon" />
+          <span className="v-search__caret" aria-hidden="true">
+            ▾
+          </span>
+        </button>
       </div>
 
-      {open && query.trim() !== "" && (
-        <div className="v-search__results" role="listbox">
-          {loading && results.length === 0 ? (
+      {scopeMenu && (
+        <ContextMenu
+          items={scopeItems}
+          x={scopeMenu.x}
+          y={scopeMenu.y}
+          onClose={() => setScopeMenu(null)}
+        />
+      )}
+
+      {/* Ducking: while the scope menu is open, hide the suggestions so the user
+          can filter; they reappear (already refreshed for the new scope) on pick
+          or dismiss. Portaled to <body> at a high z-index so nothing — the
+          section tabs included — can paint over them. */}
+      {open &&
+        query.trim() !== "" &&
+        anchor &&
+        !scopeMenu &&
+        createPortal(
+          <div
+            ref={overlayRef}
+            className="v-search__results"
+            role="listbox"
+            style={{ position: "fixed", top: anchor.top, right: anchor.right, zIndex: 2000 }}
+          >
+            {loading && results.length === 0 ? (
             <div className="v-search__status">Searching…</div>
           ) : results.length === 0 ? (
             <div className="v-search__status">No results for “{query.trim()}”.</div>
@@ -200,8 +294,9 @@ export function SearchBox() {
               </button>
             ))
           )}
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

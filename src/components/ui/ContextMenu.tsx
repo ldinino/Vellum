@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon, IconName } from "./Icon";
 import "./ContextMenu.css";
 
@@ -63,15 +64,14 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
     };
   }, [onClose]);
 
-  return (
-    <div
-      ref={ref}
-      className="v-menu"
-      style={{ left: pos.x, top: pos.y }}
-      role="menu"
-    >
+  // Portaled to <body> so the (position:fixed) menu always paints above page
+  // chrome — section tabs, the editor, etc. — regardless of any ancestor
+  // stacking context where it's invoked.
+  return createPortal(
+    <div ref={ref} className="v-menu" style={{ left: pos.x, top: pos.y }} role="menu">
       <MenuList items={items} onClose={onClose} />
-    </div>
+    </div>,
+    document.body,
   );
 }
 

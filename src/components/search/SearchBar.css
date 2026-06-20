@@ -12,7 +12,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  width: 200px;
+  width: 230px;
   height: 24px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-control);
@@ -25,18 +25,11 @@
   box-shadow: 0 0 0 2px rgba(84, 152, 245, 0.25);
 }
 
-.v-search__field-icon {
-  position: absolute;
-  left: 6px;
-  opacity: 0.6;
-  pointer-events: none;
-}
-
 .v-search__input {
   flex: 1;
   min-width: 0;
   height: 100%;
-  padding: 0 4px 0 26px;
+  padding: 0 6px;
   border: none;
   background: transparent;
   font-family: var(--font-ui);
@@ -56,31 +49,40 @@
   padding: 2px;
 }
 
-/* Scope dropdown tucked at the right of the box (This Section / Notebook / All). */
-.v-search__scope {
+/* Magnifier = search affordance + scope dropdown trigger (OneNote combo),
+   pinned at the right of the box with a small caret. */
+.v-search__menu {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
   height: 100%;
+  padding: 0 4px;
   border: none;
   border-left: 1px solid var(--border-default);
   background: var(--gradient-button);
-  font-family: var(--font-ui);
-  font-size: var(--text-size-small);
-  padding: 0 2px;
-  max-width: 116px;
   cursor: pointer;
 }
 
-.v-search__scope:focus {
-  outline: none;
+.v-search__menu:hover {
+  background: var(--gradient-hover);
+}
+
+.v-search__menu-icon {
+  opacity: 0.75;
+}
+
+.v-search__caret {
+  font-size: 8px;
+  line-height: 1;
+  color: var(--text-muted);
 }
 
 /* ---- Results overlay ---------------------------------------------------- */
 
+/* top/right + position:fixed are set inline (see SearchBar.tsx) so the overlay
+   escapes the top toolbar's overflow:hidden clip. */
 .v-search__results {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 3px;
-  width: 380px;
+  width: 360px;
   max-width: 90vw;
   max-height: 60vh;
   overflow-y: auto;
@@ -88,7 +90,7 @@
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-panel);
   box-shadow: var(--shadow-popup);
-  z-index: 30;
+  z-index: 1000;
 }
 
 .v-search__status {
