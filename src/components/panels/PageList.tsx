@@ -8,18 +8,7 @@ import { reorderByDrop } from "../dnd";
 import { handleListArrows } from "../keyboard";
 import "./PageList.css";
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-/** Right panel: pages of the selected section (spec Section 5). */
+/** Right panel: title-only page-tab strip for the selected section (spec Section 5). */
 export function PageList() {
   const {
     notebooks,
@@ -134,8 +123,6 @@ export function PageList() {
               }}
               onCancel={() => setEditingId(null)}
             />
-            {p.preview && <span className="v-pagelist__preview">{p.preview}</span>}
-            <span className="v-pagelist__date">{formatDate(p.updatedAt)}</span>
           </div>
         ))}
         {pages.length === 0 && (

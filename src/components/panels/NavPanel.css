@@ -25,6 +25,17 @@
   padding: var(--space-2);
 }
 
+/* Each notebook is a collapsible colored "box" (OneNote 2007): a header bar
+   tinted with the notebook color (--nb-color, set inline per notebook) over a
+   lighter body holding its sections. */
+.v-nav__group {
+  margin-bottom: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--nb-color) 55%, #9a9a9a);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--nb-color) 12%, white);
+  overflow: hidden;
+}
+
 .v-nav__notebook,
 .v-nav__section {
   display: flex;
@@ -44,10 +55,14 @@
 
 .v-nav__notebook {
   font-weight: 600;
+  /* Colored header bar; square so it fills the rounded box's top corners. */
+  background: color-mix(in srgb, var(--nb-color) 58%, white);
+  border-color: transparent;
+  border-radius: 0;
 }
 
 .v-nav__section {
-  padding-left: 30px;
+  padding-left: 26px;
 }
 
 .v-nav__notebook:hover,

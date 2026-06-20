@@ -89,7 +89,7 @@
   --titlebar-height: 30px;
   --toolbar-height: 34px;
   --nav-panel-width: 220px;
-  --pagelist-panel-width: 240px;
+  --pagestrip-width: 168px;       /* OneNote-style page-tab strip (right edge) */
 
   /* ---- Feature underline colors (spec Sections 9/10) ---------------------- */
   /* Distinct from each other and from WebView2's red spell-check squiggle. */

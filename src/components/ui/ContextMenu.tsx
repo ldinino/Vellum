@@ -41,17 +41,24 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
   }, [x, y]);
 
   useEffect(() => {
-    const close = () => onClose();
+    // Close only on a mousedown that lands OUTSIDE the menu (and its submenus,
+    // which render as nested children of `ref`). A blind capture-phase close
+    // would unmount the menu before the item's own click could fire, so no
+    // item would ever activate.
+    const onMouseDown = (e: MouseEvent) => {
+      const el = ref.current;
+      if (el && e.target instanceof Node && el.contains(e.target)) return;
+      onClose();
+    };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
-    // Capture phase so a click on anything else closes first.
-    window.addEventListener("mousedown", close, true);
-    window.addEventListener("blur", close);
+    window.addEventListener("mousedown", onMouseDown, true);
+    window.addEventListener("blur", onClose);
     window.addEventListener("keydown", onKey);
     return () => {
-      window.removeEventListener("mousedown", close, true);
-      window.removeEventListener("blur", close);
+      window.removeEventListener("mousedown", onMouseDown, true);
+      window.removeEventListener("blur", onClose);
       window.removeEventListener("keydown", onKey);
     };
   }, [onClose]);
@@ -62,7 +69,6 @@ export function ContextMenu({ items, x, y, onClose }: ContextMenuProps) {
       className="v-menu"
       style={{ left: pos.x, top: pos.y }}
       role="menu"
-      onMouseDown={(e) => e.stopPropagation()}
     >
       <MenuList items={items} onClose={onClose} />
     </div>

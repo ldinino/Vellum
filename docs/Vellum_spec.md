@@ -88,37 +88,51 @@ OneDrive (and other sync clients) cover this path by default on Windows — no c
 
 ### 5. Navigation & Layout
 
-**Left panel — fixed width, resizable**
+Modeled on OneNote 2007: a notebook tree on the **left**, the editor in the
+**center**, and a page-tab strip on the **right** (pages are *not* a middle
+column). Panel order, left → right: **nav · editor · page tabs.**
+
+**Left panel — notebook tree (fixed width, resizable)**
 
 ```
 [ + New Notebook ]
-▼ Notebook Name
-    Section A
-  ▶ Section B
-▶ Another Notebook
+┌──────────────────┐   ← each notebook is a collapsible colored "box";
+│▼ Notebook Name   │     the header bar is tinted with the notebook color
+│    Section A     │
+│  ▶ Section B     │
+└──────────────────┘
+┌──────────────────┐
+│▶ Another Notebook│
+└──────────────────┘
 ```
 
-- Notebooks are collapsible. Expanded notebooks show their sections.
-- Clicking a section loads its page list in the right panel.
+- Notebooks are collapsible colored boxes; the header bar is tinted with the
+  notebook color. Expanded notebooks show their sections beneath, on a lighter
+  ground.
+- Clicking a section loads its pages in the right-hand page-tab strip and tints
+  the page border with that section's color.
 - Right-click notebook: Rename, Delete, Add Section, Change color.
 - Right-click section: Rename, Delete, Add Page, Change color, **Properties**.
 - Section Properties modal: name, color, page template assignment (dropdown: None / [template names]).
 - Drag to reorder sections within a notebook.
 - No top tab bar.
 
-**Right panel — page list**
+**Center — editor**
 
-- Pages listed for the currently selected section.
-- Shows: page title, first line of content preview, last modified date.
+- Fills the remaining space between the tree and the page strip.
+- The **open section's color frames the page**: a colored band along the top
+  edge and tinted side rules meeting the page-tab strip.
+- Page title is an editable h1 at the top, outside the Tiptap content area.
+- Toolbar docked at the top of the editor (formatting controls, search).
+
+**Right panel — page-tab strip**
+
+- Pages for the currently selected section, as **title-only tabs** attached to
+  the page edge (OneNote 2007 style). The strip is tinted with the section
+  color; the selected tab turns white to read as part of the page.
 - [ + New Page ] at top.
 - Right-click: Rename, Delete, Duplicate, Move to section.
 - Drag to reorder.
-
-**Main area — editor**
-
-- Fills remaining space.
-- Page title is an editable h1 at the top, outside the Tiptap content area.
-- Toolbar docked at the top of the editor (formatting controls, search).
 
 **No section tabs at top. No floating elements.**
 

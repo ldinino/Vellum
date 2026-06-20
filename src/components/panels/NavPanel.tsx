@@ -173,7 +173,13 @@ export function NavPanel({ onOpenSectionProperties }: { onOpenSectionProperties:
         onKeyDown={(e) => handleListArrows(e, ".v-nav__notebook, .v-nav__section")}
       >
         {notebooks.map((nb) => (
-          <div key={nb.id} role="treeitem" aria-expanded={nb.expanded}>
+          <div
+            key={nb.id}
+            role="treeitem"
+            aria-expanded={nb.expanded}
+            className="v-nav__group"
+            style={{ ["--nb-color" as string]: nb.color ?? DEFAULT_NOTEBOOK_COLOR }}
+          >
             <div
               className="v-nav__notebook"
               draggable={editingId !== nb.id}
@@ -191,10 +197,6 @@ export function NavPanel({ onOpenSectionProperties }: { onOpenSectionProperties:
               onContextMenu={(e) => openMenu(e, notebookMenu(nb.id, nb.color))}
             >
               <span className={`v-nav__twisty ${nb.expanded ? "v-nav__twisty--open" : ""}`} />
-              <span
-                className="v-nav__swatch"
-                style={{ background: nb.color ?? DEFAULT_NOTEBOOK_COLOR }}
-              />
               <Icon name={nb.expanded ? "book-open" : "book"} />
               <EditableLabel
                 className="v-nav__name"
