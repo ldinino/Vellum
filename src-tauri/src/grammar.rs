@@ -16,7 +16,7 @@
 
 use std::cell::RefCell;
 
-use harper_core::linting::{LintGroup, Linter, Suggestion};
+use harper_core::linting::{LintGroup, LintKind, Linter, Suggestion};
 use harper_core::spell::FstDictionary;
 use harper_core::{Dialect, Document};
 use serde::Serialize;
@@ -31,6 +31,11 @@ pub struct GrammarSpan {
     /// Lint category (e.g. "Agreement", "Spelling"). Used as the rule identifier
     /// for the "Ignore Rule" action.
     pub kind: String,
+    /// True for misspellings (`LintKind::Spelling`). The frontend renders these
+    /// with a distinct underline + spelling context menu and gates them on the
+    /// spell-check toggle rather than the grammar toggle (spec Section 10 design
+    /// note: spelling is sourced from Harper, not WebView2).
+    pub is_spelling: bool,
     /// Replacement strings for the span; an empty string means "remove". Only
     /// whole-span replacements are surfaced (insert-after suggestions are rare
     /// and don't fit the click-to-replace model, so they're omitted in v1).
@@ -84,6 +89,7 @@ pub fn check(text: &str) -> Vec<GrammarSpan> {
                 start: to_u16(l.span.start),
                 end: to_u16(l.span.end),
                 message: l.message,
+                is_spelling: matches!(l.lint_kind, LintKind::Spelling),
                 kind: l.lint_kind.to_string(),
                 suggestions,
             }

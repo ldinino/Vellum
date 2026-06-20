@@ -91,6 +91,10 @@ function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }
               item.checked ? "v-menu__item--checked" : "",
             ].join(" ")}
             disabled={item.disabled}
+            // Keep focus (and the editor/input selection) where it was when the
+            // menu opened, so Cut/Copy/Paste act on the right selection. Click
+            // still fires — preventing mousedown only blocks the focus shift.
+            onMouseDown={(e) => e.preventDefault()}
             onMouseEnter={() => setOpenSub(item.submenu ? i : null)}
             onClick={() => {
               if (item.submenu) return;

@@ -191,7 +191,11 @@ Built on Tiptap with the following extensions enabled:
 **Inline**
 - Links (click to open, right-click to edit/remove)
 
-**Spell check:** WebView2 native via `spellcheck` attribute. No additional dependency.
+**Spell check:** Harper (see Section 10) — spelling and grammar both come from the
+embedded Harper linter. (The native WebView2 `spellcheck` attribute is turned
+**off**: its red squiggle can't be themed and its correction suggestions are not
+readable from JS, so they can't feed our themed right-click menu. See the Section
+10 design note.)
 
 **Grammar check:** Harper (see Section 10).
 
@@ -316,7 +320,7 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 
 ### 10. Grammar Check
 
-**Engine:** [Harper](https://writewithharper.com/) (`harper-core`), an offline, Rust-native grammar checker (Apache-2.0). It is compiled directly into the Tauri backend — no separate server, no on-demand download. Its dictionary is embedded in the binary, so grammar check is available immediately on first launch and works fully offline.
+**Engine:** [Harper](https://writewithharper.com/) (`harper-core`), an offline, Rust-native grammar **and spelling** checker (Apache-2.0). It is compiled directly into the Tauri backend — no separate server, no on-demand download. Its dictionary is embedded in the binary, so both checks are available immediately on first launch and work fully offline. Harper returns spelling lints (`LintKind::Spelling`) alongside grammar lints; the renderer separates them so spelling and grammar can be styled and toggled independently.
 
 **Why Harper:** It lints in milliseconds and is built for keystroke-speed feedback, which is exactly what real-time, Word-style underlining needs. It runs in-process with no background service and no model to fetch, keeping the app self-contained and private — the right balance for a notes app.
 
@@ -326,10 +330,10 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 - Runs entirely in-process on every platform (Windows, Mac, Linux) with no separate runtime required.
 
 **UI behavior:**
-- Grammar errors underlined in a distinct color (separate from Refine suggestions and spell check).
-- Hover underline: shows Harper's suggested correction and rule description.
+- Grammar errors underlined in a distinct color (green wavy); spelling errors in a distinct color (red wavy) — both separate from Refine suggestions (purple).
+- Hover underline: shows Harper's suggested correction(s) and rule/message.
 - Click suggestion to accept.
-- Right-click: Accept, Ignore, Ignore Rule.
+- Right-click (via the unified editor context menu, Section 5): grammar → Accept / Ignore / Ignore Rule; spelling → suggestion(s) / Ignore.
 
 **Scope:** Runs on the current page only. Does not scan across pages or notebooks in the background.
 
@@ -340,6 +344,7 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 > - **Offsets:** the command returns **UTF-16** offsets (Harper works in Unicode scalars) so they index a JS string directly. The renderer extracts the page's plain text — newline between blocks so Harper sees sentence boundaries — while recording each text node's offset→ProseMirror-position map, then maps spans back. Verified against multi-block docs.
 > - **Decorations, not a mark:** grammar errors are ProseMirror **decorations** (never stored in the doc or the search index); the set is mapped through edits between re-checks. The check is debounced ~2s after the last keystroke and runs on a `spawn_blocking` thread (linter is cached per thread — `LintGroup` isn't `Send`).
 > - **Ignore is per app-session** (module-level sets spanning page switches): "Ignore" keys on the lint's kind + message + matched text; "Ignore Rule" keys on the lint kind.
+> - **Spelling from Harper, not WebView2 (changed from §6's original plan).** The native `spellcheck` attribute is set to `false`. Rationale: WebView2's spelling correction suggestions are only reachable through its native right-click menu and aren't exposed to JS, so they can't populate our themed menu; keeping it on would also double-underline (native red squiggle + Harper). Harper already produces `LintKind::Spelling` lints with suggestions, so we draw spelling ourselves (red wavy) and serve corrections from our own menu. Trade-off accepted: Harper's dictionary, not WebView2's, defines "misspelled". Spelling and grammar each have their own on/off toggle (Section 15) and `mapLints` filters by category.
 
 ---
 
@@ -435,7 +440,7 @@ No PDF export, no Markdown export, no HTML export in v1.
 |---|---|
 | General | App data location (read-only, shows Documents path) |
 | Templates | Page template library: create, edit, delete |
-| Editor | Default font, default font size, spell check on/off |
+| Editor | Default font, default font size, spell check on/off (Harper spelling, English) |
 | Grammar | Grammar check on/off (Harper, English) |
 | Refine | Enable toggle, Strict ↔ Liberal slider, model selector, Refine template manager, debug panel access |
 | About | Version, Harper version, Ollama runtime version, check for updates |
@@ -627,7 +632,16 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 **Goal:** Full Refine flow end-to-end. Second highest-risk phase.
 
-- Right-click context menu on selected text: "Refine..." (one template) or "Refine ▶" submenu (multiple)
+> **Prerequisite done (themed context menus).** Before starting Phase 8 the
+> native WebView2 right-click menu was replaced app-wide with the themed
+> `ContextMenu`. A unified editor controller (`EditorContextMenu`) handles
+> spelling, grammar, links (Open/Edit/Remove), and clipboard (Cut/Copy/Paste),
+> and exposes a `buildRefineItems(selectedText)` seam: Phase 8 supplies it to
+> produce "Refine…" / "Refine ▶" on a selection. Plain inputs get a themed
+> clipboard menu via a top-level `AppContextMenus`. Spelling was also moved from
+> WebView2 to Harper as part of this (see Section 10 design note).
+
+- Right-click context menu on selected text: "Refine..." (one template) or "Refine ▶" submenu (multiple) — wire via `EditorContextMenu`'s `buildRefineItems` seam
 - Send selected text + system prompt to Ollama with Strict ↔ Liberal modifier
 - Word-level diff algorithm (diff-match-patch or equivalent, tuned to word boundaries)
 - Implement `refineSuggestion` Tiptap mark: attributes `original`, `type` (insert | delete | rewrite)

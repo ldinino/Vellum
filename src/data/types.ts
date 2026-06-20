@@ -57,6 +57,9 @@ export interface GrammarSpan {
   message: string;
   /** Lint category (e.g. "Agreement", "Spelling") — the "Ignore Rule" identifier. */
   kind: string;
+  /** True for misspellings: rendered with a distinct underline + spelling menu
+   * and gated on the spell-check toggle rather than the grammar toggle. */
+  isSpelling: boolean;
   /** Replacement strings; an empty string means "remove". */
   suggestions: string[];
 }

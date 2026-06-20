@@ -40,6 +40,8 @@ interface VellumState {
   searchHighlight: string;
   /** Harper grammar check on/off (persisted in app.json). */
   grammarEnabled: boolean;
+  /** Spell check on/off (Harper spelling, persisted in app.json). */
+  spellcheckEnabled: boolean;
   /** Page template library (app.json). */
   pageTemplates: PageTemplate[];
   /** Refine settings + library (app.json; spec Sections 8, 9). */
@@ -63,6 +65,7 @@ const initial: VellumState = {
   selectedPageId: null,
   searchHighlight: "",
   grammarEnabled: true,
+  spellcheckEnabled: true,
   pageTemplates: [],
   refineEnabled: false,
   refineAdherence: 0.5,
@@ -112,6 +115,7 @@ export interface VellumActions {
   reorderSections: (notebookId: string, orderedIds: string[]) => Promise<void>;
 
   setGrammarEnabled: (enabled: boolean) => Promise<void>;
+  setSpellcheckEnabled: (enabled: boolean) => Promise<void>;
   /** Persist the page-template library to app.json. */
   savePageTemplates: (templates: PageTemplate[]) => Promise<void>;
 
@@ -236,6 +240,7 @@ export function VellumProvider({ children }: { children: ReactNode }) {
         setState((s) => ({
           ...s,
           grammarEnabled: cfg.settings.grammarEnabled,
+          spellcheckEnabled: cfg.settings.spellcheckEnabled,
           pageTemplates: cfg.pageTemplates ?? [],
           refineEnabled: cfg.settings.refineEnabled,
           refineAdherence: cfg.settings.refineAdherence,
@@ -470,6 +475,19 @@ export function VellumProvider({ children }: { children: ReactNode }) {
         await api.saveAppConfig({
           ...cfg,
           settings: { ...cfg.settings, grammarEnabled: enabled },
+        });
+      } catch (e) {
+        fail(e);
+      }
+    },
+    setSpellcheckEnabled: async (enabled) => {
+      // Optimistic toggle, then persist into app.json (preserving other fields).
+      setState((s) => ({ ...s, spellcheckEnabled: enabled }));
+      try {
+        const cfg = await api.getAppConfig();
+        await api.saveAppConfig({
+          ...cfg,
+          settings: { ...cfg.settings, spellcheckEnabled: enabled },
         });
       } catch (e) {
         fail(e);

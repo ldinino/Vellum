@@ -31,6 +31,8 @@ export interface MappedLint {
   to: number;
   message: string;
   kind: string;
+  /** Misspelling vs grammar lint — selects the underline + context menu. */
+  isSpelling: boolean;
   suggestions: string[];
   /** Stable, content-based identity for per-session "Ignore". */
   instanceKey: string;
@@ -74,14 +76,26 @@ function mapOffset(segments: Segment[], offset: number): number | null {
   return null;
 }
 
+/** Which lint categories to surface — spelling and grammar toggle independently
+ * (spec Section 15: separate Editor "spell check" and Grammar toggles). */
+export interface LintToggles {
+  grammar: boolean;
+  spell: boolean;
+}
+
 /**
  * Resolve backend spans to document ranges, dropping any that fall outside the
- * text nodes (e.g. a span landing on an inter-block newline) or that the user
- * has ignored this session.
+ * text nodes (e.g. a span landing on an inter-block newline), belong to a
+ * disabled category, or that the user has ignored this session.
  */
-export function mapLints(spans: GrammarSpan[], extracted: ExtractedText): MappedLint[] {
+export function mapLints(
+  spans: GrammarSpan[],
+  extracted: ExtractedText,
+  toggles: LintToggles,
+): MappedLint[] {
   const out: MappedLint[] = [];
   for (const s of spans) {
+    if (s.isSpelling ? !toggles.spell : !toggles.grammar) continue;
     if (ignoredRules.has(s.kind)) continue;
     const from = mapOffset(extracted.segments, s.start);
     const to = mapOffset(extracted.segments, s.end);
@@ -94,6 +108,7 @@ export function mapLints(spans: GrammarSpan[], extracted: ExtractedText): Mapped
       to,
       message: s.message,
       kind: s.kind,
+      isSpelling: s.isSpelling,
       suggestions: s.suggestions,
       instanceKey,
     });

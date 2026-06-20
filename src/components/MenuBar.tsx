@@ -18,7 +18,8 @@ const inTauri = "__TAURI_INTERNALS__" in window;
 export function MenuBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const { active } = useActiveEditor();
   const editor = active?.editor ?? null;
-  const { actions, grammarEnabled, selectedNotebookId, selectedSectionId } = useVellum();
+  const { actions, grammarEnabled, spellcheckEnabled, selectedNotebookId, selectedSectionId } =
+    useVellum();
   const [open, setOpen] = useState<{ id: string; x: number; y: number } | null>(null);
 
   const openAt = (id: string, target: HTMLElement) => {
@@ -198,8 +199,14 @@ export function MenuBar({ onOpenSettings }: { onOpenSettings: () => void }) {
 
   const toolsItems = (): MenuItem[] => [
     {
-      // Toggle: the spell-check icon is always shown; when on, ContextMenu
-      // highlights its icon box (and the label) to indicate the active state.
+      // Toggle: the icon is always shown; when on, ContextMenu highlights its
+      // icon box (and the label) to indicate the active state.
+      label: "Check Spelling",
+      icon: "spell-check",
+      checked: spellcheckEnabled,
+      onSelect: () => actions.setSpellcheckEnabled(!spellcheckEnabled),
+    },
+    {
       label: "Check Grammar",
       icon: "spell-check",
       checked: grammarEnabled,

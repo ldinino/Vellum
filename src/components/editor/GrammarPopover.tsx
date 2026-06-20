@@ -1,15 +1,13 @@
 /**
- * Hover tooltip + right-click menu for grammar underlines (spec Section 10):
- * hover shows the rule and clickable suggestions ("Click suggestion to accept");
- * right-click offers Accept / Ignore / Ignore Rule. All actions edit the doc and
- * then trigger a re-check so the underline refreshes immediately.
+ * Hover tooltip for grammar/spelling underlines (spec Section 10): hovering an
+ * underline shows the rule/message and clickable suggestions ("Click suggestion
+ * to accept"). Right-click (Accept / Ignore / Ignore Rule) is handled by the
+ * unified [EditorContextMenu] so the editor has a single right-click path.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { Editor } from "@tiptap/react";
-import { ContextMenu, MenuItem } from "../ui/ContextMenu";
 import { grammarHitAt, GrammarHit } from "./GrammarError";
-import { ignoreInstance, ignoreRule } from "./grammar";
 import "./GrammarPopover.css";
 
 interface Anchored {
@@ -26,7 +24,6 @@ export function GrammarPopover({
   onAfterAction: () => void;
 }) {
   const [tooltip, setTooltip] = useState<Anchored | null>(null);
-  const [menu, setMenu] = useState<Anchored | null>(null);
   const hideTimer = useRef<number | null>(null);
 
   const cancelHide = () => {
@@ -45,7 +42,7 @@ export function GrammarPopover({
     const dom = editor.view.dom as HTMLElement;
 
     const onMove = (e: MouseEvent) => {
-      const el = (e.target as HTMLElement)?.closest?.(".v-grammar-error");
+      const el = (e.target as HTMLElement)?.closest?.(".v-grammar-error, .v-spell-error");
       if (!el) {
         scheduleHide();
         return;
@@ -61,22 +58,9 @@ export function GrammarPopover({
       setTooltip({ hit, x: rect.left, y: rect.bottom + 4 });
     };
 
-    const onContext = (e: MouseEvent) => {
-      const el = (e.target as HTMLElement)?.closest?.(".v-grammar-error");
-      if (!el) return;
-      const at = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
-      const hit = at ? grammarHitAt(editor, at.pos) : null;
-      if (!hit) return;
-      e.preventDefault();
-      setTooltip(null);
-      setMenu({ hit, x: e.clientX, y: e.clientY });
-    };
-
     dom.addEventListener("mousemove", onMove);
-    dom.addEventListener("contextmenu", onContext);
     return () => {
       dom.removeEventListener("mousemove", onMove);
-      dom.removeEventListener("contextmenu", onContext);
       cancelHide();
     };
   }, [editor]);
@@ -88,37 +72,10 @@ export function GrammarPopover({
     if (suggestion === "") chain.deleteRange({ from: hit.from, to: hit.to }).run();
     else chain.insertContentAt({ from: hit.from, to: hit.to }, suggestion).run();
     setTooltip(null);
-    setMenu(null);
-    onAfterAction();
-  };
-
-  const ignoreThis = (hit: GrammarHit) => {
-    ignoreInstance(hit.instanceKey);
-    setTooltip(null);
-    setMenu(null);
-    onAfterAction();
-  };
-
-  const ignoreThisRule = (hit: GrammarHit) => {
-    ignoreRule(hit.kind);
-    setTooltip(null);
-    setMenu(null);
     onAfterAction();
   };
 
   const suggestionLabel = (s: string) => (s === "" ? "Remove" : s);
-
-  const menuItems = (hit: GrammarHit): MenuItem[] => [
-    {
-      label: hit.suggestions.length ? `Accept “${suggestionLabel(hit.suggestions[0])}”` : "No suggestion",
-      icon: "tick",
-      disabled: hit.suggestions.length === 0,
-      onSelect: () => hit.suggestions.length && accept(hit, hit.suggestions[0]),
-      separatorAfter: true,
-    },
-    { label: "Ignore", icon: "cross-small", onSelect: () => ignoreThis(hit) },
-    { label: "Ignore Rule", icon: "eraser", onSelect: () => ignoreThisRule(hit) },
-  ];
 
   return (
     <>
@@ -147,15 +104,6 @@ export function GrammarPopover({
             </div>
           )}
         </div>
-      )}
-
-      {menu && (
-        <ContextMenu
-          items={menuItems(menu.hit)}
-          x={menu.x}
-          y={menu.y}
-          onClose={() => setMenu(null)}
-        />
       )}
     </>
   );

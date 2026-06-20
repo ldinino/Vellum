@@ -8,6 +8,7 @@ import { applySearchHighlight } from "./SearchHighlight";
 import { extractText, mapLints } from "./grammar";
 import { setGrammarLints, clearGrammarLints } from "./GrammarError";
 import { GrammarPopover } from "./GrammarPopover";
+import { EditorContextMenu } from "./EditorContextMenu";
 import { AttachmentBar, AttachmentItem } from "../panels/AttachmentBar";
 import { createDebouncer } from "../../lib/debounce";
 import { useVellum } from "../../state/vellum";
@@ -59,7 +60,7 @@ export function PageEditor({
   page: Page;
   highlightQuery?: string;
 }) {
-  const { actions, grammarEnabled } = useVellum();
+  const { actions, grammarEnabled, spellcheckEnabled } = useVellum();
   const { setActiveEditor } = useActiveEditor();
   const [title, setTitle] = useState(page.title);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -73,8 +74,12 @@ export function PageEditor({
   // Grammar checks fire ~2s after the user stops typing (spec Section 10).
   const grammarSaver = useMemo(() => createDebouncer(2000, 8000), []);
   const grammarReq = useRef(0);
+  // Harper runs if either category is on; mapLints filters per toggle. Refs keep
+  // the stable callbacks (runGrammar, onUpdate) reading the latest values.
   const grammarEnabledRef = useRef(grammarEnabled);
   grammarEnabledRef.current = grammarEnabled;
+  const spellcheckEnabledRef = useRef(spellcheckEnabled);
+  spellcheckEnabledRef.current = spellcheckEnabled;
   const ids = useRef({ notebookId, pageId: page.id });
   ids.current = { notebookId, pageId: page.id };
   const editorRef = useRef<Editor | null>(null);
@@ -85,7 +90,11 @@ export function PageEditor({
   const runGrammar = useCallback(async () => {
     const ed = editorRef.current;
     if (!ed) return;
-    if (!grammarEnabledRef.current) {
+    const toggles = {
+      grammar: grammarEnabledRef.current,
+      spell: spellcheckEnabledRef.current,
+    };
+    if (!toggles.grammar && !toggles.spell) {
       clearGrammarLints(ed);
       return;
     }
@@ -95,7 +104,7 @@ export function PageEditor({
     try {
       const spans = await api.grammarCheck(extracted.text);
       if (grammarReq.current !== reqId || ed.state.doc !== docAtStart) return;
-      setGrammarLints(ed, mapLints(spans, extracted));
+      setGrammarLints(ed, mapLints(spans, extracted, toggles));
     } catch (e) {
       console.error("grammar check failed", e);
     }
@@ -138,7 +147,11 @@ export function PageEditor({
   const editor = useEditor({
     extensions: buildExtensions(),
     editorProps: {
-      attributes: { class: "v-prose", spellcheck: "true" },
+      // WebView2 native spell check is off: spelling is sourced from Harper now
+      // (spec Section 10 design note), so the native menu's "correct this word"
+      // (which JS can't read) is replaced by our themed spelling menu, and we
+      // avoid a double red squiggle.
+      attributes: { class: "v-prose", spellcheck: "false" },
       handleClick: (_view, _pos, event) => {
         // Ctrl/Cmd-click a link → open in the system browser (plain click
         // keeps editing the text).
@@ -195,7 +208,7 @@ export function PageEditor({
           .then(() => actions.refreshPages())
           .catch((e) => console.error("snapshot save failed", e));
       });
-      if (grammarEnabledRef.current) {
+      if (grammarEnabledRef.current || spellcheckEnabledRef.current) {
         grammarSaver.schedule(() => void runGrammarRef.current());
       }
     },
@@ -263,12 +276,12 @@ export function PageEditor({
     applySearchHighlight(editor, terms);
   }, [editor, contentLoaded, highlightQuery]);
 
-  // Grammar check on open and whenever the toggle flips; clear underlines off.
+  // Re-lint on open and whenever either toggle flips; clear underlines when both
+  // are off (runGrammar itself clears in that case, so just call it).
   useEffect(() => {
     if (!editor || !contentLoaded) return;
-    if (grammarEnabled) void runGrammar();
-    else clearGrammarLints(editor);
-  }, [editor, contentLoaded, grammarEnabled, runGrammar]);
+    void runGrammar();
+  }, [editor, contentLoaded, grammarEnabled, spellcheckEnabled, runGrammar]);
 
   // Focus the title of a freshly created (untitled) page.
   useEffect(() => {
@@ -349,6 +362,7 @@ export function PageEditor({
       />
       <EditorContent editor={editor} className="v-editor__content" />
       <GrammarPopover editor={editor} onAfterAction={() => void runGrammarRef.current()} />
+      <EditorContextMenu editor={editor} onAfterAction={() => void runGrammarRef.current()} />
     </div>
   );
 }

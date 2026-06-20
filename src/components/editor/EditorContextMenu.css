@@ -1,0 +1,27 @@
+/* Edit Link dialog (spec Section 6 — right-click link → edit/remove). */
+
+.v-link-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--text-size-ui);
+}
+
+.v-link-dialog label {
+  font-weight: 600;
+}
+
+.v-link-dialog input[type="text"] {
+  padding: 4px 6px;
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-content);
+}
+
+.v-link-dialog input:focus {
+  outline: none;
+  border-color: var(--accent-bright);
+  box-shadow: 0 0 3px rgba(68, 136, 229, 0.5);
+}

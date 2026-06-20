@@ -83,9 +83,19 @@
 }
 
 /* Grammar underline (spec Section 10) — green wavy, distinct from Refine
- * (purple) and WebView2's red spell-check squiggle. */
+ * (purple) and spelling (red). */
 .v-grammar-error {
   text-decoration: underline wavy var(--grammar-underline);
+  text-decoration-skip-ink: none;
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
+/* Spelling underline (spec Section 10 design note) — red wavy. Sourced from
+ * Harper now that WebView2's native spell check is turned off, so we draw the
+ * squiggle ourselves. */
+.v-spell-error {
+  text-decoration: underline wavy var(--spell-underline);
   text-decoration-skip-ink: none;
   text-underline-offset: 2px;
   cursor: help;

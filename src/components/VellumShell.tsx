@@ -8,6 +8,7 @@ import { MenuBar } from "./MenuBar";
 import { TopToolbar } from "./editor/EditorToolbar";
 import { SettingsModal } from "./settings/SettingsModal";
 import { FirstRunModal } from "./settings/FirstRunModal";
+import { AppContextMenus } from "./AppContextMenus";
 import { useVellum } from "../state/vellum";
 import { DEFAULT_SECTION_COLOR } from "../data/palette";
 import { Icon } from "./ui/Icon";
@@ -100,6 +101,7 @@ export function VellumShell() {
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <FirstRunModal />
+      <AppContextMenus />
     </div>
   );
 }

@@ -21,6 +21,8 @@ export interface GrammarHit {
   to: number;
   message: string;
   kind: string;
+  /** Misspelling vs grammar lint — selects the underline + context menu. */
+  isSpelling: boolean;
   suggestions: string[];
   instanceKey: string;
 }
@@ -41,10 +43,11 @@ export const GrammarError = Extension.create({
                 Decoration.inline(
                   m.from,
                   m.to,
-                  { class: "v-grammar-error" },
+                  { class: m.isSpelling ? "v-spell-error" : "v-grammar-error" },
                   {
                     message: m.message,
                     kind: m.kind,
+                    isSpelling: m.isSpelling,
                     suggestions: m.suggestions,
                     instanceKey: m.instanceKey,
                   },
@@ -91,6 +94,7 @@ export function grammarHitAt(editor: Editor, pos: number): GrammarHit | null {
     to: d.to,
     message: spec.message,
     kind: spec.kind,
+    isSpelling: spec.isSpelling,
     suggestions: spec.suggestions,
     instanceKey: spec.instanceKey,
   };
