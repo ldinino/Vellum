@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { NavPanel } from "./panels/NavPanel";
 import { PageList } from "./panels/PageList";
 import { EditorArea } from "./panels/EditorArea";
+import { SectionTabs } from "./panels/SectionTabs";
 import { SectionPropertiesModal } from "./panels/SectionPropertiesModal";
-import { SearchBar } from "./search/SearchBar";
+import { MenuBar } from "./MenuBar";
+import { TopToolbar } from "./editor/EditorToolbar";
 import { SettingsModal } from "./settings/SettingsModal";
 import { FirstRunModal } from "./settings/FirstRunModal";
 import { useVellum } from "../state/vellum";
@@ -11,13 +13,43 @@ import { DEFAULT_SECTION_COLOR } from "../data/palette";
 import { Icon } from "./ui/Icon";
 import "./VellumShell.css";
 
-/** Three-panel navigation shell: notebook tree | editor | page-tab strip. */
+const NAV_COLLAPSED_KEY = "vellum.navCollapsed";
+
+/**
+ * App shell: a unified top toolbar (formatting + search) over a three-region
+ * body — notebook nav (left) | section tabs + editor (center) | page-tab strip
+ * (right).
+ */
 export function VellumShell() {
   const { error, actions, notebooks, selectedNotebookId, selectedSectionId } = useVellum();
   const [secProps, setSecProps] = useState<{ notebookId: string; sectionId: string } | null>(
     null,
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(NAV_COLLAPSED_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleNav = useCallback(() => {
+    setNavCollapsed((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(NAV_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore storage failures */
+      }
+      return next;
+    });
+  }, []);
+
+  const openSectionProperties = useCallback(
+    (notebookId: string, sectionId: string) => setSecProps({ notebookId, sectionId }),
+    [],
+  );
 
   // The open section's color tints the page border + page-tab strip (OneNote
   // 2007). Derived from loaded state; defaults until a section is selected.
@@ -27,11 +59,10 @@ export function VellumShell() {
       ?.sections?.find((s) => s.id === selectedSectionId)?.color ?? DEFAULT_SECTION_COLOR;
 
   return (
-    <div
-      className="v-shell"
-      style={{ ["--section-color" as string]: sectionColor }}
-    >
-      <SearchBar onOpenSettings={() => setSettingsOpen(true)} />
+    <div className="v-shell" style={{ ["--section-color" as string]: sectionColor }}>
+      <MenuBar onOpenSettings={() => setSettingsOpen(true)} />
+      <TopToolbar onOpenSettings={() => setSettingsOpen(true)} />
+
       {error && (
         <div className="v-shell__error" role="alert">
           <Icon name="exclamation" />
@@ -43,11 +74,18 @@ export function VellumShell() {
       )}
       <div className="v-shell__body">
         <NavPanel
-          onOpenSectionProperties={(notebookId, sectionId) =>
-            setSecProps({ notebookId, sectionId })
-          }
+          collapsed={navCollapsed}
+          onToggle={toggleNav}
+          onOpenSectionProperties={openSectionProperties}
         />
-        <EditorArea />
+        <div className="v-shell__center">
+          <SectionTabs
+            navCollapsed={navCollapsed}
+            onToggleNav={toggleNav}
+            onOpenSectionProperties={openSectionProperties}
+          />
+          <EditorArea />
+        </div>
         <PageList />
       </div>
 

@@ -23,6 +23,10 @@ vendor/bin/
 # lives in src/assets/icons/ and IS committed; copy more from here as needed.
 /assets/
 
+# Local dev-run artifacts (scripts/dev-run.ps1 log + machine-specific launcher)
+.devlog.txt
+*.lnk
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

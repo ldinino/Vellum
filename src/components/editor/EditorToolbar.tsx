@@ -1,8 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEditorState } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
 import { Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator } from "../ui/Toolbar";
-import { useVellum } from "../../state/vellum";
+import { Icon } from "../ui/Icon";
+import { useActiveEditor } from "../../state/activeEditor";
+import { SearchBox } from "../search/SearchBar";
 import "./EditorToolbar.css";
 
 const FONTS = [
@@ -18,26 +20,24 @@ const FONTS = [
 ];
 const SIZES = ["10", "11", "12", "14", "16", "18", "24", "36"];
 
-interface EditorToolbarProps {
+interface FormattingGroupsProps {
   editor: Editor | null;
-  onInsertImage: (file: File) => void;
-  /** Show the grammar on/off toggle (off in the template editor). */
-  showGrammarToggle?: boolean;
+  insertImage: (file: File) => void;
+  linkOpen: boolean;
+  setLinkOpen: (v: boolean) => void;
 }
 
-export function EditorToolbar({
-  editor,
-  onInsertImage,
-  showGrammarToggle = true,
-}: EditorToolbarProps) {
-  const [linkOpen, setLinkOpen] = useState(false);
+/**
+ * The formatting controls themselves, rendered as flex children of a toolbar
+ * bar. Tolerates a null editor (renders everything disabled) so the shell-level
+ * TopToolbar stays visible when no page is open.
+ */
+function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroupsProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { grammarEnabled, actions } = useVellum();
 
   // Tiptap v3's `useEditor` no longer re-renders on every transaction, so the
   // toolbar must subscribe explicitly to keep active states / select values in
-  // sync with the caret. The selector is deep-compared, so it only re-renders
-  // when one of these derived values actually changes.
+  // sync with the caret. Returns null when there is no editor.
   const s = useEditorState({
     editor,
     selector: ({ editor }) => {
@@ -69,250 +69,228 @@ export function EditorToolbar({
         blockquote: editor.isActive("blockquote"),
         codeBlock: editor.isActive("codeBlock"),
         link: editor.isActive("link"),
-        canAddRow: editor.can().addRowAfter(),
-        canDeleteRow: editor.can().deleteRow(),
-        canAddColumn: editor.can().addColumnAfter(),
-        canDeleteColumn: editor.can().deleteColumn(),
       };
     },
   });
 
-  if (!editor || !s) return <Toolbar>{null}</Toolbar>;
-
-  const run = (fn: () => void) => () => fn();
+  const disabled = !editor || !s;
+  const colorClass = `v-editortoolbar__color${disabled ? " is-disabled" : ""}`;
 
   return (
-    <div className="v-editortoolbar">
-      <Toolbar>
-        <ToolbarGroup>
-          <ToolbarButton
-            icon="edit-bold"
-            label="Bold (Ctrl+B)"
-            active={s.bold}
-            onClick={run(() => editor.chain().focus().toggleBold().run())}
-          />
-          <ToolbarButton
-            icon="edit-italic"
-            label="Italic (Ctrl+I)"
-            active={s.italic}
-            onClick={run(() => editor.chain().focus().toggleItalic().run())}
-          />
-          <ToolbarButton
-            icon="edit-underline"
-            label="Underline (Ctrl+U)"
-            active={s.underline}
-            onClick={run(() => editor.chain().focus().toggleUnderline().run())}
-          />
-          <ToolbarButton
-            icon="edit-strike"
-            label="Strikethrough"
-            active={s.strike}
-            onClick={run(() => editor.chain().focus().toggleStrike().run())}
-          />
-        </ToolbarGroup>
+    <>
+      <ToolbarGroup>
+        <ToolbarButton
+          icon="edit-bold"
+          label="Bold (Ctrl+B)"
+          active={s?.bold}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().toggleBold().run()}
+        />
+        <ToolbarButton
+          icon="edit-italic"
+          label="Italic (Ctrl+I)"
+          active={s?.italic}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().toggleItalic().run()}
+        />
+        <ToolbarButton
+          icon="edit-underline"
+          label="Underline (Ctrl+U)"
+          active={s?.underline}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().toggleUnderline().run()}
+        />
+        <ToolbarButton
+          icon="edit-strike"
+          label="Strikethrough"
+          active={s?.strike}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().toggleStrike().run()}
+        />
+      </ToolbarGroup>
 
-        <ToolbarSeparator />
+      <ToolbarSeparator />
 
-        <ToolbarGroup>
-          {([1, 2, 3, 4] as const).map((level) => (
-            <ToolbarButton
-              key={level}
-              icon={`edit-heading-${level}`}
-              label={`Heading ${level}`}
-              active={s.headings[level]}
-              onClick={run(() => editor.chain().focus().toggleHeading({ level }).run())}
-            />
+      <ToolbarGroup>
+        {([1, 2, 3, 4] as const).map((level) => (
+          <ToolbarButton
+            key={level}
+            icon={`edit-heading-${level}`}
+            label={`Heading ${level}`}
+            active={s?.headings[level]}
+            disabled={disabled}
+            onClick={() => editor?.chain().focus().toggleHeading({ level }).run()}
+          />
+        ))}
+      </ToolbarGroup>
+
+      <ToolbarSeparator />
+
+      <ToolbarGroup>
+        <select
+          className="v-editortoolbar__select"
+          title="Font"
+          value={s?.fontFamily ?? ""}
+          disabled={disabled}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v) editor?.chain().focus().setFontFamily(v).run();
+            else editor?.chain().focus().unsetFontFamily().run();
+          }}
+        >
+          <option value="">Font</option>
+          {FONTS.map((f) => (
+            <option key={f} value={f} style={{ fontFamily: f }}>
+              {f}
+            </option>
           ))}
-        </ToolbarGroup>
+        </select>
+        <select
+          className="v-editortoolbar__select v-editortoolbar__select--size"
+          title="Font size"
+          value={s?.fontSize ?? ""}
+          disabled={disabled}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v) editor?.chain().focus().setFontSize(`${v}px`).run();
+            else editor?.chain().focus().unsetFontSize().run();
+          }}
+        >
+          <option value="">Size</option>
+          {SIZES.map((size) => (
+            <option key={size} value={size}>
+              {size}
+            </option>
+          ))}
+        </select>
+        <label className={colorClass} title="Text color">
+          <span style={{ color: s?.color ?? "#000000" }}>A</span>
+          <input
+            type="color"
+            value={s?.color ?? "#000000"}
+            disabled={disabled}
+            onChange={(e) => editor?.chain().focus().setColor(e.target.value).run()}
+          />
+        </label>
+        <label className={`${colorClass} v-editortoolbar__color--hl`} title="Highlight">
+          <span style={{ background: s?.highlight ?? "#ffe600" }} />
+          <input
+            type="color"
+            value={s?.highlight ?? "#ffe600"}
+            disabled={disabled}
+            onChange={(e) => editor?.chain().focus().setHighlight({ color: e.target.value }).run()}
+          />
+        </label>
+      </ToolbarGroup>
 
-        <ToolbarSeparator />
+      <ToolbarSeparator />
 
-        <ToolbarGroup>
-          <select
-            className="v-editortoolbar__select"
-            title="Font"
-            value={s.fontFamily}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v) editor.chain().focus().setFontFamily(v).run();
-              else editor.chain().focus().unsetFontFamily().run();
-            }}
-          >
-            <option value="">Font</option>
-            {FONTS.map((f) => (
-              <option key={f} value={f} style={{ fontFamily: f }}>
-                {f}
-              </option>
-            ))}
-          </select>
-          <select
-            className="v-editortoolbar__select v-editortoolbar__select--size"
-            title="Font size"
-            value={s.fontSize}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v) editor.chain().focus().setFontSize(`${v}px`).run();
-              else editor.chain().focus().unsetFontSize().run();
-            }}
-          >
-            <option value="">Size</option>
-            {SIZES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-          <label className="v-editortoolbar__color" title="Text color">
-            <span style={{ color: s.color }}>A</span>
-            <input
-              type="color"
-              value={s.color}
-              onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
-            />
-          </label>
-          <label className="v-editortoolbar__color v-editortoolbar__color--hl" title="Highlight">
-            <span style={{ background: s.highlight }} />
-            <input
-              type="color"
-              value={s.highlight}
-              onChange={(e) =>
-                editor.chain().focus().setHighlight({ color: e.target.value }).run()
-              }
-            />
-          </label>
-        </ToolbarGroup>
+      <ToolbarGroup>
+        <ToolbarButton
+          icon="edit-alignment"
+          label="Align left"
+          active={s?.alignLeft}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().setTextAlign("left").run()}
+        />
+        <ToolbarButton
+          icon="edit-alignment-center"
+          label="Align center"
+          active={s?.alignCenter}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().setTextAlign("center").run()}
+        />
+        <ToolbarButton
+          icon="edit-alignment-right"
+          label="Align right"
+          active={s?.alignRight}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().setTextAlign("right").run()}
+        />
+        <ToolbarButton
+          icon="edit-alignment-justify"
+          label="Justify"
+          active={s?.alignJustify}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().setTextAlign("justify").run()}
+        />
+      </ToolbarGroup>
 
-        <ToolbarSeparator />
+      <ToolbarSeparator />
 
-        <ToolbarGroup>
-          <ToolbarButton
-            icon="edit-alignment"
-            label="Align left"
-            active={s.alignLeft}
-            onClick={run(() => editor.chain().focus().setTextAlign("left").run())}
-          />
-          <ToolbarButton
-            icon="edit-alignment-center"
-            label="Align center"
-            active={s.alignCenter}
-            onClick={run(() => editor.chain().focus().setTextAlign("center").run())}
-          />
-          <ToolbarButton
-            icon="edit-alignment-right"
-            label="Align right"
-            active={s.alignRight}
-            onClick={run(() => editor.chain().focus().setTextAlign("right").run())}
-          />
-          <ToolbarButton
-            icon="edit-alignment-justify"
-            label="Justify"
-            active={s.alignJustify}
-            onClick={run(() => editor.chain().focus().setTextAlign("justify").run())}
-          />
-        </ToolbarGroup>
+      <ToolbarGroup>
+        <ToolbarButton
+          icon="edit-superscript"
+          label="Superscript"
+          active={s?.superscript}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().toggleSuperscript().run()}
+        />
+        <ToolbarButton
+          icon="edit-subscript"
+          label="Subscript"
+          active={s?.subscript}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().toggleSubscript().run()}
+        />
+        <ToolbarButton
+          icon="eraser"
+          label="Clear formatting"
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().unsetAllMarks().clearNodes().run()}
+        />
+      </ToolbarGroup>
 
-        <ToolbarSeparator />
+      <ToolbarSeparator />
 
-        <ToolbarGroup>
-          <ToolbarButton
-            icon="edit-superscript"
-            label="Superscript"
-            active={s.superscript}
-            onClick={run(() => editor.chain().focus().toggleSuperscript().run())}
-          />
-          <ToolbarButton
-            icon="edit-subscript"
-            label="Subscript"
-            active={s.subscript}
-            onClick={run(() => editor.chain().focus().toggleSubscript().run())}
-          />
-          <ToolbarButton
-            icon="eraser"
-            label="Clear formatting"
-            onClick={run(() => editor.chain().focus().unsetAllMarks().clearNodes().run())}
-          />
-        </ToolbarGroup>
+      <ToolbarGroup>
+        <ToolbarButton
+          icon="edit-list"
+          label="Bullet list"
+          active={s?.bulletList}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().toggleBulletList().run()}
+        />
+        <ToolbarButton
+          icon="edit-list-order"
+          label="Numbered list"
+          active={s?.orderedList}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+        />
+        <ToolbarButton
+          icon="edit-quotation"
+          label="Blockquote"
+          active={s?.blockquote}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().toggleBlockquote().run()}
+        />
+        <ToolbarButton
+          icon="edit-code"
+          label="Code block"
+          active={s?.codeBlock}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
+        />
+      </ToolbarGroup>
 
-        <ToolbarSeparator />
+      <ToolbarSeparator />
 
-        <ToolbarGroup>
-          <ToolbarButton
-            icon="edit-list"
-            label="Bullet list"
-            active={s.bulletList}
-            onClick={run(() => editor.chain().focus().toggleBulletList().run())}
-          />
-          <ToolbarButton
-            icon="edit-list-order"
-            label="Numbered list"
-            active={s.orderedList}
-            onClick={run(() => editor.chain().focus().toggleOrderedList().run())}
-          />
-          <ToolbarButton
-            icon="edit-quotation"
-            label="Blockquote"
-            active={s.blockquote}
-            onClick={run(() => editor.chain().focus().toggleBlockquote().run())}
-          />
-          <ToolbarButton
-            icon="edit-code"
-            label="Code block"
-            active={s.codeBlock}
-            onClick={run(() => editor.chain().focus().toggleCodeBlock().run())}
-          />
-          <ToolbarButton
-            icon="edit-rule"
-            label="Horizontal rule"
-            onClick={run(() => editor.chain().focus().setHorizontalRule().run())}
-          />
-        </ToolbarGroup>
-
-        <ToolbarSeparator />
-
-        <ToolbarGroup>
-          <ToolbarButton
-            icon="table"
-            label="Insert table"
-            onClick={run(() =>
-              editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
-            )}
-          />
-          <ToolbarButton icon="table-insert-row" label="Add row below" disabled={!s.canAddRow} onClick={run(() => editor.chain().focus().addRowAfter().run())} />
-          <ToolbarButton icon="table-delete-row" label="Delete row" disabled={!s.canDeleteRow} onClick={run(() => editor.chain().focus().deleteRow().run())} />
-          <ToolbarButton icon="table-insert-column" label="Add column after" disabled={!s.canAddColumn} onClick={run(() => editor.chain().focus().addColumnAfter().run())} />
-          <ToolbarButton icon="table-delete-column" label="Delete column" disabled={!s.canDeleteColumn} onClick={run(() => editor.chain().focus().deleteColumn().run())} />
-        </ToolbarGroup>
-
-        <ToolbarSeparator />
-
-        <ToolbarGroup>
-          <ToolbarButton
-            icon="image--plus"
-            label="Insert image"
-            onClick={() => fileInputRef.current?.click()}
-          />
-          <ToolbarButton
-            icon="chain"
-            label="Link"
-            active={s.link}
-            onClick={() => setLinkOpen((v) => !v)}
-          />
-        </ToolbarGroup>
-
-        {showGrammarToggle && (
-          <>
-            <ToolbarSeparator />
-            <ToolbarGroup>
-              <ToolbarButton
-                icon="spell-check"
-                label={grammarEnabled ? "Grammar check: on" : "Grammar check: off"}
-                active={grammarEnabled}
-                onClick={() => actions.setGrammarEnabled(!grammarEnabled)}
-              />
-            </ToolbarGroup>
-          </>
-        )}
-      </Toolbar>
+      <ToolbarGroup>
+        <ToolbarButton
+          icon="image--plus"
+          label="Insert image"
+          disabled={disabled}
+          onClick={() => fileInputRef.current?.click()}
+        />
+        <ToolbarButton
+          icon="chain"
+          label="Link"
+          active={s?.link}
+          disabled={disabled}
+          onClick={() => setLinkOpen(true)}
+        />
+      </ToolbarGroup>
 
       <input
         ref={fileInputRef}
@@ -321,12 +299,82 @@ export function EditorToolbar({
         style={{ display: "none" }}
         onChange={(e) => {
           const f = e.target.files?.[0];
-          if (f) onInsertImage(f);
+          if (f) insertImage(f);
           e.target.value = "";
         }}
       />
+    </>
+  );
+}
 
-      {linkOpen && <LinkEditor editor={editor} onClose={() => setLinkOpen(false)} />}
+/**
+ * Self-contained formatting toolbar with its own editor (used by the page
+ * template editor). The main page editor uses TopToolbar instead.
+ */
+export function EditorToolbar({
+  editor,
+  onInsertImage,
+}: {
+  editor: Editor | null;
+  onInsertImage: (file: File) => void;
+}) {
+  const [linkOpen, setLinkOpen] = useState(false);
+  return (
+    <div className="v-editortoolbar">
+      <Toolbar>
+        <FormattingGroups
+          editor={editor}
+          insertImage={onInsertImage}
+          linkOpen={linkOpen}
+          setLinkOpen={setLinkOpen}
+        />
+      </Toolbar>
+      {linkOpen && editor && <LinkEditor editor={editor} onClose={() => setLinkOpen(false)} />}
+    </div>
+  );
+}
+
+/**
+ * Unified, persistent top toolbar (OneNote 2007): formatting on the left,
+ * compact search + settings at the right. Operates on the active page editor
+ * shared up via ActiveEditorProvider; controls disable when no page is open.
+ */
+export function TopToolbar({ onOpenSettings }: { onOpenSettings: () => void }) {
+  const { active } = useActiveEditor();
+  const editor = active?.editor ?? null;
+  const insertImage = active?.insertImage ?? (() => {});
+  const [linkOpen, setLinkOpen] = useState(false);
+
+  // Drop a stale open link editor when the page (and its editor) changes.
+  useEffect(() => {
+    setLinkOpen(false);
+  }, [editor]);
+
+  return (
+    <div className="v-toptoolbar">
+      <div className="v-toolbar v-toptoolbar__bar" role="toolbar">
+        <div className="v-toptoolbar__format">
+          <FormattingGroups
+            editor={editor}
+            insertImage={insertImage}
+            linkOpen={linkOpen}
+            setLinkOpen={setLinkOpen}
+          />
+        </div>
+        <div className="v-toptoolbar__right">
+          <SearchBox />
+          <button
+            type="button"
+            className="v-toptoolbar__gear"
+            title="Settings"
+            aria-label="Settings"
+            onClick={onOpenSettings}
+          >
+            <Icon name="gear" />
+          </button>
+        </div>
+      </div>
+      {linkOpen && editor && <LinkEditor editor={editor} onClose={() => setLinkOpen(false)} />}
     </div>
   );
 }

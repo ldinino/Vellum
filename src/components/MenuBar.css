@@ -1,0 +1,34 @@
+/* OneNote 2007 menu bar: a thin row of text menus above the toolbar. */
+.v-menubar {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: stretch;
+  height: 22px;
+  padding: 0 var(--space-2);
+  background: var(--gradient-toolbar);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.v-menubar__item {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  color: var(--text-primary);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control) var(--radius-control) 0 0;
+  background: transparent;
+  cursor: default;
+}
+
+.v-menubar__item:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
+}
+
+.v-menubar__item.is-open {
+  border-color: var(--selected-border);
+  background: var(--selected-fill);
+}

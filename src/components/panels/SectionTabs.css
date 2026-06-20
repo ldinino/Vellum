@@ -1,0 +1,133 @@
+/* Horizontal section-tab row (OneNote 2007): colored folder tabs above the
+   editor. The selected tab uses its full section color and overlaps the editor's
+   colored top band (--section-frame) so tab + page frame read as one block.
+   Each tab is tinted with its own --tab-color; the notebook label + nav collapse
+   toggle live at the left. */
+.v-sectiontabs {
+  position: relative;
+  z-index: 1; /* lets the selected tab overlap the editor band below */
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: var(--sectiontabs-height);
+  padding: 0 var(--space-3);
+  background: var(--surface-window);
+  border-bottom: none;
+}
+
+/* ---- Notebook label + collapse toggle ----------------------------------- */
+.v-sectiontabs__notebook {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  align-self: stretch;
+  max-width: 180px;
+  padding: 0 var(--space-3) 0 var(--space-2);
+  margin-right: var(--space-2);
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  font-weight: 600;
+  color: var(--text-secondary);
+  border: none;
+  border-right: 1px solid var(--border-default);
+  background: transparent;
+  cursor: pointer;
+}
+
+.v-sectiontabs__notebook:hover {
+  color: var(--text-primary);
+}
+
+.v-sectiontabs__notebook-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* CSS caret: points left (◄ = collapse) when expanded, right (► = expand)
+   when collapsed. */
+.v-sectiontabs__caret {
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-right: 5px solid var(--text-muted);
+}
+
+.v-sectiontabs__caret--right {
+  border-right: none;
+  border-left: 5px solid var(--text-muted);
+}
+
+/* ---- Tabs ---------------------------------------------------------------- */
+.v-sectiontabs__tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.v-sectiontabs__tab {
+  display: flex;
+  align-items: center;
+  max-width: 160px;
+  min-width: 0;
+  padding: 4px 12px;
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  color: var(--text-primary);
+  cursor: pointer;
+  /* Folder tab: rounded top corners, no bottom border (it meets the page). */
+  background: color-mix(in srgb, var(--tab-color) 40%, white);
+  border: 1px solid color-mix(in srgb, var(--tab-color) 55%, #9a9a9a);
+  border-bottom: none;
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+}
+
+.v-sectiontabs__tab:hover {
+  background: color-mix(in srgb, var(--tab-color) 55%, white);
+}
+
+.v-sectiontabs__tab--selected,
+.v-sectiontabs__tab--selected:hover {
+  /* Active tab reads as the section color and flows into the page's top band:
+     overlap the editor's --section-frame so there's no seam. */
+  background: var(--tab-color);
+  border-color: color-mix(in srgb, var(--tab-color) 70%, #7a7a7a);
+  margin-bottom: calc(-1 * var(--section-frame));
+  padding-bottom: calc(4px + var(--section-frame));
+  font-weight: 600;
+}
+
+.v-sectiontabs__tab:focus-visible {
+  outline: 1px dotted var(--text-secondary);
+  outline-offset: -3px;
+}
+
+.v-sectiontabs__tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- New-section button -------------------------------------------------- */
+.v-sectiontabs__add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 20px;
+  margin-bottom: 1px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  cursor: pointer;
+}
+
+.v-sectiontabs__add:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
+}

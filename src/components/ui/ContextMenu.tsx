@@ -88,6 +88,7 @@ function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }
             className={[
               "v-menu__item",
               item.danger ? "v-menu__item--danger" : "",
+              item.checked ? "v-menu__item--checked" : "",
             ].join(" ")}
             disabled={item.disabled}
             onMouseEnter={() => setOpenSub(item.submenu ? i : null)}
@@ -103,11 +104,11 @@ function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }
                   className="v-menu__swatch"
                   style={{ background: item.swatch }}
                 />
+              ) : item.icon ? (
+                <Icon name={item.icon} />
               ) : item.checked ? (
                 <Icon name="tick" />
-              ) : (
-                item.icon && <Icon name={item.icon} />
-              )}
+              ) : null}
             </span>
             <span className="v-menu__label">{item.label}</span>
             {item.submenu && <span className="v-menu__arrow">▶</span>}

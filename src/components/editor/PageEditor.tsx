@@ -8,10 +8,10 @@ import { applySearchHighlight } from "./SearchHighlight";
 import { extractText, mapLints } from "./grammar";
 import { setGrammarLints, clearGrammarLints } from "./GrammarError";
 import { GrammarPopover } from "./GrammarPopover";
-import { EditorToolbar } from "./EditorToolbar";
 import { AttachmentBar, AttachmentItem } from "../panels/AttachmentBar";
 import { createDebouncer } from "../../lib/debounce";
 import { useVellum } from "../../state/vellum";
+import { useActiveEditor } from "../../state/activeEditor";
 import * as api from "../../data/api";
 import type { Attachment, Page } from "../../data/types";
 import "./editor.css";
@@ -60,6 +60,7 @@ export function PageEditor({
   highlightQuery?: string;
 }) {
   const { actions, grammarEnabled } = useVellum();
+  const { setActiveEditor } = useActiveEditor();
   const [title, setTitle] = useState(page.title);
   const titleRef = useRef<HTMLInputElement>(null);
   const loadingRef = useRef(true);
@@ -103,7 +104,8 @@ export function PageEditor({
   runGrammarRef.current = runGrammar;
 
   // Store an image (pasted/dropped/inserted) and embed it by relative path.
-  const insertImage = async (file: File) => {
+  // Closes only over refs, so it's stable — safe to register up to the toolbar.
+  const insertImage = useCallback(async (file: File) => {
     const ed = editorRef.current;
     if (!ed) return;
     try {
@@ -115,7 +117,7 @@ export function PageEditor({
     } catch (e) {
       console.error("image insert failed", e);
     }
-  };
+  }, []);
 
   // Copy one or more files into the page's attachments and pin them to the bar.
   // Relies only on ids.current + the stable setter, so it's safe to close over
@@ -199,6 +201,14 @@ export function PageEditor({
     },
   });
   editorRef.current = editor;
+
+  // Publish this page's editor to the shell toolbar; clear it on unmount (page
+  // switch / close) so the toolbar disables when no page is open.
+  useEffect(() => {
+    if (!editor) return;
+    setActiveEditor({ editor, insertImage });
+    return () => setActiveEditor(null);
+  }, [editor, insertImage, setActiveEditor]);
 
   // Point the image NodeView's src resolver at this notebook so relative
   // attachment paths resolve to loadable asset:// URLs.
@@ -316,7 +326,6 @@ export function PageEditor({
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => e.preventDefault()}
     >
-      <EditorToolbar editor={editor} onInsertImage={insertImage} />
       <AttachmentBar
         attachments={attachments.map(toAttachmentItem)}
         onOpen={openAttachment}

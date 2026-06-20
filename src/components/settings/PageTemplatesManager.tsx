@@ -170,7 +170,7 @@ export function PageTemplatesManager() {
                 Delete
               </Button>
             </div>
-            <EditorToolbar editor={editor} onInsertImage={() => {}} showGrammarToggle={false} />
+            <EditorToolbar editor={editor} onInsertImage={() => {}} />
             <EditorContent editor={editor} className="v-tmpl__content" />
           </>
         ) : (

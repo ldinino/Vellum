@@ -5,7 +5,8 @@ import { Icon } from "../ui/Icon";
 import { EditableLabel } from "../ui/EditableLabel";
 import { ContextMenu, MenuItem } from "../ui/ContextMenu";
 import { useVellum } from "../../state/vellum";
-import { PALETTE, DEFAULT_NOTEBOOK_COLOR, DEFAULT_SECTION_COLOR } from "../../data/palette";
+import { DEFAULT_NOTEBOOK_COLOR, DEFAULT_SECTION_COLOR } from "../../data/palette";
+import { buildSectionMenu, colorSubmenu } from "./sectionMenu";
 import { reorderByDrop } from "../dnd";
 import { handleListArrows } from "../keyboard";
 import "./NavPanel.css";
@@ -21,9 +22,17 @@ interface MenuState {
   items: MenuItem[];
 }
 
-/** Left panel: collapsible notebook → section tree (spec Section 5). */
-export function NavPanel({ onOpenSectionProperties }: { onOpenSectionProperties: (notebookId: string, sectionId: string) => void }) {
-  const { notebooks, selectedSectionId, actions } = useVellum();
+interface NavPanelProps {
+  /** Collapsed = thin vertical notebook rail; expanded = full tree. */
+  collapsed: boolean;
+  onToggle: () => void;
+  onOpenSectionProperties: (notebookId: string, sectionId: string) => void;
+}
+
+/** Left panel: notebook → section tree, or a thin notebook rail when collapsed
+ * (spec Section 5). */
+export function NavPanel({ collapsed, onToggle, onOpenSectionProperties }: NavPanelProps) {
+  const { notebooks, selectedNotebookId, selectedSectionId, actions } = useVellum();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [drag, setDrag] = useState<Drag>(null);
@@ -33,19 +42,6 @@ export function NavPanel({ onOpenSectionProperties }: { onOpenSectionProperties:
     e.stopPropagation();
     setMenu({ x: e.clientX, y: e.clientY, items });
   };
-
-  const colorSubmenu = (
-    current: string | null,
-    apply: (color: string | null) => void,
-  ): MenuItem[] => [
-    ...PALETTE.map((c) => ({
-      label: c.name,
-      swatch: c.value,
-      checked: current === c.value,
-      onSelect: () => apply(c.value),
-    })),
-    { label: "None", onSelect: () => apply(null), separatorAfter: false },
-  ];
 
   const notebookMenu = (nbId: string, color: string | null): MenuItem[] => [
     {
@@ -75,42 +71,6 @@ export function NavPanel({ onOpenSectionProperties }: { onOpenSectionProperties:
     },
   ];
 
-  const sectionMenu = (
-    nbId: string,
-    sectionId: string,
-    name: string,
-    color: string | null,
-    pageTemplateId: string | null,
-  ): MenuItem[] => [
-    {
-      label: "Add Page",
-      icon: "document--plus",
-      onSelect: () => actions.createPage(nbId, sectionId),
-    },
-    { label: "Rename", icon: "card--pencil", onSelect: () => setEditingId(sectionId) },
-    {
-      label: "Change color",
-      icon: "edit-color",
-      // Preserve the section's page-template assignment — update_section writes
-      // every column, so passing null here would silently clear it.
-      submenu: colorSubmenu(color, (c) =>
-        actions.updateSection(nbId, sectionId, name, c, pageTemplateId),
-      ),
-    },
-    {
-      label: "Properties…",
-      icon: "gear",
-      onSelect: () => onOpenSectionProperties(nbId, sectionId),
-      separatorAfter: true,
-    },
-    {
-      label: "Delete Section",
-      icon: "cross",
-      danger: true,
-      onSelect: () => confirmDeleteSection(nbId, sectionId, name),
-    },
-  ];
-
   async function confirmDeleteNotebook(nbId: string) {
     const nb = notebooks.find((n) => n.id === nbId);
     const ok = await ask(
@@ -118,14 +78,6 @@ export function NavPanel({ onOpenSectionProperties }: { onOpenSectionProperties:
       { title: "Delete Notebook", kind: "warning" },
     );
     if (ok) actions.deleteNotebook(nbId);
-  }
-
-  async function confirmDeleteSection(nbId: string, sectionId: string, name: string) {
-    const ok = await ask(
-      `Delete section "${name}" and all its pages? This cannot be undone.`,
-      { title: "Delete Section", kind: "warning" },
-    );
-    if (ok) actions.deleteSection(nbId, sectionId);
   }
 
   const onNotebookDrop = (targetId: string) => {
@@ -150,6 +102,39 @@ export function NavPanel({ onOpenSectionProperties }: { onOpenSectionProperties:
     actions.reorderSections(nbId, order);
   };
 
+  if (collapsed) {
+    return (
+      <div className="v-nav v-nav--collapsed">
+        <button
+          type="button"
+          className="v-nav__chevron"
+          title="Show notebooks"
+          aria-label="Show notebooks"
+          onClick={onToggle}
+        >
+          »
+        </button>
+        <div className="v-nav__rail">
+          {notebooks.map((nb) => (
+            <button
+              key={nb.id}
+              type="button"
+              className={[
+                "v-nav__rail-item",
+                nb.id === selectedNotebookId ? "v-nav__rail-item--selected" : "",
+              ].join(" ")}
+              style={{ ["--nb-color" as string]: nb.color ?? DEFAULT_NOTEBOOK_COLOR }}
+              title={nb.name}
+              onClick={() => actions.selectNotebook(nb.id)}
+            >
+              <span className="v-nav__rail-label">{nb.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="v-nav">
       <div className="v-nav__header">
@@ -165,6 +150,15 @@ export function NavPanel({ onOpenSectionProperties }: { onOpenSectionProperties:
         >
           New Notebook
         </Button>
+        <button
+          type="button"
+          className="v-nav__chevron"
+          title="Hide notebooks"
+          aria-label="Hide notebooks"
+          onClick={onToggle}
+        >
+          «
+        </button>
       </div>
 
       <div
@@ -238,7 +232,16 @@ export function NavPanel({ onOpenSectionProperties }: { onOpenSectionProperties:
                   }}
                   tabIndex={0}
                   onContextMenu={(e) =>
-                    openMenu(e, sectionMenu(nb.id, s.id, s.name, s.color, s.pageTemplateId))
+                    openMenu(
+                      e,
+                      buildSectionMenu({
+                        notebookId: nb.id,
+                        section: s,
+                        actions,
+                        onRename: () => setEditingId(s.id),
+                        onOpenProperties: () => onOpenSectionProperties(nb.id, s.id),
+                      }),
+                    )
                   }
                 >
                   <span

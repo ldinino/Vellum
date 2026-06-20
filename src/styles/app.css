@@ -4,5 +4,7 @@
   display: flex;
   flex-direction: column;
   height: 100%;
+  min-width: 0;
+  overflow: hidden; /* keep wide children (toolbar) from stretching the frame */
   border: 1px solid var(--glass-border); /* window edge with decorations off */
 }

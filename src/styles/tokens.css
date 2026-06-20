@@ -89,7 +89,10 @@
   --titlebar-height: 30px;
   --toolbar-height: 34px;
   --nav-panel-width: 220px;
+  --nav-rail-width: 26px;         /* collapsed notebook rail (vertical labels) */
   --pagestrip-width: 168px;       /* OneNote-style page-tab strip (right edge) */
+  --sectiontabs-height: 27px;     /* horizontal section-tab row above the editor */
+  --section-frame: 3px;           /* colored band along the page's top edge */
 
   /* ---- Feature underline colors (spec Sections 9/10) ---------------------- */
   /* Distinct from each other and from WebView2's red spell-check squiggle. */

@@ -62,7 +62,7 @@ const initial: VellumState = {
   selectedSectionId: null,
   selectedPageId: null,
   searchHighlight: "",
-  grammarEnabled: false,
+  grammarEnabled: true,
   pageTemplates: [],
   refineEnabled: false,
   refineAdherence: 0.5,
@@ -73,12 +73,16 @@ const initial: VellumState = {
   error: null,
 };
 
-interface VellumActions {
+export interface VellumActions {
   reload: () => Promise<void>;
   refreshPages: () => Promise<void>;
   clearError: () => void;
   toggleNotebook: (id: string) => Promise<void>;
   selectSection: (notebookId: string, sectionId: string) => Promise<void>;
+  /** Select a notebook (e.g. from the collapsed rail): load its sections, then
+   * keep the current section if it belongs to this notebook, else open its
+   * first section (or none if it has no sections). */
+  selectNotebook: (notebookId: string) => Promise<void>;
   selectPage: (pageId: string) => void;
   /** Navigate to a page anywhere (e.g. from a search result), expanding and
    * loading its notebook/section, and highlight `query` in it. */
@@ -131,6 +135,28 @@ interface VellumActions {
 type VellumContextValue = VellumState & { actions: VellumActions };
 
 const VellumContext = createContext<VellumContextValue | null>(null);
+
+/** Machine-local last-open pointer (notebook/section/page) so a fresh launch
+ * lands where you left off instead of the unreachable "nothing selected" state.
+ * Kept in localStorage (not app.json) on purpose: it's per-machine session
+ * state, and writing it to the OneDrive-synced app.json on every navigation
+ * would cause sync churn. */
+const LAST_OPEN_KEY = "vellum.lastOpen";
+
+interface LastOpen {
+  n: string | null;
+  s: string | null;
+  p: string | null;
+}
+
+function readLastOpen(): LastOpen | null {
+  try {
+    const raw = localStorage.getItem(LAST_OPEN_KEY);
+    return raw ? (JSON.parse(raw) as LastOpen) : null;
+  } catch {
+    return null;
+  }
+}
 
 export function VellumProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<VellumState>(initial);
@@ -226,6 +252,93 @@ export function VellumProvider({ children }: { children: ReactNode }) {
       });
   }, []);
 
+  // Restore the last-open notebook → section → page once on startup (or fall
+  // back to the first of each), so launch never lands on the unreachable
+  // "nothing selected" state. Each saved id is validated against what still
+  // exists; a deleted target degrades to the first sibling. `restoreReady`
+  // gates the persistence effect below so it can't clobber the saved pointer
+  // with the initial nulls before this runs.
+  const restoreReady = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const saved = readLastOpen();
+      try {
+        const nbs = await api.listNotebooks();
+        const nbId =
+          saved?.n && nbs.some((n) => n.id === saved.n) ? saved.n : nbs[0]?.id ?? null;
+        if (!nbId) return;
+
+        const sections = await api.listSections(nbId);
+        const secId =
+          saved?.s && sections.some((sec) => sec.id === saved.s)
+            ? saved.s
+            : sections[0]?.id ?? null;
+
+        let pages: Page[] = [];
+        let pageId: string | null = null;
+        if (secId) {
+          pages = await api.listPages(nbId, secId);
+          pageId =
+            saved?.p && pages.some((pg) => pg.id === saved.p)
+              ? saved.p
+              : pages[0]?.id ?? null;
+        }
+        if (cancelled) return;
+
+        // Build the notebook tree from this fetch (don't depend on reload()'s
+        // timing): mark the restored notebook expanded with its sections, and
+        // preserve any expand/sections state reload() may have already set.
+        setState((s) => ({
+          ...s,
+          notebooks: nbs.map((nb) => {
+            const prev = s.notebooks.find((p) => p.id === nb.id);
+            return {
+              ...nb,
+              expanded: nb.id === nbId ? true : prev?.expanded ?? false,
+              sections: nb.id === nbId ? sections : prev?.sections ?? null,
+            };
+          }),
+          selectedNotebookId: nbId,
+          selectedSectionId: secId,
+          selectedPageId: pageId,
+          pages,
+        }));
+      } catch (e) {
+        console.error("restore last-open failed", e);
+      } finally {
+        if (!cancelled) restoreReady.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Persist the current selection so the next launch can restore it. Gated on
+  // restoreReady so the initial null selection never overwrites the saved value
+  // before restore has had a chance to apply it.
+  useEffect(() => {
+    if (!restoreReady.current) return;
+    try {
+      if (state.selectedNotebookId) {
+        localStorage.setItem(
+          LAST_OPEN_KEY,
+          JSON.stringify({
+            n: state.selectedNotebookId,
+            s: state.selectedSectionId,
+            p: state.selectedPageId,
+          }),
+        );
+      } else {
+        // Last notebook was deleted: drop the stale pointer.
+        localStorage.removeItem(LAST_OPEN_KEY);
+      }
+    } catch {
+      // localStorage unavailable (e.g. some embedded contexts) — non-fatal.
+    }
+  }, [state.selectedNotebookId, state.selectedSectionId, state.selectedPageId]);
+
   const toggleNotebook = useCallback(
     async (id: string) => {
       const nb = ref.current.notebooks.find((n) => n.id === id);
@@ -254,6 +367,43 @@ export function VellumProvider({ children }: { children: ReactNode }) {
       await reloadPages(notebookId, sectionId);
     },
     [reloadPages],
+  );
+
+  const selectNotebook = useCallback(
+    async (notebookId: string) => {
+      const nb = ref.current.notebooks.find((n) => n.id === notebookId);
+      let sections = nb?.sections ?? null;
+      if (sections == null) {
+        try {
+          sections = await api.listSections(notebookId);
+        } catch (e) {
+          fail(e);
+          sections = [];
+        }
+        const loaded = sections;
+        setState((s) => ({
+          ...s,
+          notebooks: s.notebooks.map((n) =>
+            n.id === notebookId ? { ...n, sections: loaded } : n,
+          ),
+        }));
+      }
+      const cur = ref.current.selectedSectionId;
+      const keep = cur && sections.some((sec) => sec.id === cur) ? cur : null;
+      const target = keep ?? sections[0]?.id ?? null;
+      if (target) {
+        await selectSection(notebookId, target);
+      } else {
+        setState((s) => ({
+          ...s,
+          selectedNotebookId: notebookId,
+          selectedSectionId: null,
+          selectedPageId: null,
+          pages: [],
+        }));
+      }
+    },
+    [fail, selectSection],
   );
 
   const selectPage = useCallback((pageId: string) => {
@@ -308,6 +458,7 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     clearError: () => setState((s) => ({ ...s, error: null })),
     toggleNotebook,
     selectSection,
+    selectNotebook,
     selectPage,
     openPage,
 

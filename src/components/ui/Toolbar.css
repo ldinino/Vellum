@@ -20,7 +20,7 @@
 .v-toolbar__separator {
   width: 0;
   height: 22px;
-  margin: 0 var(--space-2);
+  margin: 0 var(--space-1);
   border-left: 1px solid var(--border-default);
   border-right: 1px solid #ffffff; /* bevel highlight */
 }
@@ -29,7 +29,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  padding: 4px 5px;
+  padding: 4px 4px;
   font-family: var(--font-ui);
   font-size: var(--text-size-ui);
   color: var(--text-primary);

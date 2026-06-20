@@ -88,11 +88,27 @@ OneDrive (and other sync clients) cover this path by default on Windows — no c
 
 ### 5. Navigation & Layout
 
-Modeled on OneNote 2007: a notebook tree on the **left**, the editor in the
-**center**, and a page-tab strip on the **right** (pages are *not* a middle
-column). Panel order, left → right: **nav · editor · page tabs.**
+Modeled on OneNote 2007. A unified top toolbar spans the window (formatting
+controls left, a compact search box right). Below it sit three regions, left →
+right: the **notebook nav**, the **section tabs + editor**, and the **page-tab
+strip** (pages are *not* a middle column).
 
-**Left panel — notebook tree (fixed width, resizable)**
+**Top toolbar**
+
+- One persistent toolbar across the top: formatting controls on the left, the
+  compact search box + settings on the right. Always visible; the formatting
+  controls operate on the open page's editor and disable when no page is open.
+
+**Left panel — notebook nav (resizable; two states)**
+
+- **Expanded** — the notebook tree: each notebook is a collapsible colored box
+  whose header bar is tinted with the notebook color; expanded notebooks show
+  their sections beneath, on a lighter ground.
+- **Collapsed** — a thin rail of vertical notebook labels tinted with their
+  colors; the selected notebook is highlighted. Clicking one opens it (its
+  sections appear in the section tabs).
+- Toggle with the « / » chevron (in the nav header and on the section-tab row);
+  the choice persists across sessions (localStorage).
 
 ```
 [ + New Notebook ]
@@ -115,15 +131,24 @@ column). Panel order, left → right: **nav · editor · page tabs.**
 - Right-click section: Rename, Delete, Add Page, Change color, **Properties**.
 - Section Properties modal: name, color, page template assignment (dropdown: None / [template names]).
 - Drag to reorder sections within a notebook.
-- No top tab bar.
+
+**Section tabs (above the editor)**
+
+- The current notebook's sections as colored folder tabs, after the notebook
+  label + collapse toggle. Each tab carries its own section color; the active
+  tab uses the full color and flows into the page's top frame band.
+- Click to switch section; right-click for the section menu (Add Page, Rename,
+  Change color, Properties, Delete); drag to reorder; a trailing **+** adds a
+  section. Sections are reachable from both here and the expanded nav.
 
 **Center — editor**
 
-- Fills the remaining space between the tree and the page strip.
+- Fills the space between the nav and the page strip, beneath the section tabs.
 - The **open section's color frames the page**: a colored band along the top
-  edge and tinted side rules meeting the page-tab strip.
+  edge (the active section tab merges into it) and tinted side rules meeting the
+  page-tab strip.
 - Page title is an editable h1 at the top, outside the Tiptap content area.
-- Toolbar docked at the top of the editor (formatting controls, search).
+- Formatting lives in the unified top toolbar (above), not a per-editor bar.
 
 **Right panel — page-tab strip**
 
@@ -134,7 +159,7 @@ column). Panel order, left → right: **nav · editor · page tabs.**
 - Right-click: Rename, Delete, Duplicate, Move to section.
 - Drag to reorder.
 
-**No section tabs at top. No floating elements.**
+**No floating elements.**
 
 ---
 
@@ -320,11 +345,11 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 
 ### 11. Search
 
-**Entry point:** Single search bar in the toolbar, always visible.
+**Entry point:** Compact search box docked at the right of the top toolbar, always visible.
 
 **Default behavior:** Global search across all notebooks.
 
-**Scope filter:** Dropdown next to the search bar — All Notebooks, or any specific notebook by name.
+**Scope:** A dropdown tucked into the search box, relative to the open notebook/section — **This Section**, **This Notebook**, or **All Notebooks** (default). "This Section" / "This Notebook" disable when nothing is selected.
 
 **Search engine:** SQLite FTS5.
 
@@ -337,11 +362,9 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 > path was chosen over two parallel engines; the per-notebook index remains
 > available for future per-notebook features.
 
-**Filters (collapsible panel below the search bar):**
-- Notebook (multi-select)
-- Section (depends on notebook selection)
-- Date range (created, last modified)
-- Has attachment (checkbox)
+**Filters:** v1 surfaces scope only (OneNote-faithful). The backend `search`
+command still accepts finer filters (section id, date range, has-attachment) and
+they remain available for future use, but they are not exposed in the UI.
 
 **Results display:**
 - Result cards: notebook / section / page breadcrumb, page title, matched text snippet with keyword highlighted, last modified date, attachment indicator if present.
@@ -572,7 +595,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 ---
 
-### Phase 7 — Refine Templates + Refine Infrastructure
+### Phase 7 — Refine Templates + Refine Infrastructure ✅
 
 **Goal:** Refine template library, Ollama process lifecycle, and hardware detection working. No UI suggestions yet.
 

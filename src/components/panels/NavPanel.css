@@ -10,13 +10,96 @@
 }
 
 .v-nav__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   padding: var(--space-3);
   border-bottom: 1px solid var(--border-faint);
 }
 
 .v-nav__header .v-button {
-  width: 100%;
+  flex: 1;
   justify-content: center;
+}
+
+/* Collapse/expand chevron (« in the header, » on the collapsed rail). */
+.v-nav__chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 22px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--gradient-button);
+  cursor: pointer;
+}
+
+.v-nav__chevron:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
+}
+
+/* ---- Collapsed rail: thin strip of vertical notebook labels -------------- */
+.v-nav--collapsed {
+  width: var(--nav-rail-width);
+  min-width: var(--nav-rail-width);
+  align-items: center;
+  padding: var(--space-2) 0;
+  gap: var(--space-2);
+}
+
+.v-nav--collapsed .v-nav__chevron {
+  width: 20px;
+  margin-bottom: var(--space-1);
+}
+
+.v-nav__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.v-nav__rail-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  padding: var(--space-3) 0;
+  border: 1px solid color-mix(in srgb, var(--nb-color) 55%, #9a9a9a);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--nb-color) 40%, white);
+  cursor: pointer;
+}
+
+.v-nav__rail-item:hover {
+  background: color-mix(in srgb, var(--nb-color) 55%, white);
+}
+
+.v-nav__rail-item--selected,
+.v-nav__rail-item--selected:hover {
+  background: var(--nb-color);
+}
+
+.v-nav__rail-label {
+  /* Vertical text reading bottom-to-top, like OneNote's collapsed tabs. */
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  color: var(--text-primary);
+  max-height: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .v-nav__tree {

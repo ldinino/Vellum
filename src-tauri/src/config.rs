@@ -44,7 +44,8 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             refine_enabled: false,
-            grammar_enabled: false,
+            // Grammar check is on by default (Harper is compiled in, no download).
+            grammar_enabled: true,
             spellcheck_enabled: true,
             default_font: "Segoe UI".into(),
             default_font_size: 11,

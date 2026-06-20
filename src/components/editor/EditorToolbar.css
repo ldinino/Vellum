@@ -3,18 +3,72 @@
   flex: 0 0 auto;
 }
 
-/* Let the formatting toolbar wrap on narrow widths instead of clipping. */
+/* Single row; scroll horizontally on narrow widths rather than wrapping. */
 .v-editortoolbar .v-toolbar {
-  flex-wrap: wrap;
-  height: auto;
-  min-height: var(--toolbar-height);
-  padding-top: 3px;
-  padding-bottom: 3px;
-  row-gap: 3px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+/* ---- Unified shell-level top toolbar (formatting + search) ---------------- */
+.v-toptoolbar {
+  position: relative;
+  flex: 0 0 auto;
+  /* Flex item of the column shell: without this its min-content (the full
+     button row) would force the bar wider than the window. */
+  min-width: 0;
+}
+
+/* One flex row: formatting (scrolls if tight) on the left, search + settings
+   pinned on the right. min-width:0 lets the format column shrink instead of
+   pushing the right cluster off-screen. */
+.v-toolbar.v-toptoolbar__bar {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.v-toptoolbar__format {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.v-toptoolbar__format::-webkit-scrollbar {
+  height: 0;
+  width: 0;
+}
+
+.v-toptoolbar__right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  padding-left: var(--space-2);
+}
+
+.v-toptoolbar__gear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--gradient-button);
+  cursor: pointer;
+}
+
+.v-toptoolbar__gear:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
 }
 
 .v-editortoolbar__select {
   height: 24px;
+  max-width: 130px;
   font-family: var(--font-ui);
   font-size: var(--text-size-ui);
   border: 1px solid var(--border-default);
@@ -61,6 +115,15 @@
   cursor: pointer;
   border: none;
   padding: 0;
+}
+
+.v-editortoolbar__color.is-disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.v-editortoolbar__color.is-disabled input[type="color"] {
+  cursor: default;
 }
 
 .v-linkeditor {
