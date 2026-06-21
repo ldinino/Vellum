@@ -18,6 +18,8 @@ import * as api from "../data/api";
 import type {
   Notebook,
   Page,
+  PageSortDir,
+  PageSortMode,
   PageTemplate,
   RefineTemplate,
   Section,
@@ -115,6 +117,13 @@ export interface VellumActions {
   ) => Promise<void>;
   deleteSection: (notebookId: string, sectionId: string) => Promise<void>;
   reorderSections: (notebookId: string, orderedIds: string[]) => Promise<void>;
+  /** Set a section's page sort mode/direction, then re-list its pages. */
+  setSectionSort: (
+    notebookId: string,
+    sectionId: string,
+    mode: PageSortMode,
+    dir: PageSortDir,
+  ) => Promise<void>;
 
   setGrammarEnabled: (enabled: boolean) => Promise<void>;
   setSpellcheckEnabled: (enabled: boolean) => Promise<void>;
@@ -164,6 +173,37 @@ function readLastOpen(): LastOpen | null {
   }
 }
 
+/** Per-section "last open page" memory (sectionId → pageId) so re-opening a
+ * section returns you to the page you were on instead of nothing. Same
+ * per-machine/localStorage rationale as LAST_OPEN_KEY above. Stale entries for
+ * deleted sections are harmless — they're validated against the live page list
+ * on read and never queried for a section that no longer exists. */
+const LAST_PAGE_KEY = "vellum.lastPagePerSection";
+
+function readLastPageMap(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(LAST_PAGE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function readLastPage(sectionId: string): string | null {
+  return readLastPageMap()[sectionId] ?? null;
+}
+
+function writeLastPage(sectionId: string, pageId: string) {
+  try {
+    const map = readLastPageMap();
+    if (map[sectionId] === pageId) return;
+    map[sectionId] = pageId;
+    localStorage.setItem(LAST_PAGE_KEY, JSON.stringify(map));
+  } catch {
+    // localStorage unavailable — non-fatal.
+  }
+}
+
 export function VellumProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<VellumState>(initial);
   // Mirror for reading current values inside async actions without stale closures.
@@ -194,12 +234,14 @@ export function VellumProvider({ children }: { children: ReactNode }) {
   );
 
   const reloadPages = useCallback(
-    async (notebookId: string, sectionId: string) => {
+    async (notebookId: string, sectionId: string): Promise<Page[]> => {
       try {
         const pages = await api.listPages(notebookId, sectionId);
         setState((s) => ({ ...s, pages }));
+        return pages;
       } catch (e) {
         fail(e);
+        return [];
       }
     },
     [fail],
@@ -341,6 +383,10 @@ export function VellumProvider({ children }: { children: ReactNode }) {
         // Last notebook was deleted: drop the stale pointer.
         localStorage.removeItem(LAST_OPEN_KEY);
       }
+      // Remember the current page per section so re-opening it returns here.
+      if (state.selectedSectionId && state.selectedPageId) {
+        writeLastPage(state.selectedSectionId, state.selectedPageId);
+      }
     } catch {
       // localStorage unavailable (e.g. some embedded contexts) — non-fatal.
     }
@@ -371,7 +417,16 @@ export function VellumProvider({ children }: { children: ReactNode }) {
         searchHighlight: "",
         pages: [],
       }));
-      await reloadPages(notebookId, sectionId);
+      const pages = await reloadPages(notebookId, sectionId);
+      // Jump to the last page viewed in this section (if it still exists),
+      // else the first page, so opening a section never lands on a blank state.
+      const saved = readLastPage(sectionId);
+      const pageId =
+        saved && pages.some((p) => p.id === saved) ? saved : pages[0]?.id ?? null;
+      // Guard against a fast section switch: only apply if still the active section.
+      setState((s) =>
+        s.selectedSectionId === sectionId ? { ...s, selectedPageId: pageId } : s,
+      );
     },
     [reloadPages],
   );
@@ -672,6 +727,17 @@ export function VellumProvider({ children }: { children: ReactNode }) {
       try {
         await api.reorderSections(notebookId, orderedIds);
         await afterSectionChange(notebookId);
+      } catch (e) {
+        fail(e);
+      }
+    },
+    setSectionSort: async (notebookId, sectionId, mode, dir) => {
+      try {
+        await api.setSectionSort(notebookId, sectionId, mode, dir);
+        // Refresh the section list (so the control reflects the new mode/dir)
+        // and re-list pages in the new order.
+        await afterSectionChange(notebookId);
+        await refreshSelectedPages();
       } catch (e) {
         fail(e);
       }

@@ -19,7 +19,10 @@ body {
   font-family: var(--font-ui);
   font-size: var(--text-size-ui);
   color: var(--text-primary);
-  background: var(--surface-window);
+  /* Transparent so the window's acrylic glass (window-vibrancy) shows through
+     where chrome is translucent — the title bar. The opaque app background
+     lives on .v-shell so the content area stays fully readable (Phase 9). */
+  background: transparent;
   -webkit-font-smoothing: antialiased;
   user-select: none; /* chrome is not selectable; editor opts back in */
   cursor: default;
@@ -66,15 +69,8 @@ img {
   background: var(--surface-panel);
 }
 
-/* ---- Feature underlines (custom Tiptap marks render these classes) ----- */
-
-.grammar-error {
-  text-decoration: underline wavy;
-  text-decoration-color: var(--grammar-underline);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
+/* Grammar/spell underlines are rendered by editor.css (.v-grammar-error /
+ * .v-spell-error), the classes the GrammarError decoration actually applies. */
 
 /* ---- Inline rename input (EditableLabel) ------------------------------- */
 

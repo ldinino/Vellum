@@ -13,13 +13,23 @@
 }
 
 .v-pagelist__header {
+  display: flex;
+  gap: var(--space-2);
   padding: var(--space-3);
   border-bottom: 1px solid color-mix(in srgb, var(--section-color) 45%, white);
 }
 
 .v-pagelist__header .v-button {
-  width: 100%;
   justify-content: center;
+}
+
+/* New Page takes the remaining width; the sort button stays compact. */
+.v-pagelist__header .v-button:not(.v-pagelist__sort) {
+  flex: 1;
+}
+
+.v-pagelist__sort {
+  flex: 0 0 auto;
 }
 
 .v-pagelist__items {

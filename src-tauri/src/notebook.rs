@@ -30,11 +30,16 @@ pub struct Section {
     pub color: Option<String>,
     pub sort_order: i64,
     pub page_template_id: Option<String>,
+    /// Page sort preference (spec Section 5 / Phase 9): "custom" | "created" |
+    /// "modified". "custom" is the drag-reorder order.
+    pub page_sort_mode: String,
+    /// "asc" | "desc" (ignored for "custom").
+    pub page_sort_dir: String,
 }
 
 pub async fn list_sections(pool: &Pool<Sqlite>) -> Result<Vec<Section>, String> {
     sqlx::query_as::<_, Section>(
-        "SELECT id, name, color, sort_order, page_template_id \
+        "SELECT id, name, color, sort_order, page_template_id, page_sort_mode, page_sort_dir \
          FROM sections ORDER BY sort_order, name",
     )
     .fetch_all(pool)
@@ -62,6 +67,8 @@ pub async fn create_section(pool: &Pool<Sqlite>, name: &str) -> Result<Section, 
         color: None,
         sort_order,
         page_template_id: None,
+        page_sort_mode: "custom".into(),
+        page_sort_dir: "asc".into(),
     })
 }
 
@@ -151,6 +158,36 @@ pub async fn section_template_id(
     .map_err(|e| format!("section template id: {e}"))
 }
 
+/// Persist a section's page sort preference (spec Section 5 / Phase 9). Values
+/// are whitelisted so only known modes/directions reach the DB.
+pub async fn set_section_sort(
+    pool: &Pool<Sqlite>,
+    id: &str,
+    mode: &str,
+    dir: &str,
+) -> Result<(), String> {
+    let mode = match mode {
+        "custom" | "created" | "modified" => mode,
+        other => return Err(format!("invalid page sort mode: {other}")),
+    };
+    let dir = match dir {
+        "asc" | "desc" => dir,
+        other => return Err(format!("invalid page sort dir: {other}")),
+    };
+    sqlx::query(
+        "UPDATE sections SET page_sort_mode = ?1, page_sort_dir = ?2, updated_at = ?3 \
+         WHERE id = ?4",
+    )
+    .bind(mode)
+    .bind(dir)
+    .bind(now())
+    .bind(id)
+    .execute(pool)
+    .await
+    .map_err(|e| format!("set section sort: {e}"))?;
+    Ok(())
+}
+
 pub async fn reorder_sections(pool: &Pool<Sqlite>, ordered_ids: &[String]) -> Result<(), String> {
     let mut tx = pool.begin().await.map_err(|e| format!("begin reorder: {e}"))?;
     for (order, id) in ordered_ids.iter().enumerate() {
@@ -180,15 +217,51 @@ pub struct Page {
     pub preview: String,
 }
 
+/// Map a section's (mode, dir) to a safe ORDER BY clause. Whitelisted — the
+/// result is a fixed `&'static str`, never interpolated caller input — so the
+/// formatted `list_pages` query stays injection-safe.
+fn page_order_clause(mode: &str, dir: &str) -> &'static str {
+    let desc = dir.eq_ignore_ascii_case("desc");
+    match mode {
+        "created" => {
+            if desc {
+                "created_at DESC, sort_order"
+            } else {
+                "created_at ASC, sort_order"
+            }
+        }
+        "modified" => {
+            if desc {
+                "updated_at DESC, sort_order"
+            } else {
+                "updated_at ASC, sort_order"
+            }
+        }
+        // "custom" (and anything unknown): the user's drag-reorder order.
+        _ => "sort_order, created_at",
+    }
+}
+
 pub async fn list_pages(pool: &Pool<Sqlite>, section_id: &str) -> Result<Vec<Page>, String> {
-    sqlx::query_as::<_, Page>(
+    // Order by this section's stored preference; default to custom if missing.
+    let (mode, dir): (String, String) =
+        sqlx::query_as("SELECT page_sort_mode, page_sort_dir FROM sections WHERE id = ?1")
+            .bind(section_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| format!("section sort: {e}"))?
+            .unwrap_or_else(|| ("custom".to_string(), "asc".to_string()));
+
+    let sql = format!(
         "SELECT id, section_id, title, sort_order, updated_at, preview \
-         FROM pages WHERE section_id = ?1 ORDER BY sort_order, created_at",
-    )
-    .bind(section_id)
-    .fetch_all(pool)
-    .await
-    .map_err(|e| format!("list pages: {e}"))
+         FROM pages WHERE section_id = ?1 ORDER BY {}",
+        page_order_clause(&mode, &dir)
+    );
+    sqlx::query_as::<_, Page>(&sql)
+        .bind(section_id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("list pages: {e}"))
 }
 
 pub async fn create_page(

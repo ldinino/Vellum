@@ -28,7 +28,7 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
   const [tab, setTab] = useState("templates");
 
   return (
-    <Modal title="Settings" open={open} onClose={onClose} width={840}>
+    <Modal title="Settings" open={open} onClose={onClose} width={1000}>
       <div className="v-settings">
         <nav className="v-settings__nav">
           {TABS.map((t) => (

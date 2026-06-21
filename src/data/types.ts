@@ -10,12 +10,20 @@ export interface Notebook {
   createdAt: string;
 }
 
+/** Page sort preference for a section (spec Section 5 / Phase 9). */
+export type PageSortMode = "custom" | "created" | "modified";
+export type PageSortDir = "asc" | "desc";
+
 export interface Section {
   id: string;
   name: string;
   color: string | null;
   sortOrder: number;
   pageTemplateId: string | null;
+  /** "custom" = drag-reorder order; "created"/"modified" sort by timestamp. */
+  pageSortMode: PageSortMode;
+  /** "asc" | "desc" (ignored for "custom"). */
+  pageSortDir: PageSortDir;
 }
 
 export interface Page {

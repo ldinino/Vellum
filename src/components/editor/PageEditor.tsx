@@ -499,28 +499,32 @@ export function PageEditor({
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => e.preventDefault()}
     >
-      <AttachmentBar
-        attachments={attachments.map(toAttachmentItem)}
-        onOpen={openAttachment}
-        onRemove={removeAttachment}
-        onAttachFiles={attachFiles}
-      />
-      <input
-        ref={titleRef}
-        className="v-editor__title"
-        value={title}
-        placeholder="Untitled page"
-        onChange={(e) => setTitle(e.target.value)}
-        onBlur={commitTitle}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            commitTitle();
-            editor?.commands.focus("start");
-          }
-        }}
-      />
-      <EditorContent editor={editor} className="v-editor__content" />
+      {/* The white "page sheet" floating on the section-tinted desk (OneNote
+          2007: paper in a notebook). */}
+      <div className="v-editor__page">
+        <AttachmentBar
+          attachments={attachments.map(toAttachmentItem)}
+          onOpen={openAttachment}
+          onRemove={removeAttachment}
+          onAttachFiles={attachFiles}
+        />
+        <input
+          ref={titleRef}
+          className="v-editor__title"
+          value={title}
+          placeholder="Untitled page"
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commitTitle();
+              editor?.commands.focus("start");
+            }
+          }}
+        />
+        <EditorContent editor={editor} className="v-editor__content" />
+      </div>
       <GrammarPopover editor={editor} onAfterAction={() => void runGrammarRef.current()} />
       <EditorContextMenu
         editor={editor}

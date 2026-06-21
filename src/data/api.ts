@@ -13,6 +13,8 @@ import type {
   Manifest,
   Notebook,
   Page,
+  PageSortDir,
+  PageSortMode,
   ProcessStatus,
   RefineRequest,
   RefineResult,
@@ -78,6 +80,14 @@ export const deleteSection = (notebookId: string, sectionId: string) =>
 
 export const reorderSections = (notebookId: string, orderedIds: string[]) =>
   invoke<void>("reorder_sections", { notebookId, orderedIds });
+
+/** Persist a section's page sort preference (spec Section 5 / Phase 9). */
+export const setSectionSort = (
+  notebookId: string,
+  sectionId: string,
+  mode: PageSortMode,
+  dir: PageSortDir,
+) => invoke<void>("set_section_sort", { notebookId, sectionId, mode, dir });
 
 // --- Pages (per-notebook DB) ------------------------------------------------
 

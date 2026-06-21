@@ -4,11 +4,13 @@
   display: flex;
   height: 70vh;
   min-height: 360px;
-  margin: calc(var(--space-3) * -1);
+  /* Cancel the shared .v-modal__body padding (--space-5) fully so the settings
+     panes fill the dialog edge-to-edge — no white band around the content. */
+  margin: calc(var(--space-5) * -1);
 }
 
 .v-settings__nav {
-  flex: 0 0 170px;
+  flex: 0 0 150px;
   display: flex;
   flex-direction: column;
   gap: 2px;

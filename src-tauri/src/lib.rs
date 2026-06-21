@@ -27,6 +27,15 @@ pub fn run() {
         .manage(refine::runtime::InstallState::default())
         .setup(|app| {
             paths::ensure_data_layout(&app.handle().clone())?;
+            // Real Aero-style glass behind the chrome (Phase 9): acrylic
+            // translucency on the main window. Windows-only; best-effort, so a
+            // failure (older build / unsupported) just leaves the window opaque.
+            #[cfg(target_os = "windows")]
+            {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = window_vibrancy::apply_acrylic(&win, Some((215, 228, 242, 50)));
+                }
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -46,6 +55,7 @@ pub fn run() {
             commands::update_section,
             commands::delete_section,
             commands::reorder_sections,
+            commands::set_section_sort,
             commands::list_pages,
             commands::create_page,
             commands::set_page_title,

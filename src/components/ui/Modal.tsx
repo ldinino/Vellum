@@ -1,5 +1,4 @@
 import { ReactNode, useEffect } from "react";
-import { Icon } from "./Icon";
 import "./Modal.css";
 
 interface ModalProps {
@@ -37,14 +36,13 @@ export function Modal({ title, open, onClose, children, footer, width = 420 }: M
       >
         <div className="v-modal__titlebar">
           <span className="v-modal__title">{title}</span>
+          {/* The X glyph is a white CSS mask (Modal.css), not a raster icon. */}
           <button
             type="button"
             className="v-modal__close"
             aria-label="Close"
             onClick={onClose}
-          >
-            <Icon name="cross-small" />
-          </button>
+          />
         </div>
         <div className="v-modal__body">{children}</div>
         {footer && <div className="v-modal__footer">{footer}</div>}

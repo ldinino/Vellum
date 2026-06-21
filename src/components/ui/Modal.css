@@ -3,53 +3,88 @@
   inset: 0;
   z-index: 900;
   background: rgba(0, 0, 0, 0.2);
+  /* Frost the content behind the dialog (glass focus) to match the window's
+     real acrylic chrome (Phase 9). Chromium/WebView2 supports backdrop-filter. */
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Glass frame per makeaero window-glass values */
+/* Aero glass dialog (7.css .window.glass model). Floating over app content (not
+   the desktop), so its glass comes from a backdrop-filter blur of the content
+   behind it, with the same frosted overlay + corner shines as the main window. */
 .v-modal {
-  background: var(--glass-tint);
-  border: 1px solid var(--glass-border);
-  border-radius: 6px;
-  box-shadow:
-    var(--shadow-modal),
-    inset 0 0 0 1px var(--glass-inner-stroke);
-  padding: 0 6px 6px;
+  background: var(--aero-window-glass), var(--aero-window-frost);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--aero-window-border);
+  border-radius: var(--aero-window-radius);
+  box-shadow: var(--shadow-modal), inset 0 0 0 1px #fffa;
+  padding: 0 var(--aero-window-space) var(--aero-window-space);
+  /* Never overflow a small window (the width prop is a target, not a minimum). */
+  max-width: 92vw;
+  max-height: 92vh;
 }
 
 .v-modal__titlebar {
   display: flex;
   align-items: center;
   height: 28px;
-  padding: 0 2px 0 6px;
-  background: var(--glass-sheen);
-  margin: 0 -6px;
-  border-radius: 6px 6px 0 0;
+  /* Side padding so the mini close clears the frame edge (7.css --w7-w-space). */
+  padding: 0 var(--aero-window-space) 0 var(--space-3);
+  /* Transparent: the dialog's frosted glass + corner shines show through. */
+  background: transparent;
+  margin: 0 calc(-1 * var(--aero-window-space));
+  border-radius: var(--aero-window-radius) var(--aero-window-radius) 0 0;
 }
 
 .v-modal__title {
   flex: 1;
   font-size: var(--text-size-ui);
-  color: var(--text-primary);
-  text-shadow: var(--glass-text-shadow);
+  /* Black text + white halo so it reads on the frosted glass (7.css). */
+  color: #000;
+  text-shadow: 0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff,
+    0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff;
 }
 
+/* Mini Aero close (Win7 MDI / child-window convention): a compact glassy red
+   caption button, not the full-size window close. */
 .v-modal__close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
+  width: 26px;
   height: 18px;
-  border: 1px solid rgba(0, 0, 0, 0.3);
+  border: 1px solid #0000004d;
   border-radius: 3px;
-  background: linear-gradient(rgba(255, 255, 255, 0.5), rgba(218, 90, 90, 0.6));
+  background:
+    radial-gradient(circle at -60% 50%, #0006 5% 10%, #0000 50%),
+    radial-gradient(circle at 160% 50%, #0006 5% 10%, #0000 50%),
+    linear-gradient(#e0a197e5, #cf796a 25% 50%, #d54f36 50%);
+  box-shadow: inset 0 0 0 1px #fff8;
   cursor: pointer;
 }
 
 .v-modal__close:hover {
-  background: linear-gradient(#f2b8b0, #d54f3f 50%, #b8341f 50%);
+  background:
+    radial-gradient(circle at 50% 170%, #f4e676 10% 20%, #0000 60%),
+    linear-gradient(#fb9d8b, #ee6d56 25% 50%, #d42809 50%);
+  box-shadow: 0 0 6px 2px #e68e75, inset 0 0 0 1px #fff8;
+}
+
+/* White X drawn via mask so its color is correct on the red (a raster icon
+   carried its own off-color). Subtle dark edge for legibility on the light top
+   of the red gradient. */
+.v-modal__close::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  background-color: #fff;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 2 8 8 M8 2 2 8' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'/></svg>")
+    no-repeat center / contain;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 2 8 8 M8 2 2 8' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'/></svg>")
+    no-repeat center / contain;
+  filter: drop-shadow(0 1px 0 rgba(90, 10, 10, 0.55));
 }
 
 .v-modal__body {

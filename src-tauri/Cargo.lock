@@ -8417,6 +8417,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "uuid",
+ "window-vibrancy",
  "windows 0.61.3",
  "zip 8.6.0",
 ]

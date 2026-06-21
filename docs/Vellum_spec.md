@@ -144,9 +144,12 @@ strip** (pages are *not* a middle column).
 **Center — editor**
 
 - Fills the space between the nav and the page strip, beneath the section tabs.
-- The **open section's color frames the page**: a colored band along the top
-  edge (the active section tab merges into it) and tinted side rules meeting the
-  page-tab strip.
+- The **open section's color frames the page** as "paper on a tinted desk"
+  (OneNote's notebook metaphor): the section color tints the editor ground as a
+  soft gradient (strongest near the section tabs, fading down), and a white page
+  sheet floats on it with a margin and a raised shadow. A colored band runs along
+  the top edge, which the active section tab merges into. (Phase 9 — replaces the
+  earlier full-bleed-white + thin-side-rules treatment.)
 - Page title is an editable h1 at the top, outside the Tiptap content area.
 - Formatting lives in the unified top toolbar (above), not a per-editor bar.
 
@@ -471,7 +474,7 @@ No PDF export, no Markdown export, no HTML export in v1.
 - Mobile
 - Plugin/extension system
 - NPU acceleration
-- Themes beyond the retro aesthetic
+- Themes beyond the retro aesthetic. **Future item:** a theme system (e.g. swappable Windows 9x / classic asset themes — there's a large ecosystem of these). Out of scope for v1, but the architecture already leaves room: the palette/gradients/metrics are centralized as CSS custom properties in `tokens.css`, so a theme is largely an alternate token set. No work planned now.
 
 ---
 
@@ -494,7 +497,8 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 | 6 — Page Templates | ✅ Complete |
 | 7 — Refine Templates + Refine Infrastructure | ✅ Complete |
 | 8 — Refine (Full Feature) | ✅ Complete |
-| 9–11 | ⬜ Not started |
+| 9 — UI Polish Pass | ✅ Complete |
+| 10–11 | ⬜ Not started |
 
 ---
 
@@ -732,6 +736,16 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 - Retro glyphs/icons: replace any default browser UI elements
 
 **Exit criteria:** Visual review against Office 2007 reference screenshots. No surfaces that look like default browser or generic React UI.
+
+> **Design note (as built):** Phase 9 folded a set of usage notes into the polish pass, plus two small behavioral features.
+> - **Authentic Aero glass window (7.css glass window model).** Reproduces 7.css's `.window.glass` (MIT, github.com/khang-nd/7.css): `.app-frame` uses the `--w7-w-glass` frosted overlay (diagonal corner shines + a reflection pattern, `--aero-window-glass`) over a faint frost base, sitting on the real desktop blur from `window-vibrancy` acrylic — so the chrome picks up the desktop rather than a predefined color. `.v-titlebar` is transparent (the frame's glass + corner shines show through it) with `--w7-w-space` side padding so the caption controls clear the window edge, and white-halo title text. `.v-shell` is the opaque white window-body inset by 6px (`--aero-window-space`) so the glass frame reads as a border on the sides/bottom; dark hairline + inner white ring + 6px rounded corners. Caption buttons are 7.css's (embedded glyph PNGs + glassy fill + inner highlight + the signature red close), keyed on `aria-label`. The window is `transparent: true` (rounded corners + glass show the desktop; acrylic applied Windows-`#[cfg]`-gated + best-effort so macOS/Linux CI still builds); when **maximized** it squares its corners and drops the frame (`useWindowMaximized` → `.app-frame--maximized` zeroes the radius/border/glass margin on `.app-frame` + `.v-shell`), since a rounded transparent window leaves desktop gaps at the screen corners. **Dialogs** (the shared `Modal` — Settings, Section Properties, Refine preview, first-run) use the same frosted glass via a `backdrop-filter` blur of the app content behind them (no desktop mid-window), with a **mini** glassy-red close (Win7 MDI/child-window convention), not the full caption close. *(Iterated twice: first a translucent fill that read gray, then a solid-blue 7.css `.window` whose horizontal sheen blotched on a wide window — landed on the glass variant.)* 7.css attribution: `src/styles/ATTRIBUTION.txt` (About dialog, Phase 10). Real-glass appearance needs on-Windows verification.
+> - **Page framing = paper on a tinted desk.** `.v-editor` is now a section-color gradient "desk" (strongest near the tabs, fading down) with the white page sheet (`.v-editor__page`, in `PageEditor`) floating on it with a margin, border, and raised shadow — the OneNote "paper in a notebook" metaphor, replacing the earlier full-bleed-white + thin-side-rules framing. The active section tab still merges into the colored top band.
+> - **Collapsed nav rail** widened (`--nav-rail-width` 26→44px) with horizontal padding so the vertical notebook labels aren't cramped.
+> - **Section "+" button** swapped to the shadowless Fugue `plus-small` variant (all "+" add-buttons share that icon).
+> - **Jump to last-open page (per section).** Selecting a section now opens the last page viewed there (validated against the live list), else the first page — never a blank state. Backed by a per-section `vellum.lastPagePerSection` localStorage map alongside the existing global `vellum.lastOpen` (same per-machine, not-OneDrive-synced rationale); written from the single selection-persistence effect.
+> - **Per-section page sort.** Sections gained `page_sort_mode` (`custom`/`created`/`modified`) + `page_sort_dir` (`asc`/`desc`) via **migration 4**. `list_pages` reads them and orders through a whitelisted ORDER BY (injection-safe); a dedicated `set_section_sort` command persists the choice. The page-strip header has a themed sort menu; drag-to-reorder is enabled only in `custom` mode (OneNote behavior).
+> - **Migrate-on-open fix.** Migration 4 surfaced a latent gap: `create_or_migrate` only ran from `create_notebook`/`open_notebook`, but the startup restore path reads notebooks straight through `pool_for` (`list_sections`/`list_pages`), so a freshly-shipped migration never applied → "no such column: page_sort_mode". `pool_for` now runs `create_or_migrate` before opening the pool (idempotent, cheap when current), so every access path migrates uniformly.
+> - **Audit.** The rest of the §9 checklist (toolbar gradients + beveled separators, 3D button press states, retro scrollbars, themed context menus, glass modals, distinct green/red Harper underlines, Segoe UI fallback chain, Fugue glyphs over native controls) was already in place from incremental polish; verified for cohesion and a dead `.grammar-error` rule removed (the live classes are `.v-grammar-error` / `.v-spell-error`). Inline Refine underlines are obsolete (Refine uses the preview dialog).
 
 ---
 

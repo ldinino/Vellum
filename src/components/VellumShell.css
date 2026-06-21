@@ -4,6 +4,16 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+  /* The window body inside the Aero frame: inset so the blue frame shows as a
+     6px glass border on the sides and bottom (the title bar caps the top), with
+     a dark hairline + inner white ring like 7.css's .window-body. Opaque fill
+     keeps the content fully readable (the body is transparent for the frame). */
+  margin: 0 var(--aero-window-space) var(--aero-window-space);
+  border: 1px solid var(--aero-window-border);
+  border-radius: 0 0 4px 4px;
+  box-shadow: 0 0 0 1px #fff9;
+  background: var(--surface-window);
 }
 
 .v-shell__body {

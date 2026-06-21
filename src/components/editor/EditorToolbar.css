@@ -3,10 +3,20 @@
   flex: 0 0 auto;
 }
 
-/* Single row; scroll horizontally on narrow widths rather than wrapping. */
+/* Wrap onto extra rows on narrow widths (e.g. the template editor inside a
+   dialog) instead of scrolling horizontally. Tighter column gaps + separators
+   than the main toolbar so groups pack into fuller rows. */
 .v-editortoolbar .v-toolbar {
-  overflow-x: auto;
-  overflow-y: hidden;
+  flex-wrap: wrap;
+  height: auto;
+  row-gap: var(--space-1);
+  column-gap: var(--space-1);
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+}
+
+.v-editortoolbar .v-toolbar__separator {
+  margin: 0;
 }
 
 /* ---- Unified shell-level top toolbar (formatting + search) ---------------- */

@@ -130,6 +130,12 @@ async fn pool_for(app: &AppHandle, notebook_id: &str) -> Result<Pool<Sqlite>, St
     if !path.is_file() {
         return Err(format!("Notebook database missing: {}", path.display()));
     }
+    // Bring the schema up to date before any read/write. The startup restore
+    // path (list_sections / list_pages) reads notebooks directly, bypassing
+    // open_notebook, so without this a newly-shipped migration would never apply
+    // (e.g. the page_sort_mode column → "no such column" on list_sections).
+    // create_or_migrate is idempotent and cheap when already current.
+    db::create_or_migrate(&path).await?;
     db::open_pool(&path, false).await
 }
 
@@ -442,6 +448,20 @@ pub async fn reorder_sections(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::reorder_sections(&pool, &ordered_ids).await;
+    pool.close().await;
+    r
+}
+
+#[tauri::command]
+pub async fn set_section_sort(
+    app: AppHandle,
+    notebook_id: String,
+    section_id: String,
+    mode: String,
+    dir: String,
+) -> Result<(), String> {
+    let pool = pool_for(&app, &notebook_id).await?;
+    let r = notebook::set_section_sort(&pool, &section_id, &mode, &dir).await;
     pool.close().await;
     r
 }

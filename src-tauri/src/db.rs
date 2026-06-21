@@ -86,6 +86,13 @@ const MIGRATIONS: &[&str] = &[
     r#"
     ALTER TABLE attachments ADD COLUMN size INTEGER NOT NULL DEFAULT 0;
     "#,
+    // 4: per-section page sort preference (spec Section 5 / Phase 9). 'custom' is
+    //    the user's drag-reorder order; 'created'/'modified' sort by timestamp.
+    //    Direction is 'asc'/'desc' (ignored for 'custom').
+    r#"
+    ALTER TABLE sections ADD COLUMN page_sort_mode TEXT NOT NULL DEFAULT 'custom';
+    ALTER TABLE sections ADD COLUMN page_sort_dir  TEXT NOT NULL DEFAULT 'asc';
+    "#,
 ];
 
 /// Open a single-connection pool to a notebook DB with foreign keys on and

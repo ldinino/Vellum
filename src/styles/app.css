@@ -6,5 +6,32 @@
   height: 100%;
   min-width: 0;
   overflow: hidden; /* keep wide children (toolbar) from stretching the frame */
-  border: 1px solid var(--glass-border); /* window edge with decorations off */
+  /* Aero glass window frame (7.css --w7-w-glass): translucent frosted glass with
+     diagonal corner shines over the desktop blur (window-vibrancy acrylic) — so
+     the chrome picks up the desktop rather than a solid color. The frost shows
+     in the title bar and as a thin border around the content (the title bar caps
+     the top; .v-shell insets to reveal it on the sides/bottom). Dark hairline +
+     inner white ring + rounded corners; the transparent window shows the desktop
+     at the rounded corners. */
+  background: var(--aero-window-glass), var(--aero-window-frost);
+  border: 1px solid var(--aero-window-border);
+  border-radius: var(--aero-window-radius);
+  box-shadow: inset 0 0 0 1px #fffa;
+}
+
+/* Maximized: fill the screen edge-to-edge with square corners and no frame — a
+   rounded/bordered maximized window would leave desktop gaps at the screen
+   corners (the window is transparent). The .v-shell glass border is dropped too
+   so content uses the full area. */
+.app-frame--maximized {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.app-frame--maximized .v-shell {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }

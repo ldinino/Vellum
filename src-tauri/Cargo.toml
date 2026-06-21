@@ -53,6 +53,10 @@ windows = { version = "0.61", features = [
   "Win32_Graphics_Dxgi",
   "Win32_Graphics_Dxgi_Common",
 ] }
+# Real Aero-style glass (Phase 9): acrylic translucency behind the title bar.
+# Windows-only so macOS/Linux CI keeps building; the call site is also
+# #[cfg(windows)]-gated. Additive — must NOT move `time` off 0.3.47.
+window-vibrancy = "0.6"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

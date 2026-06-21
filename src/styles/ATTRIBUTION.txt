@@ -1,0 +1,12 @@
+The window caption buttons in src/components/Titlebar.css (the minimize /
+maximize / restore / close glyph PNGs and the glassy fill, inner-highlight, and
+red close-button values) are adapted from 7.css by Khang Nguyen Duy and 7.css
+contributors (https://github.com/khang-nd/7.css), licensed under the MIT License.
+
+MIT License — permission is hereby granted, free of charge, to use, copy, modify,
+and distribute the software, provided the copyright notice and this permission
+notice are included. The software is provided "as is", without warranty of any
+kind. Full text: https://github.com/khang-nd/7.css/blob/main/LICENSE
+
+This attribution must also appear in the app's About dialog (Phase 10), alongside
+the Fugue Icons credit (see src/assets/icons/ATTRIBUTION.txt).

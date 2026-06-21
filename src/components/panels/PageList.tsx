@@ -4,9 +4,16 @@ import { Button } from "../ui/Button";
 import { EditableLabel } from "../ui/EditableLabel";
 import { ContextMenu, MenuItem } from "../ui/ContextMenu";
 import { useVellum } from "../../state/vellum";
+import type { PageSortDir, PageSortMode } from "../../data/types";
 import { reorderByDrop } from "../dnd";
 import { handleListArrows } from "../keyboard";
 import "./PageList.css";
+
+const SORT_LABELS: Record<PageSortMode, string> = {
+  custom: "Manual order",
+  created: "Date created",
+  modified: "Date modified",
+};
 
 /** Right panel: title-only page-tab strip for the selected section (spec Section 5). */
 export function PageList() {
@@ -32,14 +39,51 @@ export function PageList() {
   const notebookId = selectedNotebookId;
   const sectionId = selectedSectionId;
 
+  const section = notebooks
+    .find((n) => n.id === notebookId)
+    ?.sections?.find((s) => s.id === sectionId);
   const otherSections =
     notebooks.find((n) => n.id === notebookId)?.sections?.filter((s) => s.id !== sectionId) ??
     [];
+
+  const sortMode: PageSortMode = section?.pageSortMode ?? "custom";
+  const sortDir: PageSortDir = section?.pageSortDir ?? "asc";
+  // Drag-to-reorder only makes sense for the manual ("custom") order.
+  const dragEnabled = sortMode === "custom";
 
   const openMenu = (e: React.MouseEvent, items: MenuItem[]) => {
     e.preventDefault();
     e.stopPropagation();
     setMenu({ x: e.clientX, y: e.clientY, items });
+  };
+
+  const sortMenu = (): MenuItem[] => {
+    const setMode = (mode: PageSortMode) =>
+      actions.setSectionSort(notebookId, sectionId, mode, sortDir);
+    const setDir = (dir: PageSortDir) =>
+      actions.setSectionSort(notebookId, sectionId, sortMode, dir);
+    return [
+      { label: "Manual order", checked: sortMode === "custom", onSelect: () => setMode("custom") },
+      { label: "Date created", checked: sortMode === "created", onSelect: () => setMode("created") },
+      {
+        label: "Date modified",
+        checked: sortMode === "modified",
+        onSelect: () => setMode("modified"),
+        separatorAfter: true,
+      },
+      {
+        label: "Ascending",
+        checked: sortDir === "asc",
+        disabled: sortMode === "custom",
+        onSelect: () => setDir("asc"),
+      },
+      {
+        label: "Descending",
+        checked: sortDir === "desc",
+        disabled: sortMode === "custom",
+        onSelect: () => setDir("desc"),
+      },
+    ];
   };
 
   const pageMenu = (pageId: string, title: string): MenuItem[] => [
@@ -85,6 +129,15 @@ export function PageList() {
         <Button icon="document--plus" onClick={() => actions.createPage(notebookId, sectionId)}>
           New Page
         </Button>
+        <Button
+          className="v-pagelist__sort"
+          icon="edit-list-order"
+          title={`Sort pages: ${SORT_LABELS[sortMode]}${
+            sortMode === "custom" ? "" : sortDir === "asc" ? " (ascending)" : " (descending)"
+          }`}
+          aria-label="Sort pages"
+          onClick={(e) => openMenu(e, sortMenu())}
+        />
       </div>
       <div
         className="v-pagelist__items"
@@ -97,8 +150,8 @@ export function PageList() {
               "v-pagelist__item",
               p.id === selectedPageId ? "v-pagelist__item--selected" : "",
             ].join(" ")}
-            draggable={editingId !== p.id}
-            onDragStart={() => setDragId(p.id)}
+            draggable={dragEnabled && editingId !== p.id}
+            onDragStart={() => dragEnabled && setDragId(p.id)}
             onDragOver={(e) => dragId && e.preventDefault()}
             onDrop={() => onDrop(p.id)}
             onDragEnd={() => setDragId(null)}

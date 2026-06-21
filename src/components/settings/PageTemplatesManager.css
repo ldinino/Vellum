@@ -2,7 +2,7 @@
 
 .v-tmpl {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 150px 1fr;
   grid-template-rows: 1fr auto;
   flex: 1;
   min-width: 0;
