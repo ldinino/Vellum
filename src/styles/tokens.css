@@ -94,11 +94,9 @@
   --sectiontabs-height: 27px;     /* horizontal section-tab row above the editor */
   --section-frame: 3px;           /* colored band along the page's top edge */
 
-  /* ---- Feature underline colors (spec Sections 9/10) ---------------------- */
+  /* ---- Feature underline colors (spec Section 10) ------------------------- */
   /* Distinct from each other. Spelling is now sourced from Harper (not WebView2),
    * so we draw its squiggle ourselves in the classic spell-check red. */
-  --refine-underline: #7a52c7;      /* purple — Refine suggestions */
-  --refine-underline-bg: rgba(122, 82, 199, 0.08);
   --grammar-underline: #2e8b57;     /* green — Harper grammar */
   --spell-underline: #e0584f;       /* red — Harper spelling */
 

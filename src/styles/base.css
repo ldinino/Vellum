@@ -68,19 +68,6 @@ img {
 
 /* ---- Feature underlines (custom Tiptap marks render these classes) ----- */
 
-.refine-suggestion {
-  text-decoration: underline;
-  text-decoration-color: var(--refine-underline);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 2px;
-  background: var(--refine-underline-bg);
-  cursor: pointer;
-}
-
-.refine-suggestion:hover {
-  text-decoration-style: double;
-}
-
 .grammar-error {
   text-decoration: underline wavy;
   text-decoration-color: var(--grammar-underline);

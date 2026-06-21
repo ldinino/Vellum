@@ -199,9 +199,9 @@ readable from JS, so they can't feed our themed right-click menu. See the Sectio
 
 **Grammar check:** Harper (see Section 10).
 
-**Custom marks:**
-- `refineSuggestion` — for Refine inline suggestions (see Section 9)
-- `grammarError` — for Harper grammar underlines
+**Custom decorations:**
+- `grammarError` — Harper grammar/spelling underlines (a ProseMirror decoration, not a stored mark)
+- (Refine no longer adds inline marks — its result is reviewed in a preview dialog and inserted on Keep; see Section 9.)
 
 ---
 
@@ -279,7 +279,17 @@ Refine templates are named system prompts used by the Refine feature. They are i
 - A "Revert" button floats near the block.
 - Individual word-level accept/reject is still available within the block.
 
-**After resolution:** Refine keeps Ollama warm through an active session so repeat Refines stay snappy. The process is released to free memory only after a long idle (~5 min) with no in-flight op and no pending suggestions, or on app exit — not eagerly after each op. (Decided in Phase 8; the next Refine transparently re-spawns Ollama.)
+> **Design note (as built — replaces the two rendering modes above).** The
+> inline word-level accept/reject model (and its `refineSuggestion` mark) was
+> built, then replaced by a **preview dialog**: a Refine op opens a modal with a
+> spinner while the local model runs, then shows the finished result for **Keep**
+> / **Cancel** (Keep replaces the selection — structural Markdown → rich blocks,
+> plain → inline text; Cancel discards and aborts the generation). This proved
+> simpler and more robust than per-word review on small local models, and the
+> spinner gives the progress feedback the long local runs need. See the Phase 8
+> design note for details.
+
+**After resolution:** Refine keeps Ollama warm through an active session so repeat Refines stay snappy. The process is released to free memory only after a long idle (~5 min) with no in-flight op, or on app exit — not eagerly after each op. (Decided in Phase 8; the next Refine transparently re-spawns Ollama.)
 
 **Model tiers:**
 

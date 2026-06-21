@@ -101,44 +101,6 @@
   cursor: help;
 }
 
-/* Refine suggestions (spec Section 9, Phase 8) — purple, distinct from grammar
- * (green) and spelling (red). Inserted/rewritten text is underlined; text marked
- * for deletion is struck through and faded. */
-.v-refine {
-  cursor: default;
-  border-radius: 1px;
-}
-
-.v-refine--insert,
-.v-refine--rewrite {
-  text-decoration: underline solid var(--refine-underline);
-  text-decoration-skip-ink: none;
-  text-underline-offset: 2px;
-  background: var(--refine-underline-bg);
-}
-
-.v-refine--delete {
-  text-decoration: line-through solid var(--refine-underline);
-  color: var(--text-muted);
-}
-
-/* Subtle in-flight indicator over the selection while the model runs. */
-.v-refine-loading {
-  background: var(--refine-underline-bg);
-  border-radius: 1px;
-  animation: v-refine-pulse 1.1s ease-in-out infinite;
-}
-
-@keyframes v-refine-pulse {
-  0%,
-  100% {
-    background: var(--refine-underline-bg);
-  }
-  50% {
-    background: rgba(122, 82, 199, 0.18);
-  }
-}
-
 /* ---- Tables ------------------------------------------------------------ */
 
 .v-prose table {
