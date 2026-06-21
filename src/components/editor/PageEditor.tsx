@@ -8,11 +8,10 @@ import { applySearchHighlight } from "./SearchHighlight";
 import { extractText, mapLints } from "./grammar";
 import { setGrammarLints, clearGrammarLints } from "./GrammarError";
 import { GrammarPopover } from "./GrammarPopover";
-import { hasRefineSuggestions } from "./RefineSuggestion";
 import { RefinePreviewModal, RefinePreviewState } from "./RefinePreviewModal";
 import { EditorContextMenu } from "./EditorContextMenu";
 import type { MenuItem } from "../ui/ContextMenu";
-import { insertRefinedText } from "../../lib/refine-diff";
+import { insertRefinedText } from "../../lib/refine-markdown";
 import { AttachmentBar, AttachmentItem } from "../panels/AttachmentBar";
 import { createDebouncer } from "../../lib/debounce";
 import { useVellum } from "../../state/vellum";
@@ -144,15 +143,14 @@ export function PageEditor({
   const runGrammarRef = useRef(runGrammar);
   runGrammarRef.current = runGrammar;
 
-  // Release Ollama after a long idle with no in-flight op and no pending
-  // suggestions (keep-warm lifecycle, spec Section 9). Re-arms itself if still
-  // busy/pending when it fires. Only armed once Refine has actually been used.
+  // Release Ollama after a long idle with no in-flight op (keep-warm lifecycle,
+  // spec Section 9). Re-arms itself if still busy when it fires. Only armed once
+  // Refine has actually been used.
   const scheduleIdleRelease = useCallback(() => {
     if (!refineUsedRef.current) return;
     if (idleTimerRef.current != null) window.clearTimeout(idleTimerRef.current);
     idleTimerRef.current = window.setTimeout(() => {
-      const ed = editorRef.current;
-      if (ed && !refineBusyRef.current && !hasRefineSuggestions(ed)) {
+      if (!refineBusyRef.current) {
         api.refineRelease().catch((e) => console.error("refine release failed", e));
         refineUsedRef.current = false;
       } else {

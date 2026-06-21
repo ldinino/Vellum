@@ -24,8 +24,6 @@ import { ContextMenu, MenuItem } from "../ui/ContextMenu";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { grammarHitAt, GrammarHit } from "./GrammarError";
-import { refineHitAt, RefineRun } from "./RefineSuggestion";
-import { acceptRun, rejectRun, acceptGroup, rejectGroup } from "../../lib/refine-resolve";
 import { ignoreInstance, ignoreRule } from "./grammar";
 import { readClipboard, execClipboard } from "../../lib/clipboard";
 import "./EditorContextMenu.css";
@@ -110,45 +108,6 @@ function lintItems(editor: Editor, hit: GrammarHit, onAfter: () => void): MenuIt
   return items;
 }
 
-/** Accept / Reject (+ Accept All / Reject All) for a Refine suggestion under the
- * cursor (spec Section 9). Rewrite suggestions reject as "Revert". */
-function refineItems(editor: Editor, run: RefineRun, onAfter: () => void): MenuItem[] {
-  const isRewrite = run.type === "rewrite";
-  return [
-    {
-      label: "Accept",
-      icon: "tick",
-      onSelect: () => {
-        acceptRun(editor, run);
-        onAfter();
-      },
-    },
-    {
-      label: isRewrite ? "Revert" : "Reject",
-      icon: "cross-small",
-      onSelect: () => {
-        rejectRun(editor, run);
-        onAfter();
-      },
-      separatorAfter: true,
-    },
-    {
-      label: "Accept All",
-      onSelect: () => {
-        acceptGroup(editor, run.group);
-        onAfter();
-      },
-    },
-    {
-      label: "Reject All",
-      onSelect: () => {
-        rejectGroup(editor, run.group);
-        onAfter();
-      },
-    },
-  ];
-}
-
 /** Open / Edit / Remove for a link under the cursor. */
 function linkItems(
   editor: Editor,
@@ -182,10 +141,6 @@ function buildMenu(
   // 1. grammar / spelling underline under the cursor
   const hit = at ? grammarHitAt(editor, at.pos) : null;
   if (hit) return lintItems(editor, hit, onAfter);
-
-  // 1b. Refine suggestion under the cursor — Accept / Reject / All
-  const refineRun = at ? refineHitAt(editor, at.pos) : null;
-  if (refineRun) return refineItems(editor, refineRun, onAfter);
 
   // 2. link under the cursor — link actions, then clipboard
   const a = (e.target as HTMLElement)?.closest?.("a");
