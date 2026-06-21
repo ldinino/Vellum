@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 36" width="36" height="36" role="img" aria-label="Refining">
+  <!-- Placeholder spinner. Replace with a Win98 hourglass animation (see note in
+       RefinePreviewModal.tsx). Animated via SMIL so it needs no JS/GIF. -->
+  <circle cx="18" cy="18" r="14" fill="none" stroke="#d9cdf0" stroke-width="4" />
+  <path
+    d="M18 4 a14 14 0 0 1 14 14"
+    fill="none"
+    stroke="#7a52c7"
+    stroke-width="4"
+    stroke-linecap="round"
+  >
+    <animateTransform
+      attributeName="transform"
+      type="rotate"
+      from="0 18 18"
+      to="360 18 18"
+      dur="0.9s"
+      repeatCount="indefinite"
+    />
+  </path>
+</svg>

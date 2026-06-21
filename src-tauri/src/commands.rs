@@ -992,6 +992,35 @@ pub async fn refine_debug_generate(
     crate::refine::inference::debug_generate(app, req).await
 }
 
+/// Refine (spec Sections 8–9, Phase 8): transform selected text with a template
+/// (instructions + examples) at the given adherence. Resolves the tier's model
+/// (with memory-aware fallback), strips reasoning, returns the cleaned text for
+/// the renderer to diff and render inline.
+#[tauri::command]
+pub async fn refine_generate(
+    app: AppHandle,
+    req: crate::refine::run::RefineRequest,
+) -> Result<crate::refine::run::RefineResult, String> {
+    crate::refine::run::refine_generate(app, req).await
+}
+
+/// Release the Ollama process to free memory without disabling Refine (Phase 8
+/// keep-warm lifecycle): the renderer calls this after a long idle with no
+/// pending suggestions. The next Refine re-spawns Ollama via
+/// `ensure_ollama_running`, which still gates on the unchanged `refine_enabled`.
+#[tauri::command]
+pub fn refine_release(app: AppHandle) -> Result<ProcessStatus, String> {
+    ollama::stop(&app.state::<OllamaState>())
+}
+
+/// Abort the in-flight Refine generation (Cancel / dismissing the preview): the
+/// stream loop drops its connection so Ollama stops generating and frees the CPU.
+#[tauri::command]
+pub fn refine_cancel() -> Result<(), String> {
+    crate::refine::run::request_cancel();
+    Ok(())
+}
+
 /// Detect RAM + GPUs and recommend a model tier. Runs on a blocking thread:
 /// DXGI enumeration uses COM and sysinfo reads the OS.
 #[tauri::command]

@@ -22,6 +22,7 @@ import type { Extensions } from "@tiptap/react";
 import { ResizableImage } from "./ResizableImage";
 import { SearchHighlight } from "./SearchHighlight";
 import { GrammarError } from "./GrammarError";
+import { RefineSuggestion, RefineLoadingExtension } from "./RefineSuggestion";
 
 export function buildExtensions(): Extensions {
   return [
@@ -49,5 +50,7 @@ export function buildExtensions(): Extensions {
     TableCell,
     SearchHighlight,
     GrammarError,
+    RefineSuggestion,
+    RefineLoadingExtension,
   ];
 }

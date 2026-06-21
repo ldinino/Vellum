@@ -38,6 +38,9 @@ pub struct AppSettings {
     /// Cleared until the user completes the first-run setup screen (spec
     /// Section 9 / Phase 7).
     pub first_run_complete: bool,
+    /// Set once the starter Refine templates have been seeded (Phase 8). Gated
+    /// on this flag so we never re-seed after the user deletes them.
+    pub starters_seeded: bool,
 }
 
 impl Default for AppSettings {
@@ -53,6 +56,7 @@ impl Default for AppSettings {
             refine_model_tier: None,
             grammar_language: "en-US".into(),
             first_run_complete: false,
+            starters_seeded: false,
         }
     }
 }
@@ -68,15 +72,33 @@ pub struct PageTemplate {
     pub updated_at: String,
 }
 
+/// One few-shot example pair rendered into the harness (Phase 8) — the biggest
+/// reliability lever for strict formats on small models (spec Section 8).
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ExamplePair {
+    pub input: String,
+    pub output: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct RefineTemplate {
     pub id: String,
     pub name: String,
-    pub system_prompt: String,
+    /// The transformation rules (Phase 8). Was `systemPrompt` pre-Phase 8; old
+    /// values are folded in on load (see `migrate_refine_templates`).
+    pub instructions: String,
+    /// Always serialized (even when empty) so the IPC payload matches the
+    /// frontend's non-optional `examples: ExamplePair[]` — a missing field there
+    /// is a render crash.
+    pub examples: Vec<ExamplePair>,
     pub description: Option<String>,
     /// Overrides the global Strict..Liberal setting when set.
     pub adherence_override: Option<f32>,
+    /// Legacy pre-Phase 8 field; read for migration, never written back.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub system_prompt: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +172,41 @@ fn read_json_or_default<T: Default + for<'de> Deserialize<'de> + Serialize>(
 }
 
 pub fn load_app_config(app: &AppHandle) -> Result<AppConfig, String> {
-    read_json_or_default(&paths::app_json_path(app)?)
+    let path = paths::app_json_path(app)?;
+    let mut config: AppConfig = read_json_or_default(&path)?;
+
+    // Migrate + seed once; persist only if something actually changed so we
+    // don't churn the file (and OneDrive) on every launch.
+    let mut changed = migrate_refine_templates(&mut config);
+    if !config.settings.starters_seeded {
+        if config.refine_templates.is_empty() {
+            config.refine_templates = crate::refine::starters::starter_templates();
+        }
+        config.settings.starters_seeded = true;
+        changed = true;
+    }
+    if changed {
+        write_json_atomic(&path, &config)?;
+    }
+    Ok(config)
+}
+
+/// Fold the legacy `systemPrompt` field into `instructions` (Phase 8 migration).
+/// Returns whether any template changed.
+fn migrate_refine_templates(config: &mut AppConfig) -> bool {
+    let mut changed = false;
+    for t in &mut config.refine_templates {
+        if t.instructions.is_empty() && !t.system_prompt.is_empty() {
+            t.instructions = std::mem::take(&mut t.system_prompt);
+            changed = true;
+        } else if !t.system_prompt.is_empty() {
+            // instructions already set (newer file touched by an old build?) —
+            // drop the stale legacy value so it stops round-tripping.
+            t.system_prompt.clear();
+            changed = true;
+        }
+    }
+    changed
 }
 
 pub fn save_app_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
@@ -163,4 +219,64 @@ pub fn load_registry(app: &AppHandle) -> Result<NotebookRegistry, String> {
 
 pub fn save_registry(app: &AppHandle, registry: &NotebookRegistry) -> Result<(), String> {
     write_json_atomic(&paths::notebooks_json_path(app)?, registry)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn legacy_system_prompt_deserializes_then_migrates() {
+        // A pre-Phase 8 app.json: a template stored as `systemPrompt`.
+        let json = r#"{
+            "refineTemplates": [
+                { "id": "1", "name": "Old", "systemPrompt": "Make it formal." }
+            ]
+        }"#;
+        let mut cfg: AppConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(cfg.refine_templates[0].system_prompt, "Make it formal.");
+        assert!(cfg.refine_templates[0].instructions.is_empty());
+
+        assert!(migrate_refine_templates(&mut cfg));
+        let t = &cfg.refine_templates[0];
+        assert_eq!(t.instructions, "Make it formal.");
+        assert!(t.system_prompt.is_empty());
+
+        // Re-running is a no-op (idempotent).
+        assert!(!migrate_refine_templates(&mut cfg));
+    }
+
+    #[test]
+    fn migrated_template_drops_legacy_field_on_serialize() {
+        let t = RefineTemplate {
+            id: "1".into(),
+            name: "New".into(),
+            instructions: "Tighten.".into(),
+            examples: vec![ExamplePair { input: "a".into(), output: "b".into() }],
+            description: None,
+            adherence_override: None,
+            system_prompt: String::new(),
+        };
+        let s = serde_json::to_string(&t).unwrap();
+        assert!(!s.contains("systemPrompt"), "legacy field is not written back");
+        assert!(s.contains("instructions"));
+        assert!(s.contains("examples"));
+    }
+
+    #[test]
+    fn empty_examples_are_serialized_as_array() {
+        // Always present (even empty) so the IPC payload matches the frontend's
+        // non-optional `examples` array — a missing field is a render crash.
+        let t = RefineTemplate {
+            id: "1".into(),
+            name: "New".into(),
+            instructions: "Tighten.".into(),
+            examples: vec![],
+            description: None,
+            adherence_override: None,
+            system_prompt: String::new(),
+        };
+        let s = serde_json::to_string(&t).unwrap();
+        assert!(s.contains("\"examples\":[]"), "empty examples serialize as []");
+    }
 }

@@ -11,7 +11,9 @@ pub mod logbuf;
 pub mod manifest;
 pub mod models;
 pub mod ndjson;
+pub mod run;
 pub mod runtime;
+pub mod starters;
 
 use tauri::{AppHandle, Manager};
 

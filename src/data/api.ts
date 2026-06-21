@@ -14,6 +14,8 @@ import type {
   Notebook,
   Page,
   ProcessStatus,
+  RefineRequest,
+  RefineResult,
   RuntimeStatus,
   Section,
   SearchFilters,
@@ -203,3 +205,15 @@ export const refineOllamaLog = () => invoke<string[]>("refine_ollama_log");
 /** Debug panel: one /api/generate call with full parameter control. */
 export const refineDebugGenerate = (req: DebugGenerateRequest) =>
   invoke<DebugGenerateResult>("refine_debug_generate", { req });
+
+/** Refine selected text with a template (Phase 8): returns the transformed text
+ * for the renderer to diff and render inline. */
+export const refineGenerate = (req: RefineRequest) =>
+  invoke<RefineResult>("refine_generate", { req });
+
+/** Release Ollama to free memory without disabling Refine (keep-warm idle
+ * release); the next Refine re-spawns it. */
+export const refineRelease = () => invoke<ProcessStatus>("refine_release");
+
+/** Abort the in-flight Refine generation (Cancel / dismiss); frees the CPU. */
+export const refineCancel = () => invoke<void>("refine_cancel");

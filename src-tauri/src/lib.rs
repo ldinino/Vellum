@@ -79,6 +79,9 @@ pub fn run() {
             commands::refine_delete_model,
             commands::refine_enable,
             commands::refine_debug_generate,
+            commands::refine_generate,
+            commands::refine_release,
+            commands::refine_cancel,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

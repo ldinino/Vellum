@@ -1,0 +1,48 @@
+/* Refine preview dialog: spinner while running, result + Keep/Cancel when done. */
+
+.v-refprev {
+  min-height: 120px;
+}
+
+.v-refprev__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-3);
+  text-align: center;
+}
+
+.v-refprev__spinner {
+  width: 36px;
+  height: 36px;
+}
+
+.v-refprev__status {
+  margin: 0;
+  font-size: var(--text-size-ui);
+  font-weight: 600;
+}
+
+.v-refprev__note {
+  margin: 0;
+  font-size: var(--text-size-small);
+  color: var(--text-muted);
+}
+
+.v-refprev__result {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-content);
+}
+
+.v-refprev__error {
+  margin: 0;
+  padding: var(--space-3);
+  font-size: var(--text-size-ui);
+  color: #8b0000;
+}

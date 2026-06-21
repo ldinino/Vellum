@@ -126,8 +126,10 @@ mod tests {
         assert!(m.ollama.url.contains(&m.ollama.version));
         assert_eq!(m.ollama.sha256.len(), 64, "sha256 is 64 hex chars");
         let tier = |id: &str| m.tiers.iter().find(|t| t.id == id);
-        assert_eq!(tier("Fast").map(|t| t.model.as_str()), Some("qwen3:4b"));
-        assert_eq!(tier("Balanced").map(|t| t.model.as_str()), Some("qwen3:14b"));
+        // Defaults are non-reasoning instruct models (qwen3's hybrid reasoning
+        // was unsuppressible on some Ollama builds — see Phase 8 design note).
+        assert_eq!(tier("Fast").map(|t| t.model.as_str()), Some("qwen2.5:3b"));
+        assert_eq!(tier("Balanced").map(|t| t.model.as_str()), Some("qwen2.5:14b"));
         assert_eq!(tier("Thorough").map(|t| t.model.as_str()), Some("gpt-oss:20b"));
         // Every tier advertises a size + RAM target; Fast/Balanced have fallbacks.
         assert!(m.tiers.iter().all(|t| !t.size_label.is_empty() && !t.target_ram_label.is_empty()));

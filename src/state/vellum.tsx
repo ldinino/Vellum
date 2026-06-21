@@ -80,6 +80,8 @@ export interface VellumActions {
   reload: () => Promise<void>;
   refreshPages: () => Promise<void>;
   clearError: () => void;
+  /** Surface a message in the app-level banner (errors, Refine notices). */
+  setError: (message: string) => void;
   toggleNotebook: (id: string) => Promise<void>;
   selectSection: (notebookId: string, sectionId: string) => Promise<void>;
   /** Select a notebook (e.g. from the collapsed rail): load its sections, then
@@ -461,6 +463,7 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     reload,
     refreshPages: refreshSelectedPages,
     clearError: () => setState((s) => ({ ...s, error: null })),
+    setError: (message: string) => setState((s) => ({ ...s, error: message })),
     toggleNotebook,
     selectSection,
     selectNotebook,

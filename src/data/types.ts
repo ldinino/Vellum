@@ -78,13 +78,25 @@ export interface AppSettings {
   grammarLanguage: string;
   /** Cleared until the user finishes the first-run setup screen. */
   firstRunComplete: boolean;
+  /** Set once the starter Refine templates have been seeded (Phase 8). */
+  startersSeeded: boolean;
 }
 
-/** A Refine template (spec Section 8) — a named system prompt, stored in app.json. */
+/** One few-shot example pair rendered into the harness (spec Section 8). */
+export interface ExamplePair {
+  input: string;
+  output: string;
+}
+
+/** A Refine template (spec Section 8) — transformation rules + optional
+ * few-shot examples, stored in app.json. */
 export interface RefineTemplate {
   id: string;
   name: string;
-  systemPrompt: string;
+  /** The transformation rules (was `systemPrompt` pre-Phase 8). */
+  instructions: string;
+  /** Few-shot input/output pairs rendered into the harness. */
+  examples: ExamplePair[];
   description: string | null;
   /** Overrides the global Strict..Liberal setting for this template when set. */
   adherenceOverride: number | null;
@@ -217,6 +229,24 @@ export interface DebugGenerateResult {
   totalMs: number;
   evalCount: number | null;
   model: string;
+}
+
+/** Refine request (spec Sections 8–9, Phase 8). `adherence` is 0 (Strict) .. 1
+ * (Liberal), already resolved from the template override or global default. */
+export interface RefineRequest {
+  text: string;
+  instructions: string;
+  examples: ExamplePair[];
+  adherence: number;
+}
+
+export interface RefineResult {
+  /** Cleaned transformed text (reasoning stripped); may be Markdown. */
+  text: string;
+  /** The model that actually ran (may be the tier's lighter fallback). */
+  model: string;
+  ttftMs: number;
+  totalMs: number;
 }
 
 export interface SearchHit {

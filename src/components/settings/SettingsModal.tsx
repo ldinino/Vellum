@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { Modal } from "../ui/Modal";
 import { Icon, IconName } from "../ui/Icon";
+import { ErrorBoundary } from "../ui/ErrorBoundary";
 import { PageTemplatesManager } from "./PageTemplatesManager";
 import { RefineSettings } from "./RefineSettings";
 import "./SettingsModal.css";
@@ -43,8 +44,10 @@ export function SettingsModal({ open, onClose }: { open: boolean; onClose: () =>
           ))}
         </nav>
         <div className="v-settings__panel">
-          {tab === "templates" && <PageTemplatesManager />}
-          {tab === "refine" && <RefineSettings />}
+          <ErrorBoundary label="This settings page" resetKeys={[tab]}>
+            {tab === "templates" && <PageTemplatesManager />}
+            {tab === "refine" && <RefineSettings />}
+          </ErrorBoundary>
         </div>
       </div>
     </Modal>

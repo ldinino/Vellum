@@ -8,14 +8,28 @@ import { applySearchHighlight } from "./SearchHighlight";
 import { extractText, mapLints } from "./grammar";
 import { setGrammarLints, clearGrammarLints } from "./GrammarError";
 import { GrammarPopover } from "./GrammarPopover";
+import { hasRefineSuggestions } from "./RefineSuggestion";
+import { RefinePreviewModal, RefinePreviewState } from "./RefinePreviewModal";
 import { EditorContextMenu } from "./EditorContextMenu";
+import type { MenuItem } from "../ui/ContextMenu";
+import { insertRefinedText } from "../../lib/refine-diff";
 import { AttachmentBar, AttachmentItem } from "../panels/AttachmentBar";
 import { createDebouncer } from "../../lib/debounce";
 import { useVellum } from "../../state/vellum";
 import { useActiveEditor } from "../../state/activeEditor";
 import * as api from "../../data/api";
-import type { Attachment, Page } from "../../data/types";
+import type { Attachment, Page, RefineTemplate } from "../../data/types";
 import "./editor.css";
+
+/** Release Ollama after this long with no Refine activity (keep-warm idle, spec
+ * Section 9 as decided). */
+const REFINE_IDLE_RELEASE_MS = 5 * 60 * 1000;
+
+// Fetched once per session: whether this machine is CPU-only (spec Section 9), so
+// the Refine preview can warn it may be slow. Module-scoped so it isn't
+// re-detected per page.
+let cpuOnly = false;
+let hardwareChecked = false;
 
 const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
 
@@ -60,7 +74,8 @@ export function PageEditor({
   page: Page;
   highlightQuery?: string;
 }) {
-  const { actions, grammarEnabled, spellcheckEnabled } = useVellum();
+  const { actions, grammarEnabled, spellcheckEnabled, refineEnabled, refineTemplates, refineAdherence } =
+    useVellum();
   const { setActiveEditor } = useActiveEditor();
   const [title, setTitle] = useState(page.title);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -83,6 +98,23 @@ export function PageEditor({
   const ids = useRef({ notebookId, pageId: page.id });
   ids.current = { notebookId, pageId: page.id };
   const editorRef = useRef<Editor | null>(null);
+
+  // Refine: refs keep the stable callbacks reading the latest library/settings.
+  const refineEnabledRef = useRef(refineEnabled);
+  refineEnabledRef.current = refineEnabled;
+  const refineTemplatesRef = useRef(refineTemplates);
+  refineTemplatesRef.current = refineTemplates;
+  const refineAdherenceRef = useRef(refineAdherence);
+  refineAdherenceRef.current = refineAdherence;
+  const refineBusyRef = useRef(false);
+  const refineUsedRef = useRef(false);
+  const idleTimerRef = useRef<number | null>(null);
+  // The Refine preview dialog (spec Section 9): status drives the UI; the op ref
+  // holds the captured range + result so Keep can insert it; the req token
+  // discards a late result if the user cancelled.
+  const [refinePreview, setRefinePreview] = useState<RefinePreviewState | null>(null);
+  const refineOpRef = useRef<{ from: number; to: number; text: string } | null>(null);
+  const refineReqRef = useRef(0);
 
   // Extract the page text, lint it via Harper, and apply the underlines. Guards
   // against stale results: a superseding request or an edit during the await
@@ -111,6 +143,120 @@ export function PageEditor({
   }, []);
   const runGrammarRef = useRef(runGrammar);
   runGrammarRef.current = runGrammar;
+
+  // Release Ollama after a long idle with no in-flight op and no pending
+  // suggestions (keep-warm lifecycle, spec Section 9). Re-arms itself if still
+  // busy/pending when it fires. Only armed once Refine has actually been used.
+  const scheduleIdleRelease = useCallback(() => {
+    if (!refineUsedRef.current) return;
+    if (idleTimerRef.current != null) window.clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = window.setTimeout(() => {
+      const ed = editorRef.current;
+      if (ed && !refineBusyRef.current && !hasRefineSuggestions(ed)) {
+        api.refineRelease().catch((e) => console.error("refine release failed", e));
+        refineUsedRef.current = false;
+      } else {
+        scheduleIdleRelease();
+      }
+    }, REFINE_IDLE_RELEASE_MS);
+  }, []);
+
+  // Run one Refine op: open the preview dialog with a spinner, transform the
+  // captured selection, then show the result for Keep/Cancel (spec Section 9,
+  // revised UX). One op at a time per editor; a late result is dropped if the
+  // user cancelled (req token).
+  const runRefine = useCallback(
+    async (ed: Editor, from: number, to: number, template: RefineTemplate) => {
+      if (refineBusyRef.current) return;
+      const text = ed.state.doc.textBetween(from, to, " ").trim();
+      if (!text) return;
+      const name = template.name || "Refine";
+      const reqId = ++refineReqRef.current;
+      refineBusyRef.current = true;
+      refineOpRef.current = { from, to, text: "" };
+      setRefinePreview({ status: "loading", templateName: name });
+      try {
+        const adherence = template.adherenceOverride ?? refineAdherenceRef.current;
+        const result = await api.refineGenerate({
+          text,
+          instructions: template.instructions,
+          examples: template.examples,
+          adherence,
+        });
+        if (refineReqRef.current !== reqId) return; // cancelled
+        const out = result.text.trim();
+        if (!out) {
+          setRefinePreview({
+            status: "error",
+            error: "Refine returned an empty result. Try again, or adjust the template.",
+            templateName: name,
+          });
+          return;
+        }
+        refineOpRef.current = { from, to, text: out };
+        setRefinePreview({ status: "done", text: out, templateName: name });
+        refineUsedRef.current = true;
+        scheduleIdleRelease();
+      } catch (e) {
+        if (refineReqRef.current !== reqId) return; // cancelled
+        setRefinePreview({
+          status: "error",
+          error: typeof e === "string" ? e : String(e),
+          templateName: name,
+        });
+      } finally {
+        refineBusyRef.current = false;
+      }
+    },
+    [scheduleIdleRelease],
+  );
+
+  // Keep: insert the approved result, replacing the original selection. The modal
+  // backdrop blocks editing while open, so the captured range stays valid.
+  const keepRefine = useCallback(() => {
+    const ed = editorRef.current;
+    const op = refineOpRef.current;
+    if (ed && op && op.text) insertRefinedText(ed, op.from, op.to, op.text);
+    refineOpRef.current = null;
+    setRefinePreview(null);
+  }, []);
+
+  const cancelRefine = useCallback(() => {
+    refineReqRef.current++; // invalidate any in-flight result
+    refineOpRef.current = null;
+    refineBusyRef.current = false;
+    setRefinePreview(null);
+    // Abort the backend generation so Ollama stops chewing CPU immediately.
+    api.refineCancel().catch((e) => console.error("refine cancel failed", e));
+  }, []);
+
+  // Build the right-click "Refine…" / "Refine ▶" items for the current
+  // selection (the EditorContextMenu seam). Absent when Refine is off or there
+  // are no templates. Captures the selection range at menu-build time.
+  const buildRefineItems = useCallback(
+    (selectedText: string): MenuItem[] => {
+      const ed = editorRef.current;
+      if (!ed || !refineEnabledRef.current) return [];
+      const templates = refineTemplatesRef.current;
+      if (!templates.length || !selectedText.trim()) return [];
+      const { from, to } = ed.state.selection;
+      const trigger = (t: RefineTemplate) => () => void runRefine(ed, from, to, t);
+      if (templates.length === 1) {
+        return [{ label: "Refine…", icon: "wand", onSelect: trigger(templates[0]) }];
+      }
+      return [
+        {
+          label: "Refine",
+          icon: "wand",
+          submenu: templates.map((t) => ({
+            label: t.name || "Untitled",
+            onSelect: trigger(t),
+          })),
+        },
+      ];
+    },
+    [runRefine],
+  );
 
   // Store an image (pasted/dropped/inserted) and embed it by relative path.
   // Closes only over refs, so it's stable — safe to register up to the toolbar.
@@ -211,6 +357,8 @@ export function PageEditor({
       if (grammarEnabledRef.current || spellcheckEnabledRef.current) {
         grammarSaver.schedule(() => void runGrammarRef.current());
       }
+      // Editing counts as activity: push back the keep-warm idle release.
+      if (refineUsedRef.current) scheduleIdleRelease();
     },
   });
   editorRef.current = editor;
@@ -288,13 +436,27 @@ export function PageEditor({
     if (page.title === "") requestAnimationFrame(() => titleRef.current?.focus());
   }, [page.id, page.title]);
 
+  // Detect CPU-only once per session so Refine can warn at point of use that
+  // requests may be slow (spec Section 9). Side-effect free; never starts Ollama.
+  useEffect(() => {
+    if (hardwareChecked) return;
+    hardwareChecked = true;
+    api
+      .refineDetectHardware()
+      .then((hw) => {
+        cpuOnly = hw.cpuOnly;
+      })
+      .catch((e) => console.error("hardware detect failed", e));
+  }, []);
+
   // Flush pending saves on unmount (page switch / app close path); drop any
-  // pending grammar check (the editor is going away).
+  // pending grammar check (the editor is going away) and the idle timer.
   useEffect(() => {
     return () => {
       opSaver.flush();
       snapSaver.flush();
       grammarSaver.cancel();
+      if (idleTimerRef.current != null) window.clearTimeout(idleTimerRef.current);
     };
   }, [opSaver, snapSaver, grammarSaver]);
 
@@ -362,7 +524,17 @@ export function PageEditor({
       />
       <EditorContent editor={editor} className="v-editor__content" />
       <GrammarPopover editor={editor} onAfterAction={() => void runGrammarRef.current()} />
-      <EditorContextMenu editor={editor} onAfterAction={() => void runGrammarRef.current()} />
+      <EditorContextMenu
+        editor={editor}
+        onAfterAction={() => void runGrammarRef.current()}
+        buildRefineItems={buildRefineItems}
+      />
+      <RefinePreviewModal
+        state={refinePreview}
+        cpuOnly={cpuOnly}
+        onKeep={keepRefine}
+        onCancel={cancelRefine}
+      />
     </div>
   );
 }

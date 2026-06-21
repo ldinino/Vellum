@@ -1,5 +1,6 @@
 import { useVellum } from "../../state/vellum";
 import { PageEditor } from "../editor/PageEditor";
+import { ErrorBoundary } from "../ui/ErrorBoundary";
 import "./EditorArea.css";
 
 /**
@@ -21,11 +22,13 @@ export function EditorArea() {
   }
 
   return (
-    <PageEditor
-      key={page.id}
-      notebookId={selectedNotebookId}
-      page={page}
-      highlightQuery={searchHighlight}
-    />
+    <ErrorBoundary label="The editor" resetKeys={[page.id]}>
+      <PageEditor
+        key={page.id}
+        notebookId={selectedNotebookId}
+        page={page}
+        highlightQuery={searchHighlight}
+      />
+    </ErrorBoundary>
   );
 }

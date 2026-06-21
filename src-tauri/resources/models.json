@@ -9,19 +9,19 @@
   "tiers": [
     {
       "id": "Fast",
-      "model": "qwen3:4b",
-      "sizeLabel": "~3 GB",
+      "model": "qwen2.5:3b",
+      "sizeLabel": "~1.9 GB",
       "targetRamLabel": "8 GB",
       "useFor": "Strict, well-specified templates",
-      "fallback": { "model": "qwen3:1.7b", "sizeLabel": "~1.5 GB" }
+      "fallback": { "model": "qwen2.5:1.5b", "sizeLabel": "~1 GB" }
     },
     {
       "id": "Balanced",
-      "model": "qwen3:14b",
+      "model": "qwen2.5:14b",
       "sizeLabel": "~9 GB",
       "targetRamLabel": "16 GB",
       "useFor": "General use",
-      "fallback": { "model": "qwen3:8b", "sizeLabel": "~5 GB" }
+      "fallback": { "model": "qwen2.5:7b", "sizeLabel": "~4.7 GB" }
     },
     {
       "id": "Thorough",
