@@ -6,7 +6,12 @@
   height: 100%;
   background: var(--gradient-panel);
   border-right: 1px solid var(--border-default);
-  box-shadow: var(--shadow-panel);
+  /* Inner top highlight + a soft drop shadow on the right edge so the pane reads
+     as a layer floating above the canvas/desk rather than a flat partition. */
+  box-shadow: var(--shadow-panel), 1px 0 3px rgba(0, 0, 0, 0.07);
+  /* Sit above the canvas gap so the drop shadow lands on the desk, not under it. */
+  position: relative;
+  z-index: 1;
 }
 
 .v-nav__header {

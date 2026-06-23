@@ -14,21 +14,83 @@
   border-radius: 0 0 4px 4px;
   box-shadow: 0 0 0 1px #fff9;
   background: var(--surface-window);
+  /* A hairline of the canvas (surface-window) shows around every region — the
+     toolbar is painted straight onto it, the nav / desk / page strip float on it
+     with this 1px gap. Gives the layers a crisp edge instead of butting against
+     the window frame. */
+  padding: 1px;
+
+  /* The "desk" the open section's page rests on (OneNote 2007): one section-tinted
+     vertical gradient shared by the editor area and the page strip so they read
+     as a single layer. Strongest near the tabs, fading down. --section-color is
+     set inline per the open section. */
+  --desk-gradient: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--section-color) 22%, white) 0,
+    color-mix(in srgb, var(--section-color) 12%, white) 240px,
+    color-mix(in srgb, var(--section-color) 12%, white)
+  );
 }
 
 .v-shell__body {
   flex: 1;
   min-height: 0;
   display: flex;
+  /* Hairline of canvas between the nav pane and the main column. */
+  gap: 1px;
 }
 
-/* Center column: section tabs stacked above the editor. */
-.v-shell__center {
+/* Main column to the right of the nav: a tab row stacked over the content row.
+   Padded so the base canvas shows as a margin around the framed desk on all sides
+   — the tab row shares the canvas color so its inset is seamless, and the tabs
+   line up with the desk frame below. */
+.v-shell__main {
   flex: 1;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  padding: var(--space-2) var(--space-3) var(--space-3);
+}
+
+/* Tab row (canvas layer): section tabs (flex) + search box pinned right.
+   Folder tabs sit at the bottom (flex-end) so they meet the desk's colored band;
+   the row is a touch taller than the tabs to give the search vertical breathing
+   room between the formatting toolbar's drop shadow above and the band below. */
+.v-shell__tabrow {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  min-height: calc(var(--sectiontabs-height) + 5px);
+  background: var(--surface-window);
+}
+
+.v-shell__tabrow > .v-sectiontabs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Center the search so it clears the toolbar shadow above and the band below —
+   a clean control floating on the canvas, not smudged into either. */
+.v-shell__tabrow > .v-search {
+  align-self: center;
+}
+
+/* Content row: editor (flex) + page-tab strip, framed as one bounded "desk"
+   surface (OneNote 2007) the section tabs rest on. Bordered on all four sides;
+   the top edge runs along under the tabs and the active section tab rises up out
+   of it like a folder-tab in a binder — the tab carries the same outline and
+   overlaps the top border, so the line cuts around the tab and the tab's interior
+   is continuous with the desk. */
+.v-shell__content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  border: 1px solid color-mix(in srgb, var(--section-color) 50%, #9a9a9a);
+  border-radius: var(--radius-panel);
+  overflow: hidden;
 }
 
 .v-shell__error {

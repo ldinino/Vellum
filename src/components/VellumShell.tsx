@@ -6,6 +6,7 @@ import { SectionTabs } from "./panels/SectionTabs";
 import { SectionPropertiesModal } from "./panels/SectionPropertiesModal";
 import { MenuBar } from "./MenuBar";
 import { TopToolbar } from "./editor/EditorToolbar";
+import { SearchBox } from "./search/SearchBar";
 import { SettingsModal } from "./settings/SettingsModal";
 import { FirstRunModal } from "./settings/FirstRunModal";
 import { AppContextMenus } from "./AppContextMenus";
@@ -17,9 +18,10 @@ import "./VellumShell.css";
 const NAV_COLLAPSED_KEY = "vellum.navCollapsed";
 
 /**
- * App shell: a unified top toolbar (formatting + search) over a three-region
- * body — notebook nav (left) | section tabs + editor (center) | page-tab strip
- * (right).
+ * App shell: the formatting toolbar over a body split into the notebook nav
+ * (left) and a main column (right). The main column stacks a tab row — section
+ * tabs on the left, search box pinned top-right above the page strip — over the
+ * content row: editor (center) | page-tab strip (right). (OneNote 2007 layout.)
  */
 export function VellumShell() {
   const { error, actions, notebooks, selectedNotebookId, selectedSectionId } = useVellum();
@@ -79,15 +81,22 @@ export function VellumShell() {
           onToggle={toggleNav}
           onOpenSectionProperties={openSectionProperties}
         />
-        <div className="v-shell__center">
-          <SectionTabs
-            navCollapsed={navCollapsed}
-            onToggleNav={toggleNav}
-            onOpenSectionProperties={openSectionProperties}
-          />
-          <EditorArea />
+        <div className="v-shell__main">
+          {/* Tab row spans the editor + page strip: section tabs on the left,
+              the search box pinned top-right above the page strip (OneNote 2007). */}
+          <div className="v-shell__tabrow">
+            <SectionTabs
+              navCollapsed={navCollapsed}
+              onToggleNav={toggleNav}
+              onOpenSectionProperties={openSectionProperties}
+            />
+            <SearchBox />
+          </div>
+          <div className="v-shell__content">
+            <EditorArea />
+            <PageList />
+          </div>
         </div>
-        <PageList />
       </div>
 
       {secProps && (

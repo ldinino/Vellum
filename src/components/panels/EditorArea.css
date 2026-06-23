@@ -5,18 +5,13 @@
   display: flex;
   flex-direction: column;
   /* The open section's color tints the "desk" the page rests on (OneNote 2007:
-     paper in a notebook) — strongest near the section tabs, fading down. The
-     active section tab merges into the colored band at the very top edge (the
-     tab overlaps it by --section-frame); the white page sheet floats on the
-     desk with a margin (the padding here). */
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--section-color) 30%, white) 0,
-    color-mix(in srgb, var(--section-color) 14%, white) 200px,
-    color-mix(in srgb, var(--section-color) 14%, white)
-  );
-  border-top: var(--section-frame) solid var(--section-color);
-  padding: var(--space-5) var(--space-6);
+     paper in a notebook) — one continuous gradient shared with the page strip
+     (--desk-gradient on .v-shell) so editor + page strip read as a single surface.
+     The white page sheet floats on the desk with a margin on three sides; no right
+     margin, so its right edge meets the page strip and the active page tab connects
+     to it. The section tab fades into the desk at the top. */
+  background: var(--desk-gradient);
+  padding: var(--space-5) 0 var(--space-5) var(--space-6);
   /* The page sheet scrolls internally; the desk itself doesn't. */
   overflow: hidden;
 }
@@ -27,8 +22,13 @@
   display: flex;
   flex-direction: column;
   background: var(--surface-content);
+  /* Floating sheet with a full, continuous border + drop shadow (rounded on the
+     left; squared where it docks into the page strip). The border stays unbroken;
+     the active page tab covers just its own 1px slice of this right edge to blend
+     in (see .v-pagelist__items / --selected). The right-edge shadow is clipped by
+     the editor's overflow. */
   border: 1px solid color-mix(in srgb, var(--section-color) 45%, #9a9a9a);
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-panel) 0 0 var(--radius-panel);
   box-shadow: var(--shadow-raised);
   /* Clip the title/content (and rounded corners); content scrolls inside. */
   overflow: hidden;

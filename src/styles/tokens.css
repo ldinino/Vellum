@@ -104,7 +104,6 @@
   --nav-rail-width: 44px;         /* collapsed notebook rail (vertical labels) */
   --pagestrip-width: 168px;       /* OneNote-style page-tab strip (right edge) */
   --sectiontabs-height: 27px;     /* horizontal section-tab row above the editor */
-  --section-frame: 3px;           /* colored band along the page's top edge */
 
   /* ---- Feature underline colors (spec Section 10) ------------------------- */
   /* Distinct from each other. Spelling is now sourced from Harper (not WebView2),

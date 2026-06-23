@@ -3,7 +3,6 @@ import { useEditorState } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
 import { Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator } from "../ui/Toolbar";
 import { useActiveEditor } from "../../state/activeEditor";
-import { SearchBox } from "../search/SearchBar";
 import "./EditorToolbar.css";
 
 const FONTS = [
@@ -353,9 +352,9 @@ export function EditorToolbar({
 }
 
 /**
- * Unified, persistent top toolbar (OneNote 2007): formatting on the left,
- * compact search + settings at the right. Operates on the active page editor
- * shared up via ActiveEditorProvider; controls disable when no page is open.
+ * Persistent top formatting toolbar (OneNote 2007). Operates on the active page
+ * editor shared up via ActiveEditorProvider; controls disable when no page is
+ * open. (Search lives in the tab row below — see VellumShell.)
  */
 export function TopToolbar() {
   const { active } = useActiveEditor();
@@ -378,9 +377,6 @@ export function TopToolbar() {
             linkOpen={linkOpen}
             setLinkOpen={setLinkOpen}
           />
-        </div>
-        <div className="v-toptoolbar__right">
-          <SearchBox />
         </div>
       </div>
       {linkOpen && editor && <LinkEditor editor={editor} onClose={() => setLinkOpen(false)} />}

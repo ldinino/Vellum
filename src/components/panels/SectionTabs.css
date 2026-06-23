@@ -1,11 +1,11 @@
 /* Horizontal section-tab row (OneNote 2007): colored folder tabs above the
-   editor. The selected tab uses its full section color and overlaps the editor's
-   colored top band (--section-frame) so tab + page frame read as one block.
-   Each tab is tinted with its own --tab-color; the notebook label + nav collapse
-   toggle live at the left. */
+   editor. The selected tab fades into the desk and overlaps its top border so the
+   desk edge cuts up and around the tab (a folder-tab in a binder). Each tab is
+   tinted with its own --tab-color; the notebook label + nav collapse toggle live
+   at the left. */
 .v-sectiontabs {
   position: relative;
-  z-index: 1; /* lets the selected tab overlap the editor band below */
+  z-index: 1; /* lets the selected tab overlap the desk edge below */
   display: flex;
   align-items: flex-end;
   gap: 2px;
@@ -44,22 +44,6 @@
   white-space: nowrap;
 }
 
-/* CSS caret: points left (◄ = collapse) when expanded, right (► = expand)
-   when collapsed. */
-.v-sectiontabs__caret {
-  flex: 0 0 auto;
-  width: 0;
-  height: 0;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
-  border-right: 5px solid var(--text-muted);
-}
-
-.v-sectiontabs__caret--right {
-  border-right: none;
-  border-left: 5px solid var(--text-muted);
-}
-
 /* ---- Tabs ---------------------------------------------------------------- */
 .v-sectiontabs__tabs {
   display: flex;
@@ -67,7 +51,11 @@
   gap: 2px;
   flex: 1;
   min-width: 0;
-  overflow: hidden;
+  /* visible (not hidden) so the active tab's bottom can overlap the desk's top
+     border below it — that overlap is what cuts the folder-tab notch into the
+     desk edge. Tabs still fit via flex-shrink + label ellipsis, so nothing spills
+     horizontally. */
+  overflow: visible;
 }
 
 .v-sectiontabs__tab {
@@ -80,26 +68,77 @@
   font-size: var(--text-size-ui);
   color: var(--text-primary);
   cursor: pointer;
-  /* Folder tab: rounded top corners, no bottom border (it meets the page). */
-  background: color-mix(in srgb, var(--tab-color) 40%, white);
+  /* Folder tab: a section-tinted top-down gradient (glossy), rounded top corners,
+     square bottom that sits on the desk edge; no bottom border (it meets the
+     page). The active tab overrides the bottom corners to flare outward. */
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tab-color) 48%, white),
+    color-mix(in srgb, var(--tab-color) 34%, white)
+  );
   border: 1px solid color-mix(in srgb, var(--tab-color) 55%, #9a9a9a);
   border-bottom: none;
   border-radius: var(--radius-panel) var(--radius-panel) 0 0;
 }
 
 .v-sectiontabs__tab:hover {
-  background: color-mix(in srgb, var(--tab-color) 55%, white);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tab-color) 58%, white),
+    color-mix(in srgb, var(--tab-color) 44%, white)
+  );
 }
 
 .v-sectiontabs__tab--selected,
 .v-sectiontabs__tab--selected:hover {
-  /* Active tab reads as the section color and flows into the page's top band:
-     overlap the editor's --section-frame so there's no seam. */
-  background: var(--tab-color);
-  border-color: color-mix(in srgb, var(--tab-color) 70%, #7a7a7a);
-  margin-bottom: calc(-1 * var(--section-frame));
-  padding-bottom: calc(4px + var(--section-frame));
+  /* Active tab "opens" into the page: rather than darkening to the solid color, it
+     starts at the other tabs' tint and fades down to the desk's top tint so tab and
+     desk read as one continuous surface. Its bottom corners flare *outward* to the
+     desk edge (the ::before/::after feet below) like a folder tab in a binder. */
+  position: relative;
+  z-index: 1; /* tab + its flares paint over the neighbouring tabs */
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--tab-color) 42%, white) 0,
+    color-mix(in srgb, var(--tab-color) 20%, white) 100%
+  );
+  border-color: color-mix(in srgb, var(--tab-color) 50%, #9a9a9a);
+  /* Overlap the desk's 1px top border so it's covered under the tab (no line). */
+  margin-bottom: -1px;
+  padding-bottom: 5px;
   font-weight: 600;
+}
+
+/* Concave feet at the bottom corners: a radial-gradient carves a quarter-circle
+   COVE (the inverse of a rounded corner — border-radius can only bulge outward) so
+   each side sweeps concavely down to the desk edge, like the foot of a folder tab.
+   The transparent quarter reveals the canvas/desk beside the tab; a 1px ring at the
+   arc carries the tab outline; the inner quarter is the tab's bottom tint. */
+.v-sectiontabs__tab--selected::before,
+.v-sectiontabs__tab--selected::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  width: var(--radius-panel);
+  height: var(--radius-panel);
+}
+.v-sectiontabs__tab--selected::before {
+  left: calc(-1 * var(--radius-panel));
+  background: radial-gradient(
+    circle at top left,
+    transparent calc(var(--radius-panel) - 1px),
+    color-mix(in srgb, var(--tab-color) 50%, #9a9a9a) calc(var(--radius-panel) - 1px) var(--radius-panel),
+    color-mix(in srgb, var(--tab-color) 20%, white) var(--radius-panel)
+  );
+}
+.v-sectiontabs__tab--selected::after {
+  right: calc(-1 * var(--radius-panel));
+  background: radial-gradient(
+    circle at top right,
+    transparent calc(var(--radius-panel) - 1px),
+    color-mix(in srgb, var(--tab-color) 50%, #9a9a9a) calc(var(--radius-panel) - 1px) var(--radius-panel),
+    color-mix(in srgb, var(--tab-color) 20%, white) var(--radius-panel)
+  );
 }
 
 .v-sectiontabs__tab:focus-visible {

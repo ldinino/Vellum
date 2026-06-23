@@ -1,8 +1,9 @@
 /**
- * Compact search box (spec Section 11), docked at the right of the top toolbar.
- * A query field with a scope dropdown (This Section / This Notebook / All
- * Notebooks) and a results overlay. Results update as the user types (200ms
- * debounce); clicking a result opens its page and highlights the matches there.
+ * Compact search box (spec Section 11), pinned at the right of the section-tab
+ * row (above the page strip). A query field with a scope dropdown (This Section /
+ * This Notebook / All Notebooks) and a results overlay. Results update as the
+ * user types (200ms debounce); clicking a result opens its page and highlights
+ * the matches there.
  */
 
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -91,8 +92,8 @@ export function SearchBox() {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   // The scope picker (a ContextMenu under the magnifier) and the results overlay
-  // both render with fixed positioning so they escape the top toolbar's
-  // overflow:hidden clip — otherwise the dropdown is cut off below the bar.
+  // both render with fixed positioning so they escape the shell's overflow:hidden
+  // clip — otherwise the dropdown is cut off below the bar.
   const [scopeMenu, setScopeMenu] = useState<{ x: number; y: number } | null>(null);
   const [anchor, setAnchor] = useState<{ top: number; right: number } | null>(null);
 

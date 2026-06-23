@@ -1,6 +1,6 @@
-/* Compact search box + results overlay (spec Section 11). Lives at the right of
-   the top toolbar; the input, clear button, and scope dropdown read as one
-   control. */
+/* Compact search box + results overlay (spec Section 11). Pinned at the right of
+   the section-tab row (above the page strip); the input, clear button, and scope
+   dropdown read as one control. */
 
 .v-search {
   position: relative;
@@ -80,7 +80,7 @@
 /* ---- Results overlay ---------------------------------------------------- */
 
 /* top/right + position:fixed are set inline (see SearchBar.tsx) so the overlay
-   escapes the top toolbar's overflow:hidden clip. */
+   escapes the shell's overflow:hidden clip. */
 .v-search__results {
   width: 360px;
   max-width: 90vw;

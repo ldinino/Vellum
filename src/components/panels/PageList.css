@@ -1,15 +1,17 @@
-/* Page-tab strip (OneNote 2007): docked on the RIGHT of the editor, tinted with
-   the open section's color (--section-color, set on .v-shell). Each page is a
-   title-only tab attached to the page edge on its left; the selected tab turns
-   white to read as part of the page. */
+/* Page-tab strip (OneNote 2007): docked on the RIGHT of the editor, sharing the
+   editor's desk gradient (--desk-gradient on .v-shell) so the page selector and
+   the editor read as one cohesive layer. Each page is a title-only tab attached
+   to the page edge on its left; the selected tab turns white to read as part of
+   the page. */
 .v-pagelist {
   display: flex;
   flex-direction: column;
   width: var(--pagestrip-width);
   min-width: 120px;
   height: 100%;
-  background: color-mix(in srgb, var(--section-color) 22%, white);
-  border-left: 1px solid color-mix(in srgb, var(--section-color) 60%, #7a7a7a);
+  /* No left border or top band: the desk gradient continues straight out of the
+     editor, so the strip is the same surface, not a partitioned panel. */
+  background: var(--desk-gradient);
 }
 
 .v-pagelist__header {
@@ -35,8 +37,16 @@
 .v-pagelist__items {
   flex: 1;
   overflow-y: auto;
-  /* No left padding so tabs sit flush against the editor/page edge. */
-  padding: var(--space-3) 0 var(--space-3) 0;
+  /* No left padding so tabs sit flush against the editor/page edge; right padding
+     gives a little breathing room and lines the tabs' ends up with the sort-order
+     button in the header above (same inset). */
+  padding: var(--space-3) var(--space-3) var(--space-3) 0;
+  /* Shift the scroll box (and its clip edge) 1px left into the editor so the active
+     tab can reach over the editor's 1px right border to cover it. Each tab shifts
+     itself back 1px (below) to sit on the boundary; only the active tab doesn't,
+     so only it covers the border. */
+  position: relative;
+  left: -1px;
 }
 
 .v-pagelist__item {
@@ -47,24 +57,40 @@
   margin-bottom: 2px;
   font-family: var(--font-ui);
   text-align: left;
-  background: color-mix(in srgb, var(--section-color) 42%, white);
-  border: 1px solid color-mix(in srgb, var(--section-color) 55%, white);
+  /* Light tabs that rest on the desk (just a touch above it), defined mainly by a
+     soft outline — not dark blocks. */
+  background: color-mix(in srgb, var(--section-color) 26%, white);
+  /* No left edge of its own — the editor's right border is the page-edge line that
+     sits just to the tab's left. Shift 1px right to undo the items' -1px so the tab
+     lands on the boundary, leaving the editor's border showing beside it. */
+  border: 1px solid color-mix(in srgb, var(--section-color) 42%, white);
   border-left: none;
-  /* Tab rounds on the right; left edge stays square against the page. */
   border-radius: 0 var(--radius-control) var(--radius-control) 0;
   cursor: pointer;
+  position: relative;
+  left: 1px;
 }
 
 .v-pagelist__item:hover {
-  background: color-mix(in srgb, var(--section-color) 55%, white);
+  background: color-mix(in srgb, var(--section-color) 38%, white);
 }
 
 .v-pagelist__item--selected,
 .v-pagelist__item--selected:hover {
-  /* Selected tab reads as the page: white, pulled left to overlap the border. */
-  background: var(--surface-content);
-  border-color: color-mix(in srgb, var(--section-color) 70%, #7a7a7a);
-  margin-left: -1px;
+  /* The active page connects to the editor: white on the left (continuing the page
+     sheet it abuts) and gradually transitioning to the desk tint toward the right,
+     so it reads as the page flowing out into the strip. */
+  background: linear-gradient(
+    90deg,
+    var(--surface-content) 0%,
+    color-mix(in srgb, var(--section-color) 18%, white) 100%
+  );
+  border-color: color-mix(in srgb, var(--section-color) 50%, #9a9a9a);
+  /* The active tab keeps the items' -1px shift (no +1px reset), so its white slides
+     1px left over the editor's right border and covers just that slice — blending
+     into the editor while the border stays intact above and below. */
+  border-left: none;
+  left: 0;
   font-weight: 600;
 }
 

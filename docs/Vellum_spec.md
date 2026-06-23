@@ -88,16 +88,17 @@ OneDrive (and other sync clients) cover this path by default on Windows — no c
 
 ### 5. Navigation & Layout
 
-Modeled on OneNote 2007. A unified top toolbar spans the window (formatting
-controls left, a compact search box right). Below it sit three regions, left →
-right: the **notebook nav**, the **section tabs + editor**, and the **page-tab
-strip** (pages are *not* a middle column).
+Modeled on OneNote 2007. A formatting toolbar spans the window. Below it sit
+three regions, left → right: the **notebook nav**, the **section tabs + editor**,
+and the **page-tab strip** (pages are *not* a middle column). The section-tab row
+spans the editor + page strip, carrying the compact **search box** pinned at its
+right (above the page strip), OneNote-style.
 
 **Top toolbar**
 
-- One persistent toolbar across the top: formatting controls on the left, the
-  compact search box + settings on the right. Always visible; the formatting
-  controls operate on the open page's editor and disable when no page is open.
+- One persistent formatting toolbar across the top. Always visible; the controls
+  operate on the open page's editor and disable when no page is open. (The search
+  box is *not* in this toolbar — it lives in the section-tab row below.)
 
 **Left panel — notebook nav (resizable; two states)**
 
@@ -107,8 +108,9 @@ strip** (pages are *not* a middle column).
 - **Collapsed** — a thin rail of vertical notebook labels tinted with their
   colors; the selected notebook is highlighted. Clicking one opens it (its
   sections appear in the section tabs).
-- Toggle with the « / » chevron (in the nav header and on the section-tab row);
-  the choice persists across sessions (localStorage).
+- Toggle with the « / » chevron in the nav header, or by clicking the notebook
+  label at the left of the section-tab row (no chevron there); the choice
+  persists across sessions (localStorage).
 
 ```
 [ + New Notebook ]
@@ -366,7 +368,7 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 
 ### 11. Search
 
-**Entry point:** Compact search box docked at the right of the top toolbar, always visible.
+**Entry point:** Compact search box pinned at the right of the section-tab row (above the page strip, in line with the tabs), always visible.
 
 **Default behavior:** Global search across all notebooks.
 

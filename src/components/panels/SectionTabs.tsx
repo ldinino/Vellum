@@ -1,8 +1,8 @@
 /**
  * Horizontal section-tab row (OneNote 2007), shown above the editor. The current
  * notebook's sections render as colored folder tabs; the active tab merges into
- * the page's colored top frame. The left end carries the notebook label and the
- * nav collapse toggle; a trailing "+" adds a section.
+ * the page's colored top frame. The left end carries the notebook label, which
+ * doubles as the nav show/hide toggle; a trailing "+" adds a section.
  *
  * Sections are reachable from both here and the left nav (intentional, matching
  * OneNote), so both share buildSectionMenu / colorSubmenu from ./sectionMenu.
@@ -64,10 +64,6 @@ export function SectionTabs({
         <span className="v-sectiontabs__notebook-name">
           {notebook?.name ?? "No notebook"}
         </span>
-        <span
-          className={`v-sectiontabs__caret ${navCollapsed ? "v-sectiontabs__caret--right" : ""}`}
-          aria-hidden="true"
-        />
       </button>
 
       <div className="v-sectiontabs__tabs" role="tablist">
