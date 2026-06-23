@@ -182,7 +182,7 @@ export function RefineTemplatesManager() {
                 disabled={selectedIndex <= 0}
                 onClick={() => move(-1)}
               >
-                <Icon name="navigation" />
+                <Icon name="arrow-090" />
               </button>
               <button
                 type="button"
@@ -191,7 +191,7 @@ export function RefineTemplatesManager() {
                 disabled={selectedIndex < 0 || selectedIndex >= drafts.length - 1}
                 onClick={() => move(1)}
               >
-                <Icon name="navigation-180" />
+                <Icon name="arrow-270" />
               </button>
               <Button icon="document--plus" onClick={duplicateSelected}>
                 Duplicate

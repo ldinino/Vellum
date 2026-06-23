@@ -3,7 +3,10 @@
 .v-tmpl {
   display: grid;
   grid-template-columns: 150px 1fr;
-  grid-template-rows: 1fr auto;
+  /* minmax(0, 1fr), not 1fr: a bare 1fr track has an auto minimum that grows to
+     fit content and spills past the dialog; capping it at 0 keeps the row bounded
+     so .v-tmpl__content's overflow-y can scroll. */
+  grid-template-rows: minmax(0, 1fr) auto;
   flex: 1;
   min-width: 0;
 }

@@ -4,6 +4,7 @@ import { Button } from "../ui/Button";
 import { EditableLabel } from "../ui/EditableLabel";
 import { ContextMenu, MenuItem } from "../ui/ContextMenu";
 import { useVellum } from "../../state/vellum";
+import { DEFAULT_SECTION_COLOR } from "../../data/palette";
 import type { PageSortDir, PageSortMode } from "../../data/types";
 import { reorderByDrop } from "../dnd";
 import { handleListArrows } from "../keyboard";
@@ -99,6 +100,9 @@ export function PageList() {
       disabled: otherSections.length === 0,
       submenu: otherSections.map((s) => ({
         label: s.name,
+        // Color chip matching the section's square in the notebook tree
+        // (NavPanel) so the two reads of a section stay consistent.
+        swatch: s.color ?? DEFAULT_SECTION_COLOR,
         onSelect: () => actions.movePage(notebookId, pageId, s.id),
       })),
       separatorAfter: true,

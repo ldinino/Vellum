@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useEditor, EditorContent, Editor } from "@tiptap/react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -31,6 +31,17 @@ let cpuOnly = false;
 let hardwareChecked = false;
 
 const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
+
+// Measure rendered text width (shared canvas) so the title's hover underline can
+// hug the title text rather than spanning a fixed length.
+let measureCanvas: HTMLCanvasElement | null = null;
+function measureTextWidth(text: string, font: string): number {
+  if (!measureCanvas) measureCanvas = document.createElement("canvas");
+  const ctx = measureCanvas.getContext("2d");
+  if (!ctx) return 0;
+  ctx.font = font;
+  return ctx.measureText(text).width;
+}
 
 function derivePreview(text: string): string {
   return text.replace(/\s+/g, " ").trim().slice(0, 120);
@@ -433,6 +444,18 @@ export function PageEditor({
   useEffect(() => {
     if (page.title === "") requestAnimationFrame(() => titleRef.current?.focus());
   }, [page.id, page.title]);
+
+  // Size the title's hover underline to the title text so it hugs the title —
+  // the placeholder when empty (lighter weight), the typed value otherwise.
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (!el) return;
+    const cs = getComputedStyle(el);
+    const text = title || el.placeholder;
+    const weight = title ? cs.fontWeight : "400";
+    const width = measureTextWidth(text, `${weight} ${cs.fontSize} ${cs.fontFamily}`);
+    el.style.setProperty("--title-underline-width", `${Math.ceil(width)}px`);
+  }, [title]);
 
   // Detect CPU-only once per session so Refine can warn at point of use that
   // requests may be slow (spec Section 9). Side-effect free; never starts Ollama.

@@ -117,15 +117,62 @@ function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }
             <span className="v-menu__label">{item.label}</span>
             {item.submenu && <span className="v-menu__arrow">▶</span>}
             {item.submenu && openSub === i && (
-              <div className="v-menu v-menu--submenu" role="menu">
-                <MenuList items={item.submenu} onClose={onClose} />
-              </div>
+              <SubMenu items={item.submenu} onClose={onClose} />
             )}
           </button>
           {item.separatorAfter && <div className="v-menu__separator" />}
         </div>
       ))}
     </>
+  );
+}
+
+/**
+ * A nested menu, absolutely positioned against its parent item. Opens to the
+ * right by default, but flips to the left when it would run off the viewport
+ * (e.g. a page's "Move to section" menu near the right window edge) and clamps
+ * vertically so the bottom stays on-screen — same intent as the root menu's
+ * clamp, but resolved against the parent item rather than the cursor.
+ */
+function SubMenu({ items, onClose }: { items: MenuItem[]; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Render hidden on the right first; measure in a layout effect (before paint)
+  // and place it for real, so there's no flash at the wrong edge.
+  const [style, setStyle] = useState<React.CSSProperties>({
+    left: "calc(100% - 4px)",
+    top: -3,
+    visibility: "hidden",
+  });
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const anchor = el?.parentElement?.getBoundingClientRect();
+    if (!el || !anchor) return;
+    const { width, height } = el.getBoundingClientRect();
+    const margin = 4;
+
+    // Horizontal: prefer right (left edge at anchor.right - 4); flip left only
+    // if right overflows and there's room on the left.
+    const overflowsRight = anchor.right - margin + width > window.innerWidth;
+    const fitsLeft = anchor.left + margin - width >= 0;
+    const horizontal: React.CSSProperties =
+      overflowsRight && fitsLeft
+        ? { left: "auto", right: "calc(100% - 4px)" }
+        : { left: "calc(100% - 4px)", right: "auto" };
+
+    // Vertical: `top` is relative to the anchor's top. Keep the default -3 unless
+    // that pushes the bottom (or, if too tall, the top) off-screen.
+    const minTop = margin - anchor.top;
+    const maxTop = window.innerHeight - margin - height - anchor.top;
+    const top = Math.max(minTop, Math.min(-3, maxTop));
+
+    setStyle({ ...horizontal, top, visibility: "visible" });
+  }, []);
+
+  return (
+    <div ref={ref} className="v-menu v-menu--submenu" role="menu" style={style}>
+      <MenuList items={items} onClose={onClose} />
+    </div>
   );
 }
 

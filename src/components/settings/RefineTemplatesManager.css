@@ -3,9 +3,18 @@
 .v-rtmpl {
   display: grid;
   grid-template-columns: 220px 1fr;
-  grid-template-rows: 1fr auto;
+  /* minmax(0, 1fr), not 1fr: a bare 1fr track has an auto minimum, so it would
+     grow to fit the editor's content (e.g. many examples) and spill past the
+     dialog. Capping the minimum at 0 keeps the row bounded so .v-rtmpl__form's
+     overflow-y can actually scroll. */
+  grid-template-rows: minmax(0, 1fr) auto;
   flex: 1;
   min-width: 0;
+  /* This is a flex item in RefineSettings' flex COLUMN (.v-refine), so flex:1 is
+     on the block axis. min-height:0 (overriding the auto default) lets it shrink
+     to the available height instead of growing to fit its content and overflowing
+     the dialog — without this the inner overflow-y above can never scroll. */
+  min-height: 0;
 }
 
 .v-rtmpl__list {
@@ -147,11 +156,16 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  /* Don't compress when the form overflows — let .v-rtmpl__form scroll instead,
+     so fields keep their size rather than squashing into each other. */
+  flex-shrink: 0;
 }
 
+/* Instructions fills spare vertical space when there's room, but with an auto
+   basis + no shrink it keeps its textarea's height (rather than collapsing) once
+   examples push the form past its height and it starts to scroll. */
 .v-rtmpl__field--grow {
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 auto;
 }
 
 .v-rtmpl__label {

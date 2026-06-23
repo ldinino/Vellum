@@ -6,7 +6,11 @@
   font-size: var(--text-size-editor);
   line-height: 1.6;
   color: var(--text-primary);
+  /* Fill the scroll area so the whole page is a click target. Padding lives here
+     (not on the scroll container) so border-box keeps min-height: 100% equal to
+     the visible area — no phantom scrollbar on an empty page (see EditorArea.css). */
   min-height: 100%;
+  padding: var(--space-5) var(--space-6);
 }
 
 .v-prose:focus {

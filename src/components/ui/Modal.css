@@ -89,8 +89,12 @@
 
 .v-modal__body {
   background: var(--surface-content);
-  border: 1px solid var(--border-default);
+  /* Same canvas seam as the main window (.v-shell): a dark Aero hairline + white
+     ring between the glass frame and the content. The old light-gray border let
+     the canvas run straight into the glass with no separation. */
+  border: 1px solid var(--aero-window-border);
   border-radius: 2px;
+  box-shadow: 0 0 0 1px #fff9;
   padding: var(--space-5);
   user-select: text;
 }

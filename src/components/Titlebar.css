@@ -24,12 +24,12 @@
   flex: 1;
   font-size: var(--text-size-ui);
   /* Black text with a strong white halo so it reads on the blue glass (7.css
-     .title-bar-text). */
+     .title-bar-text). No overflow:hidden — it clipped the halo into a hard
+     rectangle around the text; the title is the short app name ("Vellum"), so it
+     needs no ellipsis. */
   color: #000;
   text-shadow: 0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff,
     0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
