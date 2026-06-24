@@ -751,16 +751,19 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 ---
 
-### Phase 10 — Print & Settings
+### Phase 10 — Export/Print & Settings
 
-**Goal:** Print current page. Complete Settings UI.
+**Goal:** Export or Print current page. Complete Settings UI.
 
+- Export current page as markdown ("File > Export...")
+- Exports should be WYSIWYG
+- Attachments are exported alongside the markdown file
 - Print stylesheet: hide nav panels, render page title + content only, attachments as filename list
 - Wire `window.print()` to print button / keyboard shortcut
 - Settings modal: all sections from spec (General, Templates, Editor, Grammar, Refine, About)
 - Verify all settings persist correctly and apply immediately where expected
 
-**Exit criteria:** Print renders cleanly. All settings survive app restart.
+**Exit criteria:** Export flow consistently succeeds. Print renders cleanly. All settings survive app restart.
 
 ---
 
@@ -806,7 +809,7 @@ Phase 0 (Foundation)
               └── Phase 7 (Refine Infrastructure)
                     └── Phase 8 (Refine Full)
                           └── Phase 9 (UI Polish)
-                                └── Phase 10 (Print + Settings)
+                                └── Phase 10 (Export/Print + Settings)
                                       └── Phase 11 (QA)
 ```
 

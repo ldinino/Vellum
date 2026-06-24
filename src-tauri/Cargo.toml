@@ -37,10 +37,12 @@ harper-core = "2.5.0"
 # Phase 7 (Refine infrastructure). All already resolved transitively at these
 # versions in Cargo.lock, so adding them is additive and must NOT move `time`
 # off 0.3.47 (re-pin with `cargo update time --precise 0.3.47` if it drifts).
-#   - reqwest: rustls-tls (matches the in-tree rustls node; no native-tls/OpenSSL)
+#   - reqwest: 0.13, matching tauri-plugin-updater's own reqwest dependency so
+#     cargo unifies on one copy instead of compiling two major versions side by
+#     side. Feature is "rustls" (renamed from "rustls-tls" in 0.13); no native-tls/OpenSSL.
 #   - zip: default features OFF — the default set pulls `time`; we only need deflate
 tokio = { version = "1", features = ["rt", "time"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "stream", "json"] }
 futures-util = "0.3"
 sha2 = "0.10"
 zip = { version = "8", default-features = false, features = ["deflate"] }
