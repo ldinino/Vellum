@@ -9,7 +9,7 @@
 import { Extension } from "@tiptap/core";
 import { Editor } from "@tiptap/react";
 import { Plugin, PluginKey, TextSelection } from "@tiptap/pm/state";
-import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 import type { Node as PMNode } from "@tiptap/pm/model";
 
 export const findKey = new PluginKey<FindState>("find");
@@ -108,6 +108,38 @@ function readStats(editor: Editor): FindStats {
   return { count: s?.matches.length ?? 0, current: s?.current ?? -1 };
 }
 
+/** Nearest vertically-scrollable ancestor of the editor (its `.v-editor__content`). */
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  for (let node = el; node; node = node.parentElement) {
+    const overflowY = getComputedStyle(node).overflowY;
+    if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight) {
+      return node;
+    }
+  }
+  return null;
+}
+
+/**
+ * Scroll the editor's own scroll container so `pos` is comfortably in view.
+ * ProseMirror's built-in `scrollIntoView` decides which container to scroll from
+ * the DOM selection's focus node; while the FindBar input holds focus the editor
+ * is unfocused, so that heuristic misses `.v-editor__content` and off-screen
+ * matches never scroll. We scroll the real container ourselves, independent of
+ * focus, nudging just enough to clear a small margin from the edge.
+ */
+function scrollPosIntoView(view: EditorView, pos: number) {
+  const container = scrollParent(view.dom as HTMLElement);
+  if (!container) return;
+  const target = view.coordsAtPos(pos);
+  const box = container.getBoundingClientRect();
+  const margin = 40;
+  if (target.top < box.top + margin) {
+    container.scrollTop -= box.top + margin - target.top;
+  } else if (target.bottom > box.bottom - margin) {
+    container.scrollTop += target.bottom - (box.bottom - margin);
+  }
+}
+
 /** Select + scroll the current match into view without stealing DOM focus. */
 function revealCurrent(editor: Editor) {
   const s = findKey.getState(editor.state);
@@ -116,6 +148,7 @@ function revealCurrent(editor: Editor) {
   const { view } = editor;
   const tr = view.state.tr.setSelection(TextSelection.create(view.state.doc, m.from, m.to));
   view.dispatch(tr.scrollIntoView());
+  scrollPosIntoView(view, m.from);
 }
 
 /** Set the query (jumping to the first match) and reveal it. */
