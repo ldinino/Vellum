@@ -12,6 +12,12 @@
   /* No left border or top band: the desk gradient continues straight out of the
      editor, so the strip is the same surface, not a partitioned panel. */
   background: var(--desk-gradient);
+  /* Inset the bottom by the editor's bottom desk margin (.v-editor's padding-bottom
+     is also --space-5) so the strip's content column ends level with the editor's
+     page sheet, not at the desk's bottom edge. This is what the bottom fade below
+     keys off, so the fade lines up with the editor instead of tracking the desk.
+     The desk gradient still fills this padding band, continuing to the real edge. */
+  padding-bottom: var(--space-5);
 }
 
 .v-pagelist__header {
@@ -51,6 +57,29 @@
      so only it covers the border. */
   position: relative;
   left: -1px;
+  /* Soft fade at the bottom edge: once the list grows past the editor the last
+     tabs dissolve into the desk instead of being hard-cut. With the strip's
+     bottom inset to the editor's page-sheet level (see .v-pagelist's
+     padding-bottom), the mask's 100% sits on the editor's bottom edge, so the
+     fade lines up with the editor rather than the desk's lower edge. The mask
+     turns the content transparent there so the desk gradient shows straight
+     through — there's no color to match, so it holds for any section tint. The
+     fade zone is empty desk when the list is short, so it only shows on overflow.
+
+     A mask covers the element's scrollbar too, which would fade it away at the
+     bottom. To spare it, the mask is two layers: the fade over the tab column
+     only (left, width minus the scrollbar gutter), plus a fully-opaque layer over
+     the gutter (right), so the retro scrollbar stays solid top to bottom. */
+  --pagelist-fade: 44px;
+  --pagelist-sbw: 15px; /* must match ::-webkit-scrollbar width in base.css */
+  -webkit-mask:
+    linear-gradient(to bottom, #000 calc(100% - var(--pagelist-fade)), transparent)
+      left top / calc(100% - var(--pagelist-sbw)) 100% no-repeat,
+    linear-gradient(#000, #000) right top / var(--pagelist-sbw) 100% no-repeat;
+  mask:
+    linear-gradient(to bottom, #000 calc(100% - var(--pagelist-fade)), transparent)
+      left top / calc(100% - var(--pagelist-sbw)) 100% no-repeat,
+    linear-gradient(#000, #000) right top / var(--pagelist-sbw) 100% no-repeat;
 }
 
 .v-pagelist__item {
