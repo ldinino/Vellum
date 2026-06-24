@@ -1,0 +1,71 @@
+/* In-page find box (Ctrl+F): floats at the lower-right of the page desk, over
+   the bottom of the page-tab strip. Tinted with the open section's color
+   (--section-color, inherited from .v-shell) so it reads as part of the desk. */
+.v-find {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 6px;
+  border: 1px solid color-mix(in srgb, var(--section-color) 55%, #9a9a9a);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--section-color) 28%, white);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+}
+
+.v-find__glass {
+  flex: 0 0 auto;
+  opacity: 0.55;
+}
+
+.v-find__input {
+  width: 150px;
+  padding: 3px 6px;
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  border: 1px solid color-mix(in srgb, var(--section-color) 45%, #9a9a9a);
+  border-radius: var(--radius-control);
+  background: #fff;
+}
+
+.v-find__input:focus {
+  outline: none;
+  border-color: var(--accent-bright);
+  box-shadow: 0 0 3px rgba(68, 136, 229, 0.5);
+}
+
+.v-find__count {
+  min-width: 42px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: var(--text-size-small);
+  white-space: nowrap;
+}
+
+.v-find__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 24px;
+  height: 22px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  cursor: pointer;
+}
+
+.v-find__btn:hover:not(:disabled) {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
+}
+
+.v-find__btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

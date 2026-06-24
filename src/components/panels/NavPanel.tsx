@@ -112,7 +112,7 @@ export function NavPanel({ collapsed, onToggle, onOpenSectionProperties }: NavPa
           aria-label="Show notebooks"
           onClick={onToggle}
         >
-          »
+          <Icon name="control" />
         </button>
         <div className="v-nav__rail">
           {notebooks.map((nb) => (
@@ -157,7 +157,7 @@ export function NavPanel({ collapsed, onToggle, onOpenSectionProperties }: NavPa
           aria-label="Hide notebooks"
           onClick={onToggle}
         >
-          «
+          <Icon name="control-180" />
         </button>
       </div>
 

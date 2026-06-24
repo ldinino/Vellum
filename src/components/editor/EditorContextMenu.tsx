@@ -26,6 +26,7 @@ import { Button } from "../ui/Button";
 import { grammarHitAt, GrammarHit } from "./GrammarError";
 import { ignoreInstance, ignoreRule } from "./grammar";
 import { readClipboard, execClipboard } from "../../lib/clipboard";
+import { requestOpenFind } from "./find";
 import "./EditorContextMenu.css";
 
 interface Props {
@@ -158,7 +159,12 @@ function buildMenu(
     }
   }
   items[items.length - 1].separatorAfter = true;
-  items.push({ label: "Select All", onSelect: () => editor.chain().focus().selectAll().run() });
+  items.push({
+    label: "Select All",
+    icon: "ui-text-field-select",
+    onSelect: () => editor.chain().focus().selectAll().run(),
+  });
+  items.push({ label: "Find", icon: "magnifier", onSelect: requestOpenFind });
   return items;
 }
 

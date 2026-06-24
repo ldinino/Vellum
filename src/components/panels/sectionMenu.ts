@@ -10,7 +10,7 @@ import type { MenuItem } from "../ui/ContextMenu";
 import type { Section } from "../../data/types";
 import type { VellumActions } from "../../state/vellum";
 
-/** Color picker submenu: a swatch per palette entry plus "None". */
+/** Color picker submenu: a swatch per palette entry. */
 export function colorSubmenu(
   current: string | null,
   apply: (color: string | null) => void,
@@ -22,7 +22,6 @@ export function colorSubmenu(
       checked: current === c.value,
       onSelect: () => apply(c.value),
     })),
-    { label: "None", onSelect: () => apply(null) },
   ];
 }
 

@@ -84,6 +84,7 @@
    overlaps the top border, so the line cuts around the tab and the tab's interior
    is continuous with the desk. */
 .v-shell__content {
+  position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;

@@ -52,12 +52,6 @@
   outline-offset: 1px;
 }
 
-.v-secprops__swatch--none {
-  background:
-    linear-gradient(45deg, transparent 45%, #d54f3f 45%, #d54f3f 55%, transparent 55%),
-    var(--surface-content);
-}
-
 .v-secprops__hint {
   color: var(--text-muted);
   font-size: var(--text-size-small);

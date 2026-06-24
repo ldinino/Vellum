@@ -134,7 +134,7 @@ export function SectionTabs({
               }
             }}
           >
-            <Icon name="plus-small" />
+            <Icon name="plus" />
           </button>
         )}
       </div>

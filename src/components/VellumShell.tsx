@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { NavPanel } from "./panels/NavPanel";
 import { PageList } from "./panels/PageList";
 import { EditorArea } from "./panels/EditorArea";
@@ -7,6 +7,8 @@ import { SectionPropertiesModal } from "./panels/SectionPropertiesModal";
 import { MenuBar } from "./MenuBar";
 import { TopToolbar } from "./editor/EditorToolbar";
 import { SearchBox } from "./search/SearchBar";
+import { FindBar } from "./editor/FindBar";
+import { OPEN_FIND_EVENT } from "./editor/find";
 import { SettingsModal } from "./settings/SettingsModal";
 import { FirstRunModal } from "./settings/FirstRunModal";
 import { AppContextMenus } from "./AppContextMenus";
@@ -54,6 +56,30 @@ export function VellumShell() {
     [],
   );
 
+  // In-page find (Ctrl+F): our own box instead of WebView2's native find.
+  const [findOpen, setFindOpen] = useState(false);
+  const [findTick, setFindTick] = useState(0);
+  const openFind = useCallback(() => {
+    setFindOpen(true);
+    setFindTick((t) => t + 1);
+  }, []);
+  const closeFind = useCallback(() => setFindOpen(false), []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "f" || e.key === "F")) {
+        e.preventDefault(); // suppress WebView2's built-in find
+        openFind();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener(OPEN_FIND_EVENT, openFind);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener(OPEN_FIND_EVENT, openFind);
+    };
+  }, [openFind]);
+
   // The open section's color tints the page border + page-tab strip (OneNote
   // 2007). Derived from loaded state; defaults until a section is selected.
   const sectionColor =
@@ -95,6 +121,7 @@ export function VellumShell() {
           <div className="v-shell__content">
             <EditorArea />
             <PageList />
+            {findOpen && <FindBar onClose={closeFind} focusTick={findTick} />}
           </div>
         </div>
       </div>

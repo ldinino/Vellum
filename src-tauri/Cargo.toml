@@ -59,6 +59,11 @@ windows = { version = "0.61", features = [
 # Windows-only so macOS/Linux CI keeps building; the call site is also
 # #[cfg(windows)]-gated. Additive — must NOT move `time` off 0.3.47.
 window-vibrancy = "0.6"
+# Disable WebView2 browser accelerator keys (Ctrl+R / F5 reload, Ctrl+P, F12,
+# zoom, native Ctrl+F) so the app behaves like a fixed desktop window. Already
+# pulled in transitively by Tauri at this version, so adding it as a direct dep
+# is additive — must NOT move `time` off 0.3.47.
+webview2-com = "0.38"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread"] }

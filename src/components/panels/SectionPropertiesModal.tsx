@@ -87,16 +87,6 @@ export function SectionPropertiesModal({ notebookId, sectionId, open, onClose }:
                 onClick={() => setColor(c.value)}
               />
             ))}
-            <button
-              type="button"
-              className={[
-                "v-secprops__swatch v-secprops__swatch--none",
-                color === null ? "v-secprops__swatch--selected" : "",
-              ].join(" ")}
-              title="None"
-              aria-label="No color"
-              onClick={() => setColor(null)}
-            />
           </div>
         </div>
 

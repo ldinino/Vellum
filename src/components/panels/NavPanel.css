@@ -27,17 +27,16 @@
   justify-content: center;
 }
 
-/* Collapse/expand chevron (« in the header, » on the collapsed rail). */
+/* Collapse/expand control: Fugue "control-180" (points left = collapse) in the
+   header, "control" (points right = expand) on the collapsed rail. Identical box
+   in both states so the button doesn't change size when toggled. */
 .v-nav__chevron {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 20px;
+  width: 24px;
   height: 22px;
-  font-size: 13px;
-  line-height: 1;
-  color: var(--text-secondary);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-control);
   background: var(--gradient-button);
@@ -59,7 +58,6 @@
 }
 
 .v-nav--collapsed .v-nav__chevron {
-  width: 30px;
   margin-bottom: var(--space-1);
 }
 

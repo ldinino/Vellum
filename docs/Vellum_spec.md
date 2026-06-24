@@ -28,6 +28,8 @@ A desktop note-taking application modeled on the layout and UX feel of Microsoft
 
 **v1 target:** Windows 10 and 11 (WebView2 is standard on both).
 
+**Desktop-window behavior:** WebView2's browser accelerator keys are disabled at window setup (`AreBrowserAcceleratorKeysEnabled = false`, Windows-only), so the app can't be reloaded (Ctrl+R / F5), printed (Ctrl+P), zoomed, or open DevTools (F12) like a web page. This also removes the native Ctrl+F find, which is replaced by our own in-page find (Section 11).
+
 **Future Mac/Linux:** Tauri's Rust backend and React frontend are cross-platform by default. The delta for Mac/Linux is:
 - WebView rendering differences (WKWebView on Mac, WebKitGTK on Linux) — test CSS, no rewrites expected
 - Platform-specific file path handling (Tauri provides abstractions for this)
@@ -398,6 +400,8 @@ they remain available for future use, but they are not exposed in the UI.
 
 **Performance expectation:** Results for typical note corpora (10k–100k words) in <100ms.
 
+**Find on page (Ctrl+F):** A separate, lightweight in-page find, distinct from the global FTS5 search above. Ctrl+F — or **Edit ▸ Find**, or the editor's right-click menu — opens a small box at the lower-right of the page, tinted with the open section's color. It highlights every match in the current page, steps through them with Enter / Shift+Enter (or the up / down buttons) showing "current / total", and closes with Esc. Replaces WebView2's native find (see Section 3).
+
 ---
 
 ### 12. Attachments
@@ -648,7 +652,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 ---
 
-### Phase 8 — Refine (Full Feature)
+### Phase 8 — Refine (Full Feature) ✅
 
 **Goal:** Full Refine flow end-to-end. Second highest-risk phase.
 
@@ -720,7 +724,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 ---
 
-### Phase 9 — UI Polish Pass
+### Phase 9 — UI Polish Pass 
 
 **Goal:** Cohesive retro aesthetic across all surfaces.
 

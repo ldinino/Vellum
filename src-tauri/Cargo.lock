@@ -8456,6 +8456,7 @@ dependencies = [
  "tauri-plugin-updater",
  "tokio",
  "uuid",
+ "webview2-com",
  "window-vibrancy",
  "windows 0.61.3",
  "zip 8.6.0",

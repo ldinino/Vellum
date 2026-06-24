@@ -15,6 +15,7 @@ export const PALETTE: Swatch[] = [
   { name: "Teal", value: "#76c5c0" },
   { name: "Yellow", value: "#e6d06e" },
   { name: "Magenta", value: "#d98ac2" },
+  { name: "Gray", value: "#b4b0a6" },
 ];
 
 export const DEFAULT_NOTEBOOK_COLOR = PALETTE[0].value;

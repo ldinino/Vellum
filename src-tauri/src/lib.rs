@@ -34,6 +34,26 @@ pub fn run() {
             {
                 if let Some(win) = app.get_webview_window("main") {
                     let _ = window_vibrancy::apply_acrylic(&win, Some((215, 228, 242, 50)));
+
+                    // Turn off WebView2's browser accelerator keys so the shipped
+                    // app can't be reloaded (Ctrl+R / F5), printed (Ctrl+P),
+                    // zoomed, or pop DevTools (F12) like a web page — it's a fixed
+                    // desktop window. Also disables the native Ctrl+F find, which
+                    // we replace with our own (src/components/editor/FindBar).
+                    // Release-only so DevTools / reload stay usable in `tauri dev`.
+                    // Best-effort: any failure just leaves the defaults in place.
+                    #[cfg(not(debug_assertions))]
+                    let _ = win.with_webview(|webview| unsafe {
+                        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+                        use windows::core::Interface;
+                        if let Ok(core) = webview.controller().CoreWebView2() {
+                            if let Ok(settings) = core.Settings() {
+                                if let Ok(s3) = settings.cast::<ICoreWebView2Settings3>() {
+                                    let _ = s3.SetAreBrowserAcceleratorKeysEnabled(false);
+                                }
+                            }
+                        }
+                    });
                 }
             }
             Ok(())

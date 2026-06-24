@@ -26,7 +26,7 @@ export function Titlebar({
   return (
     <div className="v-titlebar" data-tauri-drag-region>
       <img
-        src="/tauri.svg"
+        src="/app-icon.png"
         className="v-titlebar__appicon"
         alt=""
         aria-hidden="true"

@@ -21,6 +21,7 @@ import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table
 import type { Extensions } from "@tiptap/react";
 import { ResizableImage } from "./ResizableImage";
 import { SearchHighlight } from "./SearchHighlight";
+import { Find } from "./find";
 import { GrammarError } from "./GrammarError";
 
 export function buildExtensions(): Extensions {
@@ -48,6 +49,7 @@ export function buildExtensions(): Extensions {
     TableHeader,
     TableCell,
     SearchHighlight,
+    Find,
     GrammarError,
   ];
 }

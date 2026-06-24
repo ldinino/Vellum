@@ -10,6 +10,7 @@ import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ContextMenu, MenuItem } from "./ui/ContextMenu";
 import { useActiveEditor } from "../state/activeEditor";
+import { requestOpenFind } from "./editor/find";
 import { useVellum } from "../state/vellum";
 import "./MenuBar.css";
 
@@ -115,11 +116,13 @@ export function MenuBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const editItems = (): MenuItem[] => [
     {
       label: "Undo",
+      icon: "arrow-circle-225-left",
       disabled: !editor?.can().undo(),
       onSelect: () => editor?.chain().focus().undo().run(),
     },
     {
       label: "Redo",
+      icon: "arrow-circle-315",
       disabled: !editor?.can().redo(),
       onSelect: () => editor?.chain().focus().redo().run(),
       separatorAfter: true,
@@ -145,8 +148,16 @@ export function MenuBar({ onOpenSettings }: { onOpenSettings: () => void }) {
     },
     {
       label: "Select All",
+      icon: "ui-text-field-select",
       disabled: !editor,
       onSelect: () => editor?.chain().focus().selectAll().run(),
+      separatorAfter: true,
+    },
+    {
+      label: "Find",
+      icon: "magnifier",
+      disabled: !editor,
+      onSelect: requestOpenFind,
     },
   ];
 
@@ -208,7 +219,7 @@ export function MenuBar({ onOpenSettings }: { onOpenSettings: () => void }) {
     },
     {
       label: "Check Grammar",
-      icon: "spell-check",
+      icon: "blog--pencil",
       checked: grammarEnabled,
       onSelect: () => actions.setGrammarEnabled(!grammarEnabled),
       separatorAfter: true,

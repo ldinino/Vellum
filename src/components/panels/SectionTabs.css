@@ -157,8 +157,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 20px;
+  /* Roomier hit target than the old 22×20, but the glyph stays a standard 16px
+     Fugue icon (like the toolbar) so it doesn't dwarf the tabs. Height fills the
+     --sectiontabs-height (27px) row. */
+  width: 32px;
+  height: 24px;
   margin-bottom: 1px;
   border: 1px solid transparent;
   border-radius: var(--radius-control);
