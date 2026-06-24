@@ -12,7 +12,8 @@
                  CHANGES" below), it puts them back before starting.
     3. Builds + runs `npm run tauri dev` in its own window (compiles the Rust
                  backend and launches the app).
-    4. Waits   - asks "Are you done?"; nothing is torn down until you say yes.
+    4. Waits   - watches the Vellum process; nothing is torn down until you
+                 close the app window (no prompt).
     5. Puts back - stops the dev server + app, frees the Vite port, and reverts
                  any temporary edits this script made.
 
@@ -176,9 +177,24 @@ try {
         -WorkingDirectory $script:Repo -PassThru
     Write-Host "The build runs in its own window; the app appears when it finishes."
 
-    do {
-        $ans = Read-Host "`nAre you done? (y/n)"
-    } while ($ans -notmatch '^(y|yes)$')
+    # No prompt: wait for the Vellum window to appear (the build takes a while),
+    # then block until you close it. Closing the app ends the session and the
+    # finally block tears everything down. If the dev process exits before the
+    # app ever appears, the build failed or was cancelled, so stop waiting.
+    Write-Host "`nWaiting for the Vellum app to start..."
+    while (-not (Get-Process -Name vellum -ErrorAction SilentlyContinue) -and -not $dev.HasExited) {
+        Start-Sleep -Seconds 1
+    }
+
+    if (Get-Process -Name vellum -ErrorAction SilentlyContinue) {
+        Write-Host "App is running. Close the Vellum window when you're done - cleanup is automatic."
+        while (Get-Process -Name vellum -ErrorAction SilentlyContinue) {
+            Start-Sleep -Seconds 1
+        }
+        Write-Host "Vellum closed."
+    } else {
+        Write-Host "The app didn't start (the dev/build process exited first)."
+    }
 }
 finally {
     Write-Host "Stopping the app and putting things back..."
