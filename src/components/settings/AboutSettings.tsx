@@ -71,6 +71,23 @@ export function AboutSettings() {
           <strong>Harper</strong> (Apache-2.0). Refine runs on <strong>Ollama</strong> (MIT).
         </p>
       </section>
+
+      <section className="v-set__section">
+        <h3 className="v-set__heading">License</h3>
+        <p className="v-set__hint">
+          © 2026 Luciano DiNino. Vellum is released under the MIT License. Bundled assets and
+          software are licensed separately; see THIRD-PARTY-NOTICES.md.
+        </p>
+      </section>
+
+      <section className="v-set__section">
+        <h3 className="v-set__heading">Disclaimer</h3>
+        <p className="v-set__hint">
+          Vellum is an independent project and is not affiliated with, endorsed by, or sponsored
+          by Microsoft. OneNote, Windows, Office, OneDrive, and Segoe UI are trademarks of
+          Microsoft Corporation.
+        </p>
+      </section>
     </div>
   );
 }
