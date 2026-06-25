@@ -48,6 +48,56 @@ function derivePreview(text: string): string {
   return text.replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
+// A pasted plain-text token that is a single http(s) URL → the trimmed URL
+// (preserving exactly what was pasted), else null. Lets a pasted bare link get
+// a readable label instead of showing the raw address.
+function parseSingleUrl(raw: string): string | null {
+  const text = raw.trim();
+  if (!text || /\s/.test(text)) return null;
+  try {
+    const u = new URL(text);
+    return u.protocol === "http:" || u.protocol === "https:" ? text : null;
+  } catch {
+    return null;
+  }
+}
+
+// Swap a freshly-pasted link's visible text (still the raw URL) for its fetched
+// page title. Matches by href + current text and picks the occurrence nearest
+// the paste point, so it stays correct if the same URL was pasted twice or the
+// user edited elsewhere while the title loaded. Runs outside undo history and
+// leaves the selection untouched (the fetch resolves asynchronously).
+function replaceLinkLabel(
+  editor: Editor | null,
+  href: string,
+  oldText: string,
+  newText: string,
+  nearPos: number,
+): void {
+  if (!editor || editor.isDestroyed) return;
+  const linkType = editor.schema.marks.link;
+  if (!linkType) return;
+  let foundFrom = -1;
+  let foundTo = -1;
+  let bestDist = Infinity;
+  editor.state.doc.descendants((node, pos) => {
+    if (!node.isText || node.text !== oldText) return;
+    if (!node.marks.some((m) => m.type === linkType && m.attrs.href === href)) return;
+    const dist = Math.abs(pos - nearPos);
+    if (dist < bestDist) {
+      bestDist = dist;
+      foundFrom = pos;
+      foundTo = pos + node.nodeSize;
+    }
+  });
+  if (foundFrom < 0) return;
+  const tr = editor.state.tr
+    .insertText(newText, foundFrom, foundTo)
+    .addMark(foundFrom, foundFrom + newText.length, linkType.create({ href }))
+    .setMeta("addToHistory", false);
+  editor.view.dispatch(tr);
+}
+
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   const units = ["KB", "MB", "GB"];
@@ -322,16 +372,47 @@ export function PageEditor({
         }
         return false;
       },
-      handlePaste: (_view, event) => {
-        const items = event.clipboardData?.items;
-        if (!items) return false;
-        for (const it of items) {
+      handlePaste: (view, event) => {
+        const cd = event.clipboardData;
+        if (!cd) return false;
+        // Image on the clipboard → embed it inline.
+        for (const it of cd.items) {
           if (it.type.startsWith("image/")) {
             const f = it.getAsFile();
             if (f) {
               void insertImage(f);
               return true;
             }
+          }
+        }
+        // Bare URL pasted into an empty selection: drop the link in now, then
+        // swap in the page <title> once fetched so it reads "Google", not the
+        // raw address. A non-empty selection is left to the Link extension's
+        // linkOnPaste (it wraps the selected text, keeping it as the label);
+        // rich (text/html) pastes keep their own markup and anchor text.
+        if (!cd.types.includes("text/html")) {
+          const url = parseSingleUrl(cd.getData("text/plain"));
+          const { from, to } = view.state.selection;
+          const ed = editorRef.current;
+          if (url && from === to && ed) {
+            ed.chain()
+              .focus()
+              .insertContent({
+                type: "text",
+                text: url,
+                marks: [{ type: "link", attrs: { href: url } }],
+              })
+              .run();
+            void api
+              .fetchLinkTitle(url)
+              .then((title) => {
+                const label = title?.trim();
+                if (label && label !== url) {
+                  replaceLinkLabel(editorRef.current, url, url, label, from);
+                }
+              })
+              .catch(() => {});
+            return true;
           }
         }
         return false;

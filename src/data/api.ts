@@ -37,6 +37,13 @@ export const saveAppConfig = (config: AppConfig) =>
 export const grammarCheck = (text: string) =>
   invoke<GrammarSpan[]>("grammar_check", { text });
 
+// --- Links ------------------------------------------------------------------
+
+/** Best-effort fetch of a URL's page `<title>` so a pasted bare link can show a
+ * readable label. Resolves to `null` when no usable title is found. */
+export const fetchLinkTitle = (url: string) =>
+  invoke<string | null>("fetch_link_title", { url });
+
 // --- Notebooks (notebooks.json registry) -----------------------------------
 
 export const listNotebooks = () => invoke<Notebook[]>("list_notebooks");

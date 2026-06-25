@@ -887,6 +887,18 @@ pub async fn grammar_check(text: String) -> Result<Vec<GrammarSpan>, String> {
 }
 
 // ---------------------------------------------------------------------------
+// Links
+// ---------------------------------------------------------------------------
+
+/// Best-effort `<title>` lookup so a pasted bare URL can show a readable label
+/// (e.g. "Google" instead of "https://google.com"). Returns `None` when no
+/// usable title is found; the renderer then keeps the raw URL.
+#[tauri::command]
+pub async fn fetch_link_title(url: String) -> Result<Option<String>, String> {
+    crate::link::fetch_title(&url).await
+}
+
+// ---------------------------------------------------------------------------
 // Background processes
 // ---------------------------------------------------------------------------
 

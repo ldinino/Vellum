@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { useEditorState } from "@tiptap/react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useEditorState, getMarkRange } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
 import { Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator } from "../ui/Toolbar";
 import { useActiveEditor } from "../../state/activeEditor";
+import { LinkDialog } from "./LinkDialog";
 import "./EditorToolbar.css";
 
 const FONTS = [
@@ -302,7 +303,7 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
         />
         <ToolbarButton
           icon="chain"
-          label="Link"
+          label="Insert link"
           active={s?.link}
           disabled={disabled}
           onClick={() => setLinkOpen(true)}
@@ -346,7 +347,7 @@ export function EditorToolbar({
           setLinkOpen={setLinkOpen}
         />
       </Toolbar>
-      {linkOpen && editor && <LinkEditor editor={editor} onClose={() => setLinkOpen(false)} />}
+      {linkOpen && editor && <ToolbarLinkDialog editor={editor} onClose={() => setLinkOpen(false)} />}
     </div>
   );
 }
@@ -379,53 +380,99 @@ export function TopToolbar() {
           />
         </div>
       </div>
-      {linkOpen && editor && <LinkEditor editor={editor} onClose={() => setLinkOpen(false)} />}
+      {linkOpen && editor && <ToolbarLinkDialog editor={editor} onClose={() => setLinkOpen(false)} />}
     </div>
   );
 }
 
-function LinkEditor({ editor, onClose }: { editor: Editor; onClose: () => void }) {
-  const [href, setHref] = useState<string>(editor.getAttributes("link").href ?? "https://");
+/** Resolve what a toolbar "Insert link" click should act on: an existing link
+ * under the caret (edit it), a non-empty selection (link the selected text), or
+ * a bare caret (insert a brand-new link). Captured once when the dialog opens. */
+function resolveLinkTarget(editor: Editor): {
+  range: { from: number; to: number } | null;
+  href: string;
+  text: string;
+} {
+  const { from, to } = editor.state.selection;
+  const linkRange = getMarkRange(editor.state.doc.resolve(from), editor.schema.marks.link);
+  if (linkRange) {
+    return {
+      range: linkRange,
+      href: editor.getAttributes("link").href ?? "",
+      text: editor.state.doc.textBetween(linkRange.from, linkRange.to),
+    };
+  }
+  if (from !== to) {
+    return { range: { from, to }, href: "", text: editor.state.doc.textBetween(from, to, " ") };
+  }
+  return { range: null, href: "", text: "" };
+}
 
-  const apply = () => {
-    const url = href.trim();
-    if (url) {
-      editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
-    } else {
-      editor.chain().focus().extendMarkRange("link").unsetLink().run();
+/** Apply the dialog result: edit the link over `range`, or insert a new one at
+ * the caret when `range` is null. An empty address removes an existing link. */
+function applyLinkEdit(
+  editor: Editor,
+  range: { from: number; to: number } | null,
+  href: string,
+  text: string,
+): void {
+  const url = href.trim();
+  const label = text.trim();
+  if (range) {
+    if (!url) {
+      editor.chain().focus().setTextSelection(range).extendMarkRange("link").unsetLink().run();
+      return;
     }
-    onClose();
-  };
+    const finalLabel = label || url;
+    const current = editor.state.doc.textBetween(range.from, range.to);
+    if (finalLabel !== current) {
+      editor
+        .chain()
+        .focus()
+        .insertContentAt(range, {
+          type: "text",
+          text: finalLabel,
+          marks: [{ type: "link", attrs: { href: url } }],
+        })
+        .run();
+    } else {
+      editor
+        .chain()
+        .focus()
+        .setTextSelection(range)
+        .extendMarkRange("link")
+        .setLink({ href: url })
+        .run();
+    }
+  } else {
+    if (!url) return;
+    const finalLabel = label || url;
+    editor
+      .chain()
+      .focus()
+      .insertContent({
+        type: "text",
+        text: finalLabel,
+        marks: [{ type: "link", attrs: { href: url } }],
+      })
+      .run();
+  }
+}
 
+/** Toolbar "Insert link": opens the shared [LinkDialog] pre-filled from the
+ * selection/caret, then applies the result. */
+function ToolbarLinkDialog({ editor, onClose }: { editor: Editor; onClose: () => void }) {
+  const target = useMemo(() => resolveLinkTarget(editor), [editor]);
   return (
-    <div className="v-linkeditor">
-      <input
-        autoFocus
-        type="url"
-        value={href}
-        placeholder="https://example.com"
-        onChange={(e) => setHref(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            apply();
-          } else if (e.key === "Escape") {
-            onClose();
-          }
-        }}
-      />
-      <button type="button" onClick={apply}>
-        Apply
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          editor.chain().focus().extendMarkRange("link").unsetLink().run();
-          onClose();
-        }}
-      >
-        Remove
-      </button>
-    </div>
+    <LinkDialog
+      title={target.href ? "Edit Link" : "Insert Link"}
+      initialHref={target.href}
+      initialText={target.text}
+      onSubmit={(href, text) => {
+        applyLinkEdit(editor, target.range, href, text);
+        onClose();
+      }}
+      onCancel={onClose}
+    />
   );
 }

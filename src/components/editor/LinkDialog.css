@@ -11,6 +11,11 @@
   font-weight: 600;
 }
 
+/* Space the second field group (Address) away from the first (Text). */
+.v-link-dialog label:not(:first-child) {
+  margin-top: var(--space-2);
+}
+
 .v-link-dialog input[type="text"] {
   padding: 4px 6px;
   font-family: var(--font-ui);

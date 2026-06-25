@@ -2,6 +2,7 @@ mod commands;
 mod config;
 mod db;
 mod grammar;
+mod link;
 mod notebook;
 mod paths;
 mod process;
@@ -95,6 +96,7 @@ pub fn run() {
             commands::search,
             commands::reindex_all,
             commands::grammar_check,
+            commands::fetch_link_title,
             commands::ollama_start,
             commands::ollama_stop,
             commands::ollama_status,

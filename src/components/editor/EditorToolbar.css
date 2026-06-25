@@ -109,36 +109,3 @@
 .v-editortoolbar__color.is-disabled input[type="color"] {
   cursor: default;
 }
-
-.v-linkeditor {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  background: var(--surface-panel);
-  border-bottom: 1px solid var(--border-default);
-}
-
-.v-linkeditor input {
-  flex: 1;
-  max-width: 360px;
-  padding: 3px 6px;
-  font-family: var(--font-ui);
-  font-size: var(--text-size-ui);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-control);
-}
-
-.v-linkeditor button {
-  padding: 3px 10px;
-  font-size: var(--text-size-ui);
-  border: 1px solid var(--button-border);
-  border-radius: var(--radius-control);
-  background: var(--gradient-button);
-  cursor: pointer;
-}
-
-.v-linkeditor button:hover {
-  border-color: var(--hover-border);
-  background: var(--gradient-hover);
-}

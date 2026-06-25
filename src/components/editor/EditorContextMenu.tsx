@@ -18,16 +18,14 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { Editor } from "@tiptap/react";
+import { Editor, getMarkRange } from "@tiptap/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ContextMenu, MenuItem } from "../ui/ContextMenu";
-import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
 import { grammarHitAt, GrammarHit } from "./GrammarError";
 import { ignoreInstance, ignoreRule } from "./grammar";
 import { readClipboard, execClipboard } from "../../lib/clipboard";
 import { requestOpenFind } from "./find";
-import "./EditorContextMenu.css";
+import { LinkDialog } from "./LinkDialog";
 
 interface Props {
   editor: Editor | null;
@@ -170,7 +168,9 @@ function buildMenu(
 
 export function EditorContextMenu({ editor, onAfterAction, buildRefineItems }: Props) {
   const [menu, setMenu] = useState<MenuState | null>(null);
-  const [editLink, setEditLink] = useState<{ pos: number; href: string } | null>(null);
+  const [editLink, setEditLink] = useState<{ pos: number; href: string; text: string } | null>(
+    null,
+  );
 
   // Refs keep the listener (registered once per editor) reading current props.
   const onAfterRef = useRef(onAfterAction);
@@ -187,7 +187,13 @@ export function EditorContextMenu({ editor, onAfterAction, buildRefineItems }: P
         editor,
         e,
         () => onAfterRef.current(),
-        (pos, href) => setEditLink({ pos, href }),
+        (pos, href) => {
+          // Capture the link's current visible text so the dialog can edit the
+          // label, not just the address.
+          const range = getMarkRange(editor.state.doc.resolve(pos), editor.schema.marks.link);
+          const text = range ? editor.state.doc.textBetween(range.from, range.to) : "";
+          setEditLink({ pos, href, text });
+        },
         buildRefineRef.current,
       );
       setMenu({ x: e.clientX, y: e.clientY, items });
@@ -198,11 +204,34 @@ export function EditorContextMenu({ editor, onAfterAction, buildRefineItems }: P
 
   if (!editor) return null;
 
-  const applyLink = (href: string) => {
+  const applyLink = (href: string, text: string) => {
     if (!editLink) return;
-    const chain = editor.chain().focus().setTextSelection(editLink.pos).extendMarkRange("link");
-    if (href) chain.setLink({ href }).run();
-    else chain.unsetLink().run();
+    const range = getMarkRange(editor.state.doc.resolve(editLink.pos), editor.schema.marks.link);
+    if (!range) {
+      setEditLink(null);
+      return;
+    }
+    // Empty address → drop the link entirely (keep the text in place).
+    if (!href) {
+      editor.chain().focus().setTextSelection(range).extendMarkRange("link").unsetLink().run();
+      setEditLink(null);
+      return;
+    }
+    const label = text.trim() || href;
+    const current = editor.state.doc.textBetween(range.from, range.to);
+    const chain = editor.chain().focus();
+    if (label !== current) {
+      // Rewrite the label, carrying the (possibly new) address on the new text.
+      chain.insertContentAt(range, {
+        type: "text",
+        text: label,
+        marks: [{ type: "link", attrs: { href } }],
+      });
+    } else {
+      // Label unchanged — just update the address across the whole link.
+      chain.setTextSelection(range).extendMarkRange("link").setLink({ href });
+    }
+    chain.run();
     setEditLink(null);
   };
 
@@ -213,57 +242,13 @@ export function EditorContextMenu({ editor, onAfterAction, buildRefineItems }: P
       )}
       {editLink && (
         <LinkDialog
-          initial={editLink.href}
+          title="Edit Link"
+          initialHref={editLink.href}
+          initialText={editLink.text}
           onSubmit={applyLink}
           onCancel={() => setEditLink(null)}
         />
       )}
     </>
-  );
-}
-
-function LinkDialog({
-  initial,
-  onSubmit,
-  onCancel,
-}: {
-  initial: string;
-  onSubmit: (href: string) => void;
-  onCancel: () => void;
-}) {
-  const [href, setHref] = useState(initial);
-  return (
-    <Modal
-      title="Edit Link"
-      open
-      onClose={onCancel}
-      width={420}
-      footer={
-        <>
-          <Button onClick={onCancel}>Cancel</Button>
-          <Button accent onClick={() => onSubmit(href.trim())}>
-            OK
-          </Button>
-        </>
-      }
-    >
-      <div className="v-link-dialog">
-        <label htmlFor="v-link-url">Address</label>
-        <input
-          id="v-link-url"
-          type="text"
-          value={href}
-          autoFocus
-          placeholder="https://example.com"
-          onChange={(e) => setHref(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              onSubmit(href.trim());
-            }
-          }}
-        />
-      </div>
-    </Modal>
   );
 }
