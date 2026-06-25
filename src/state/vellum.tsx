@@ -15,6 +15,7 @@ import {
   useState,
 } from "react";
 import * as api from "../data/api";
+import { randomPaletteColor } from "../data/palette";
 import type {
   Notebook,
   Page,
@@ -514,6 +515,27 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     }
   }, [reloadPages]);
 
+  // Create a section (with a random color + one blank page so it's never empty)
+  // in a notebook, returning it with its color. Pure DB writes — the caller is
+  // responsible for any reload. Shared by createSection and createNotebook so the
+  // "every section starts with a page" invariant lives in exactly one place.
+  const createSectionWithPage = useCallback(
+    async (notebookId: string, name: string): Promise<Section> => {
+      const section = await api.createSection(notebookId, name);
+      const color = randomPaletteColor();
+      await api.updateSection(
+        notebookId,
+        section.id,
+        section.name,
+        color,
+        section.pageTemplateId,
+      );
+      await api.createPage(notebookId, section.id, "");
+      return { ...section, color };
+    },
+    [],
+  );
+
   const actions: VellumActions = {
     reload,
     refreshPages: refreshSelectedPages,
@@ -630,8 +652,13 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     createNotebook: async (name) => {
       try {
         const nb = await api.createNotebook(name);
+        const color = randomPaletteColor();
+        await api.setNotebookColor(nb.id, color);
+        // A new notebook starts with one section (which itself starts with a
+        // blank page) so it's never empty.
+        await createSectionWithPage(nb.id, "New Section");
         await reload();
-        return nb;
+        return { ...nb, color };
       } catch (e) {
         fail(e);
         return null;
@@ -682,7 +709,7 @@ export function VellumProvider({ children }: { children: ReactNode }) {
 
     createSection: async (notebookId, name) => {
       try {
-        const section = await api.createSection(notebookId, name);
+        const section = await createSectionWithPage(notebookId, name);
         await afterSectionChange(notebookId);
         return section;
       } catch (e) {
@@ -708,17 +735,32 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     },
     deleteSection: async (notebookId, sectionId) => {
       try {
+        // Capture the neighbor (prefer the next section, else the previous one)
+        // before deleting so a deleted-while-selected section navigates there
+        // instead of leaving nothing selected.
+        const wasSelected = ref.current.selectedSectionId === sectionId;
+        const sections =
+          ref.current.notebooks.find((n) => n.id === notebookId)?.sections ?? [];
+        const idx = sections.findIndex((sec) => sec.id === sectionId);
+        const neighbor =
+          idx >= 0 ? sections[idx + 1] ?? sections[idx - 1] ?? null : null;
+
         await api.deleteSection(notebookId, sectionId);
-        setState((s) => {
-          const wasSelected = s.selectedSectionId === sectionId;
-          return {
-            ...s,
-            selectedSectionId: wasSelected ? null : s.selectedSectionId,
-            selectedPageId: wasSelected ? null : s.selectedPageId,
-            pages: wasSelected ? [] : s.pages,
-          };
-        });
         await afterSectionChange(notebookId);
+
+        if (wasSelected) {
+          if (neighbor) {
+            await selectSection(notebookId, neighbor.id);
+          } else {
+            // Last section in the notebook is gone — clear the selection.
+            setState((s) => ({
+              ...s,
+              selectedSectionId: null,
+              selectedPageId: null,
+              pages: [],
+            }));
+          }
+        }
       } catch (e) {
         fail(e);
       }
@@ -762,12 +804,20 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     },
     deletePage: async (notebookId, pageId) => {
       try {
+        // If we're deleting the open page, land on the adjacent one (the next
+        // page, else the previous) computed from the CURRENT in-memory order so
+        // a prior reorder is respected — instead of dropping to a blank view.
+        const wasSelected = ref.current.selectedPageId === pageId;
+        const cur = ref.current.pages;
+        const idx = cur.findIndex((p) => p.id === pageId);
+        const neighborId =
+          idx >= 0 ? (cur[idx + 1] ?? cur[idx - 1])?.id ?? null : null;
+
         await api.deletePage(notebookId, pageId);
-        setState((s) => ({
-          ...s,
-          selectedPageId: s.selectedPageId === pageId ? null : s.selectedPageId,
-        }));
         await refreshSelectedPages();
+        if (wasSelected) {
+          setState((s) => ({ ...s, selectedPageId: neighborId }));
+        }
       } catch (e) {
         fail(e);
       }
@@ -783,12 +833,20 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     },
     movePage: async (notebookId, pageId, toSectionId) => {
       try {
+        // Remember the page directly above the one being moved (fall back to the
+        // one below if it was at the top) so moving the open page lands there
+        // instead of a blank view.
+        const wasSelected = ref.current.selectedPageId === pageId;
+        const cur = ref.current.pages;
+        const idx = cur.findIndex((p) => p.id === pageId);
+        const neighborId =
+          idx >= 0 ? (cur[idx - 1] ?? cur[idx + 1])?.id ?? null : null;
+
         await api.movePage(notebookId, pageId, toSectionId);
-        setState((s) => ({
-          ...s,
-          selectedPageId: s.selectedPageId === pageId ? null : s.selectedPageId,
-        }));
         await refreshSelectedPages();
+        if (wasSelected) {
+          setState((s) => ({ ...s, selectedPageId: neighborId }));
+        }
       } catch (e) {
         fail(e);
       }

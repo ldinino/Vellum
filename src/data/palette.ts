@@ -20,3 +20,12 @@ export const PALETTE: Swatch[] = [
 
 export const DEFAULT_NOTEBOOK_COLOR = PALETTE[0].value;
 export const DEFAULT_SECTION_COLOR = PALETTE[1].value;
+
+/**
+ * A random palette color, assigned to newly created notebooks/sections so they
+ * don't all default to the same swatch. The choice is persisted at creation
+ * (picking at render time would reshuffle on every re-render).
+ */
+export function randomPaletteColor(): string {
+  return PALETTE[Math.floor(Math.random() * PALETTE.length)].value;
+}
