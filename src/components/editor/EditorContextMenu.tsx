@@ -21,7 +21,7 @@ import { useEffect, useRef, useState } from "react";
 import { Editor, getMarkRange } from "@tiptap/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ContextMenu, MenuItem } from "../ui/ContextMenu";
-import { grammarHitAt, GrammarHit } from "./GrammarError";
+import { grammarHitAt, GrammarHit, suggestionLabel } from "./GrammarError";
 import { ignoreInstance, ignoreRule } from "./grammar";
 import { readClipboard, execClipboard } from "../../lib/clipboard";
 import { requestOpenFind } from "./find";
@@ -75,7 +75,7 @@ function lintItems(editor: Editor, hit: GrammarHit, onAfter: () => void): MenuIt
   } else {
     for (const s of hit.suggestions.slice(0, 6)) {
       items.push({
-        label: s === "" ? "Remove" : s,
+        label: suggestionLabel(s),
         onSelect: () => {
           const chain = editor.chain().focus();
           if (s === "") chain.deleteRange({ from: hit.from, to: hit.to }).run();
