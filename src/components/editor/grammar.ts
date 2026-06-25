@@ -121,8 +121,16 @@ export function mapLints(
 const ignoredRules = new Set<string>();
 const ignoredInstances = new Set<string>();
 
-export function ignoreRule(kind: string) {
-  ignoredRules.add(kind);
+/** Replace the set of ignored rule kinds (loaded from persisted settings, spec
+ * Section 10). Keeps the live underline filter in sync with Settings → Proofing. */
+export function setIgnoredRules(kinds: string[]) {
+  ignoredRules.clear();
+  for (const k of kinds) ignoredRules.add(k);
+}
+
+/** Stop ignoring a rule kind; its underlines return on the next lint. */
+export function unignoreRule(kind: string) {
+  ignoredRules.delete(kind);
 }
 
 export function ignoreInstance(instanceKey: string) {

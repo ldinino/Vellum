@@ -15,10 +15,12 @@
 //! pool, so only a handful of threads ever build one).
 
 use std::cell::RefCell;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, RwLock};
 
 use harper_core::linting::{LintGroup, LintKind, Linter, Suggestion};
-use harper_core::spell::FstDictionary;
-use harper_core::{Dialect, Document};
+use harper_core::spell::{Dictionary, FstDictionary, MergedDictionary, MutableDictionary};
+use harper_core::{Dialect, DictWordMetadata, Document};
 use serde::Serialize;
 
 #[derive(Debug, Serialize)]
@@ -43,7 +45,54 @@ pub struct GrammarSpan {
 }
 
 thread_local! {
-    static LINTER: RefCell<Option<LintGroup>> = const { RefCell::new(None) };
+    // (generation, dictionary, linter): rebuilt when the global dictionary
+    // generation changes (a word was added/removed). The merged dictionary is
+    // kept alongside the linter so the document is parsed with the SAME
+    // dictionary the linter checks against — otherwise a freshly added word is
+    // still tagged "unknown" at parse time and flagged as a misspelling.
+    static LINTER: RefCell<Option<(u64, Arc<MergedDictionary>, LintGroup)>> =
+        const { RefCell::new(None) };
+}
+
+/// The user's custom dictionary words (spec Section 10), shared across worker
+/// threads. Set at startup from `app.json` and whenever the user adds/removes a
+/// word; bumping `DICT_GEN` invalidates every thread's cached linter.
+static USER_WORDS: RwLock<Vec<String>> = RwLock::new(Vec::new());
+static DICT_GEN: AtomicU64 = AtomicU64::new(0);
+
+/// Replace the set of user dictionary words and invalidate cached linters so the
+/// next lint on every thread rebuilds with the new dictionary.
+pub fn set_user_words(words: Vec<String>) {
+    if let Ok(mut w) = USER_WORDS.write() {
+        *w = words;
+    }
+    DICT_GEN.fetch_add(1, Ordering::SeqCst);
+}
+
+/// Build the dictionary (curated merged with the user's custom words) and a
+/// `LintGroup` over it, so added words (product names, jargon) stop being
+/// flagged as misspellings. The curated dictionary is inserted first so its
+/// richer metadata wins on any overlap. The dictionary is returned too so the
+/// caller can parse documents with it.
+fn build_linter() -> (Arc<MergedDictionary>, LintGroup) {
+    let mut merged = MergedDictionary::new();
+    let curated: Arc<dyn Dictionary> = FstDictionary::curated();
+    merged.add_dictionary(curated);
+
+    if let Ok(words) = USER_WORDS.read() {
+        if !words.is_empty() {
+            let mut user = MutableDictionary::new();
+            for w in words.iter() {
+                user.append_word_str(w, DictWordMetadata::default());
+            }
+            let user: Arc<dyn Dictionary> = Arc::new(user);
+            merged.add_dictionary(user);
+        }
+    }
+
+    let merged = Arc::new(merged);
+    let group = LintGroup::new_curated(merged.clone(), Dialect::American);
+    (merged, group)
 }
 
 /// Lint `text` and return spans with suggestions. English-only (v1).
@@ -52,12 +101,21 @@ pub fn check(text: &str) -> Vec<GrammarSpan> {
         return Vec::new();
     }
 
-    let doc = Document::new_plain_english_curated(text);
     let lints = LINTER.with(|cell| {
         let mut opt = cell.borrow_mut();
-        let group = opt.get_or_insert_with(|| {
-            LintGroup::new_curated(FstDictionary::curated(), Dialect::American)
-        });
+        let generation = DICT_GEN.load(Ordering::SeqCst);
+        let stale = match opt.as_ref() {
+            Some((g, _, _)) => *g != generation,
+            None => true,
+        };
+        if stale {
+            let (dict, group) = build_linter();
+            *opt = Some((generation, dict, group));
+        }
+        let (_, dict, group) = opt.as_mut().expect("linter built above");
+        // Parse with the merged dictionary so custom words are known at parse
+        // time (otherwise the spell linter re-flags them).
+        let doc = Document::new_plain_english(text, &**dict);
         group.lint(&doc)
     });
 
@@ -123,6 +181,22 @@ mod tests {
     #[test]
     fn empty_text_is_safe() {
         assert!(check("   ").is_empty());
+    }
+
+    #[test]
+    fn custom_dictionary_suppresses_spelling_lint() {
+        // A nonsense token is flagged as a misspelling...
+        let sentence = "I really like Qwertzuiop today.";
+        set_user_words(Vec::new());
+        let flagged_before = check(sentence).iter().any(|s| s.is_spelling);
+        // ...until the user adds it to their dictionary.
+        set_user_words(vec!["Qwertzuiop".to_string()]);
+        let flagged_after = check(sentence).iter().any(|s| s.is_spelling);
+        // Restore global state first so a failed assertion can't leave the
+        // shared dictionary dirty for other tests.
+        set_user_words(Vec::new());
+        assert!(flagged_before, "expected the nonsense word to be flagged first");
+        assert!(!flagged_after, "expected no spelling lint after adding the word");
     }
 
     #[test]

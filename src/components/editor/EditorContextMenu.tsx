@@ -22,7 +22,7 @@ import { Editor, getMarkRange } from "@tiptap/react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ContextMenu, MenuItem } from "../ui/ContextMenu";
 import { grammarHitAt, GrammarHit, suggestionLabel } from "./GrammarError";
-import { ignoreInstance, ignoreRule } from "./grammar";
+import { ignoreInstance } from "./grammar";
 import { readClipboard, execClipboard } from "../../lib/clipboard";
 import { requestOpenFind } from "./find";
 import { LinkDialog } from "./LinkDialog";
@@ -31,6 +31,10 @@ interface Props {
   editor: Editor | null;
   /** Re-run the linter after an accept/ignore so underlines refresh. */
   onAfterAction: () => void;
+  /** Add a misspelled word to the persistent dictionary (spec Section 10). */
+  onAddToDictionary: (word: string) => void | Promise<void>;
+  /** Ignore a grammar rule category persistently ("Ignore this rule"). */
+  onIgnoreRule: (kind: string) => void | Promise<void>;
   /**
    * Phase 8 seam: given the current selection's text, return Refine menu items
    * ("Refine…" for one template, "Refine ▶" submenu for several). Inserted into
@@ -67,8 +71,19 @@ function clipboardItems(editor: Editor): MenuItem[] {
   ];
 }
 
-/** Suggestions + Ignore (+ Ignore Rule for grammar). */
-function lintItems(editor: Editor, hit: GrammarHit, onAfter: () => void): MenuItem[] {
+/**
+ * Suggestions, then the management actions, which differ by lint type:
+ *  - spelling → "Add to Dictionary" (persistent, reversible in Settings →
+ *    Proofing) and "Ignore once" (this app session only)
+ *  - grammar  → "Ignore once" and "Ignore this rule" (persistent, reversible)
+ */
+function lintItems(
+  editor: Editor,
+  hit: GrammarHit,
+  onAfter: () => void,
+  onAddToDictionary: (word: string) => void | Promise<void>,
+  onIgnoreRule: (kind: string) => void | Promise<void>,
+): MenuItem[] {
   const items: MenuItem[] = [];
   if (hit.suggestions.length === 0) {
     items.push({ label: "No suggestions", disabled: true });
@@ -86,21 +101,41 @@ function lintItems(editor: Editor, hit: GrammarHit, onAfter: () => void): MenuIt
     }
   }
   items[items.length - 1].separatorAfter = true;
-  items.push({
-    label: "Ignore",
-    icon: "cross-small",
-    onSelect: () => {
-      ignoreInstance(hit.instanceKey);
-      onAfter();
-    },
-  });
-  if (!hit.isSpelling) {
+
+  if (hit.isSpelling) {
+    // Adding the word is the permanent, reversible action; "Ignore once" only
+    // hides this occurrence until the app restarts.
+    const word = editor.state.doc.textBetween(hit.from, hit.to).trim();
     items.push({
-      label: "Ignore Rule",
+      label: "Add to Dictionary",
+      icon: "book--plus",
+      disabled: word === "",
+      onSelect: () => {
+        void Promise.resolve(onAddToDictionary(word)).then(onAfter);
+      },
+    });
+    items.push({
+      label: "Ignore once",
+      icon: "cross-small",
+      onSelect: () => {
+        ignoreInstance(hit.instanceKey);
+        onAfter();
+      },
+    });
+  } else {
+    items.push({
+      label: "Ignore once",
+      icon: "cross-small",
+      onSelect: () => {
+        ignoreInstance(hit.instanceKey);
+        onAfter();
+      },
+    });
+    items.push({
+      label: "Ignore this rule",
       icon: "eraser",
       onSelect: () => {
-        ignoreRule(hit.kind);
-        onAfter();
+        void Promise.resolve(onIgnoreRule(hit.kind)).then(onAfter);
       },
     });
   }
@@ -132,6 +167,8 @@ function buildMenu(
   e: MouseEvent,
   onAfter: () => void,
   onEdit: (pos: number, href: string) => void,
+  onAddToDictionary: (word: string) => void | Promise<void>,
+  onIgnoreRule: (kind: string) => void | Promise<void>,
   buildRefine?: (text: string) => MenuItem[],
 ): MenuItem[] {
   const at = editor.view.posAtCoords({ left: e.clientX, top: e.clientY });
@@ -139,7 +176,7 @@ function buildMenu(
 
   // 1. grammar / spelling underline under the cursor
   const hit = at ? grammarHitAt(editor, at.pos) : null;
-  if (hit) return lintItems(editor, hit, onAfter);
+  if (hit) return lintItems(editor, hit, onAfter, onAddToDictionary, onIgnoreRule);
 
   // 2. link under the cursor — link actions, then clipboard
   const a = (e.target as HTMLElement)?.closest?.("a");
@@ -166,7 +203,13 @@ function buildMenu(
   return items;
 }
 
-export function EditorContextMenu({ editor, onAfterAction, buildRefineItems }: Props) {
+export function EditorContextMenu({
+  editor,
+  onAfterAction,
+  onAddToDictionary,
+  onIgnoreRule,
+  buildRefineItems,
+}: Props) {
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [editLink, setEditLink] = useState<{ pos: number; href: string; text: string } | null>(
     null,
@@ -175,6 +218,10 @@ export function EditorContextMenu({ editor, onAfterAction, buildRefineItems }: P
   // Refs keep the listener (registered once per editor) reading current props.
   const onAfterRef = useRef(onAfterAction);
   onAfterRef.current = onAfterAction;
+  const onAddWordRef = useRef(onAddToDictionary);
+  onAddWordRef.current = onAddToDictionary;
+  const onIgnoreRuleRef = useRef(onIgnoreRule);
+  onIgnoreRuleRef.current = onIgnoreRule;
   const buildRefineRef = useRef(buildRefineItems);
   buildRefineRef.current = buildRefineItems;
 
@@ -194,6 +241,8 @@ export function EditorContextMenu({ editor, onAfterAction, buildRefineItems }: P
           const text = range ? editor.state.doc.textBetween(range.from, range.to) : "";
           setEditLink({ pos, href, text });
         },
+        (word) => onAddWordRef.current(word),
+        (kind) => onIgnoreRuleRef.current(kind),
         buildRefineRef.current,
       );
       setMenu({ x: e.clientX, y: e.clientY, items });

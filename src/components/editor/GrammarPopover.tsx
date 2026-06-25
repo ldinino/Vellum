@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Editor } from "@tiptap/react";
 import { grammarHitAt, GrammarHit, suggestionLabel } from "./GrammarError";
+import { Icon } from "../ui/Icon";
 import "./GrammarPopover.css";
 
 interface Anchored {
@@ -19,9 +20,11 @@ interface Anchored {
 export function GrammarPopover({
   editor,
   onAfterAction,
+  onAddToDictionary,
 }: {
   editor: Editor | null;
   onAfterAction: () => void;
+  onAddToDictionary: (word: string) => void | Promise<void>;
 }) {
   const [tooltip, setTooltip] = useState<Anchored | null>(null);
   const hideTimer = useRef<number | null>(null);
@@ -75,6 +78,15 @@ export function GrammarPopover({
     onAfterAction();
   };
 
+  // Add the hovered (misspelled) word to the persistent dictionary, then re-lint
+  // so its underline clears. Only offered for spelling hits.
+  const addWord = (hit: GrammarHit) => {
+    const word = editor.state.doc.textBetween(hit.from, hit.to).trim();
+    if (!word) return;
+    setTooltip(null);
+    void Promise.resolve(onAddToDictionary(word)).then(onAfterAction);
+  };
+
   return (
     <>
       {tooltip && (
@@ -85,7 +97,20 @@ export function GrammarPopover({
           onMouseLeave={scheduleHide}
           role="tooltip"
         >
-          <div className="v-grammar-tip__msg">{tooltip.hit.message}</div>
+          <div className="v-grammar-tip__header">
+            <span className="v-grammar-tip__msg">{tooltip.hit.message}</span>
+            {tooltip.hit.isSpelling && (
+              <button
+                type="button"
+                className="v-grammar-tip__add"
+                title="Add to dictionary"
+                aria-label="Add to dictionary"
+                onClick={() => addWord(tooltip.hit)}
+              >
+                <Icon name="plus-small" />
+              </button>
+            )}
+          </div>
           <div className="v-grammar-tip__rule">{tooltip.hit.kind}</div>
           {tooltip.hit.suggestions.length > 0 && (
             <div className="v-grammar-tip__suggestions">

@@ -12,9 +12,35 @@
   font-size: var(--text-size-ui);
 }
 
+.v-grammar-tip__header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
 .v-grammar-tip__msg {
+  flex: 1;
   color: var(--text-primary);
   line-height: 1.4;
+}
+
+/* Compact "+" that adds the hovered word to the dictionary (spec Section 10). */
+.v-grammar-tip__add {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--gradient-button);
+  cursor: pointer;
+}
+
+.v-grammar-tip__add:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
 }
 
 .v-grammar-tip__rule {
