@@ -183,6 +183,108 @@ pub fn get_paths(app: AppHandle) -> Result<AppPaths, String> {
 }
 
 // ---------------------------------------------------------------------------
+// Export / Print & version info (Phase 10, spec Sections 14 / 15)
+// ---------------------------------------------------------------------------
+
+/// One file to copy alongside an exported page: a notebook-relative source (an
+/// inline image or an attachment) and the basename it gets in the export's
+/// sibling `<Title> files/` folder. Dest names are deduped by the renderer.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportCopy {
+    /// Notebook-relative path (e.g. `attachments/<page>/<uuid>/<file>`).
+    src_rel: String,
+    /// Destination filename within the export files folder.
+    dest_name: String,
+}
+
+/// Write a page's Markdown to `md_path` and copy its images + attachments into a
+/// sibling `<files_dir_name>/` folder next to it (spec Section 14). The Markdown
+/// and the dest filenames are produced by the renderer (HTML → Markdown); this
+/// command owns the filesystem writes. Source paths are validated against the
+/// notebook dir (no traversal) and dest names are sanitized.
+#[tauri::command]
+pub fn export_page(
+    app: AppHandle,
+    notebook_id: String,
+    md_path: String,
+    markdown: String,
+    files_dir_name: String,
+    copies: Vec<ExportCopy>,
+) -> Result<(), String> {
+    let md_path = std::path::PathBuf::from(&md_path);
+    let parent = md_path
+        .parent()
+        .ok_or_else(|| "Export path has no parent directory".to_string())?;
+
+    if !copies.is_empty() {
+        let nb_dir = notebook_folder(&app, &notebook_id)?;
+        let files_dir = parent.join(sanitize_attachment_name(&files_dir_name));
+        std::fs::create_dir_all(&files_dir)
+            .map_err(|e| format!("create {}: {e}", files_dir.display()))?;
+        for c in &copies {
+            // Source comes from our own DB/editor, but reject traversal defensively
+            // (matches open_attachment).
+            if c.src_rel.split(['/', '\\']).any(|p| p == "..") {
+                return Err(format!("Invalid source path: {}", c.src_rel));
+            }
+            let src = nb_dir.join(&c.src_rel);
+            // A referenced file that's missing on disk is skipped rather than
+            // aborting the whole export.
+            if !src.is_file() {
+                continue;
+            }
+            let dest = files_dir.join(sanitize_attachment_name(&c.dest_name));
+            std::fs::copy(&src, &dest).map_err(|e| format!("copy {}: {e}", src.display()))?;
+        }
+    }
+
+    std::fs::write(&md_path, markdown.as_bytes())
+        .map_err(|e| format!("write {}: {e}", md_path.display()))?;
+    Ok(())
+}
+
+/// Harper (`harper-core`) version. harper-core exposes no runtime version
+/// constant, so it's maintained here — keep in sync with Cargo.toml when the
+/// dependency is bumped (shown in Settings → About).
+const HARPER_VERSION: &str = "2.5.0";
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionInfo {
+    /// Vellum app version (Cargo.toml / tauri.conf.json / package.json).
+    pub app: String,
+    /// Harper grammar engine version.
+    pub harper: String,
+    /// Pinned Ollama runtime version from the bundled manifest (e.g. "v0.30.10").
+    pub ollama: String,
+}
+
+/// Versions shown in Settings → About (spec Section 15). The Ollama version is
+/// the pinned manifest value, not a check of what's installed.
+#[tauri::command]
+pub fn get_version_info(app: AppHandle) -> Result<VersionInfo, String> {
+    let ollama = crate::refine::manifest::load_manifest(&app)
+        .map(|m| m.ollama.version)
+        .unwrap_or_else(|_| "unknown".to_string());
+    Ok(VersionInfo {
+        app: env!("CARGO_PKG_VERSION").to_string(),
+        harper: HARPER_VERSION.to_string(),
+        ollama,
+    })
+}
+
+/// Reveal the app data folder (`Documents\Vellum`) in the system file manager
+/// (Settings → General "Open folder").
+#[tauri::command]
+pub fn reveal_data_dir(app: AppHandle) -> Result<(), String> {
+    let dir = paths::data_dir(&app)?;
+    app.opener()
+        .open_path(dir.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|e| format!("open data dir: {e}"))
+}
+
+// ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 

@@ -67,6 +67,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_paths,
+            commands::export_page,
+            commands::get_version_info,
+            commands::reveal_data_dir,
             commands::get_app_config,
             commands::save_app_config,
             commands::list_notebooks,

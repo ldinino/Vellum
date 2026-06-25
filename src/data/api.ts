@@ -4,10 +4,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   AppConfig,
+  AppPaths,
   Attachment,
   DebugGenerateRequest,
   DebugGenerateResult,
   DetectedHardware,
+  ExportCopy,
   GrammarSpan,
   InstalledModel,
   Manifest,
@@ -23,6 +25,7 @@ import type {
   Section,
   SearchFilters,
   SearchHit,
+  VersionInfo,
 } from "./types";
 
 // --- App config (app.json) --------------------------------------------------
@@ -31,6 +34,27 @@ export const getAppConfig = () => invoke<AppConfig>("get_app_config");
 
 export const saveAppConfig = (config: AppConfig) =>
   invoke<void>("save_app_config", { config });
+
+// --- Paths / versions / export (Phase 10) -----------------------------------
+
+/** Filesystem locations (Settings → General). */
+export const getPaths = () => invoke<AppPaths>("get_paths");
+
+/** App / Harper / Ollama versions (Settings → About). */
+export const getVersionInfo = () => invoke<VersionInfo>("get_version_info");
+
+/** Reveal Documents\Vellum in the system file manager (Settings → General). */
+export const revealDataDir = () => invoke<void>("reveal_data_dir");
+
+/** Write a page's Markdown to `mdPath` and copy its images/attachments into a
+ * sibling `<filesDirName>/` folder next to it (spec Section 14). */
+export const exportPage = (
+  notebookId: string,
+  mdPath: string,
+  markdown: string,
+  filesDirName: string,
+  copies: ExportCopy[],
+) => invoke<void>("export_page", { notebookId, mdPath, markdown, filesDirName, copies });
 
 // --- Grammar (Harper, spec Section 10) --------------------------------------
 

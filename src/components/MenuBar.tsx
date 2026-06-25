@@ -11,17 +11,29 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ContextMenu, MenuItem } from "./ui/ContextMenu";
 import { useActiveEditor } from "../state/activeEditor";
 import { requestOpenFind } from "./editor/find";
+import { exportCurrentPage } from "../lib/export-markdown";
+import { printCurrentPage } from "../lib/print-page";
 import { useVellum } from "../state/vellum";
 import "./MenuBar.css";
 
 const inTauri = "__TAURI_INTERNALS__" in window;
 
-export function MenuBar({ onOpenSettings }: { onOpenSettings: () => void }) {
+export function MenuBar({ onOpenSettings }: { onOpenSettings: (tab?: string) => void }) {
   const { active } = useActiveEditor();
   const editor = active?.editor ?? null;
-  const { actions, grammarEnabled, spellcheckEnabled, selectedNotebookId, selectedSectionId } =
-    useVellum();
+  const {
+    actions,
+    grammarEnabled,
+    spellcheckEnabled,
+    selectedNotebookId,
+    selectedSectionId,
+    selectedPageId,
+    pages,
+  } = useVellum();
   const [open, setOpen] = useState<{ id: string; x: number; y: number } | null>(null);
+  // The open page (drives Export / Print).
+  const currentPage = pages.find((p) => p.id === selectedPageId) ?? null;
+  const canExport = !!editor && !!currentPage && !!selectedNotebookId;
 
   const openAt = (id: string, target: HTMLElement) => {
     const r = target.getBoundingClientRect();
@@ -59,7 +71,41 @@ export function MenuBar({ onOpenSettings }: { onOpenSettings: () => void }) {
       separatorAfter: true,
     },
     {
+      label: "Export Page as Markdown…",
+      icon: "document-export",
+      disabled: !canExport,
+      onSelect: () => {
+        if (editor && currentPage && selectedNotebookId) {
+          void exportCurrentPage({
+            editor,
+            notebookId: selectedNotebookId,
+            pageId: currentPage.id,
+            title: currentPage.title,
+            onError: actions.setError,
+          });
+        }
+      },
+    },
+    {
+      label: "Print…",
+      icon: "printer",
+      disabled: !canExport,
+      onSelect: () => {
+        if (editor && currentPage && selectedNotebookId) {
+          void printCurrentPage({
+            editor,
+            notebookId: selectedNotebookId,
+            pageId: currentPage.id,
+            title: currentPage.title,
+            onError: actions.setError,
+          });
+        }
+      },
+      separatorAfter: true,
+    },
+    {
       label: "Exit",
+      icon: "door-open-in",
       disabled: !inTauri,
       onSelect: () => {
         if (inTauri) getCurrentWindow().close().catch(() => {});
@@ -224,7 +270,15 @@ export function MenuBar({ onOpenSettings }: { onOpenSettings: () => void }) {
       onSelect: () => actions.setGrammarEnabled(!grammarEnabled),
       separatorAfter: true,
     },
-    { label: "Settings…", icon: "gear", onSelect: onOpenSettings },
+    { label: "Settings…", icon: "gear", onSelect: () => onOpenSettings() },
+  ];
+
+  const helpItems = (): MenuItem[] => [
+    {
+      label: "About Vellum",
+      icon: "information",
+      onSelect: () => onOpenSettings("about"),
+    },
   ];
 
   const menus: { id: string; label: string; items: () => MenuItem[] }[] = [
@@ -232,6 +286,7 @@ export function MenuBar({ onOpenSettings }: { onOpenSettings: () => void }) {
     { id: "edit", label: "Edit", items: editItems },
     { id: "insert", label: "Insert", items: insertItems },
     { id: "tools", label: "Tools", items: toolsItems },
+    { id: "help", label: "Help", items: helpItems },
   ];
 
   return (

@@ -59,7 +59,9 @@ impl Default for AppSettings {
             grammar_enabled: true,
             spellcheck_enabled: true,
             default_font: "Segoe UI".into(),
-            default_font_size: 11,
+            // 14px = the editor's base size token (--text-size-editor); keep in
+            // sync so a fresh app.json matches the default page look.
+            default_font_size: 14,
             refine_adherence: 0.5,
             refine_model_tier: None,
             grammar_language: "en-US".into(),

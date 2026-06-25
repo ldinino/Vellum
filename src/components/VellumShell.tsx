@@ -16,6 +16,7 @@ import { FirstRunModal } from "./settings/FirstRunModal";
 import { AppContextMenus } from "./AppContextMenus";
 import { useVellum } from "../state/vellum";
 import { useActiveEditor } from "../state/activeEditor";
+import { printCurrentPage } from "../lib/print-page";
 import { DEFAULT_SECTION_COLOR } from "../data/palette";
 import { Icon } from "./ui/Icon";
 import "./VellumShell.css";
@@ -29,7 +30,8 @@ const NAV_COLLAPSED_KEY = "vellum.navCollapsed";
  * content row: editor (center) | page-tab strip (right). (OneNote 2007 layout.)
  */
 export function VellumShell() {
-  const { error, actions, notebooks, selectedNotebookId, selectedSectionId } = useVellum();
+  const { error, actions, notebooks, pages, selectedNotebookId, selectedSectionId, selectedPageId } =
+    useVellum();
   const { active } = useActiveEditor();
   // Always-current ref to the open page's inline-image cleanup, so the close
   // listener (registered once) sweeps whichever page is open at quit time.
@@ -67,6 +69,7 @@ export function VellumShell() {
     null,
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsTab, setSettingsTab] = useState("general");
   const [recycleBinOpen, setRecycleBinOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
     try {
@@ -117,6 +120,34 @@ export function VellumShell() {
     };
   }, [openFind]);
 
+  // Print the open page (Ctrl+P): render its content into an isolated iframe and
+  // print that, replacing WebView2's native print (disabled in release builds).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        !e.altKey &&
+        !e.shiftKey &&
+        (e.key === "p" || e.key === "P")
+      ) {
+        e.preventDefault();
+        const editor = active?.editor;
+        if (selectedPageId && selectedNotebookId && editor) {
+          const title = pages.find((p) => p.id === selectedPageId)?.title ?? "";
+          void printCurrentPage({
+            editor,
+            notebookId: selectedNotebookId,
+            pageId: selectedPageId,
+            title,
+            onError: actions.setError,
+          });
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [selectedPageId, selectedNotebookId, pages, active, actions]);
+
   // The open section's color tints the page border + page-tab strip (OneNote
   // 2007). Derived from loaded state; defaults until a section is selected.
   const sectionColor =
@@ -126,7 +157,12 @@ export function VellumShell() {
 
   return (
     <div className="v-shell" style={{ ["--section-color" as string]: sectionColor }}>
-      <MenuBar onOpenSettings={() => setSettingsOpen(true)} />
+      <MenuBar
+        onOpenSettings={(tab) => {
+          setSettingsTab(tab ?? "general");
+          setSettingsOpen(true);
+        }}
+      />
       <TopToolbar />
 
       {error && (
@@ -173,7 +209,11 @@ export function VellumShell() {
         />
       )}
 
-      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsModal
+        open={settingsOpen}
+        initialTab={settingsTab}
+        onClose={() => setSettingsOpen(false)}
+      />
       <RecycleBinModal open={recycleBinOpen} onClose={() => setRecycleBinOpen(false)} />
       <FirstRunModal />
       <AppContextMenus />

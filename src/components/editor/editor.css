@@ -2,8 +2,11 @@
 
 .v-prose {
   outline: none;
-  font-family: var(--font-ui);
-  font-size: var(--text-size-editor);
+  /* Default font/size come from Settings → Editor, applied as CSS vars on the
+     document root by the state layer; fall back to the global tokens before
+     config loads. Explicit textStyle marks from the toolbar still override. */
+  font-family: var(--editor-font, var(--font-ui));
+  font-size: var(--editor-font-size, var(--text-size-editor));
   line-height: 1.6;
   color: var(--text-primary);
   /* Fill the scroll area so the whole page is a click target. Padding lives here

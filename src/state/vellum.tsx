@@ -47,6 +47,10 @@ interface VellumState {
   grammarEnabled: boolean;
   /** Spell check on/off (Harper spelling, persisted in app.json). */
   spellcheckEnabled: boolean;
+  /** Editor default font family + size (Settings → Editor; applied as CSS vars
+   * on the document root, so unstyled page text uses them). */
+  defaultFont: string;
+  defaultFontSize: number;
   /** Words the user added to the Harper dictionary (app.json, spec Section 10). */
   customDictionary: string[];
   /** Grammar lint categories the user has ignored via "Ignore this rule". */
@@ -82,6 +86,8 @@ const initial: VellumState = {
   searchHighlight: "",
   grammarEnabled: true,
   spellcheckEnabled: true,
+  defaultFont: "Segoe UI",
+  defaultFontSize: 14,
   customDictionary: [],
   ignoredGrammarRules: [],
   pageTemplates: [],
@@ -146,6 +152,10 @@ export interface VellumActions {
 
   setGrammarEnabled: (enabled: boolean) => Promise<void>;
   setSpellcheckEnabled: (enabled: boolean) => Promise<void>;
+  /** Set the editor default font family (Settings → Editor; persisted + applied). */
+  setDefaultFont: (font: string) => Promise<void>;
+  /** Set the editor default font size in px (Settings → Editor; persisted + applied). */
+  setDefaultFontSize: (size: number) => Promise<void>;
   /** Add a word to the Harper dictionary (persisted + synced to the engine). */
   addDictionaryWord: (word: string) => Promise<void>;
   /** Remove a word from the Harper dictionary. */
@@ -240,6 +250,17 @@ function writeLastPage(sectionId: string, pageId: string) {
   } catch {
     // localStorage unavailable — non-fatal.
   }
+}
+
+/** Apply the configured editor default font + size as CSS custom properties on
+ * the document root (consumed by `.v-prose`; see editor.css). Called on config
+ * load and whenever the setting changes so unstyled page text updates live. */
+function applyEditorFont(font: string, size: number) {
+  const root = document.documentElement;
+  if (font) root.style.setProperty("--editor-font", `"${font}"`);
+  else root.style.removeProperty("--editor-font");
+  if (size > 0) root.style.setProperty("--editor-font-size", `${size}px`);
+  else root.style.removeProperty("--editor-font-size");
 }
 
 export function VellumProvider({ children }: { children: ReactNode }) {
@@ -339,10 +360,15 @@ export function VellumProvider({ children }: { children: ReactNode }) {
         // Apply the persisted ignored rules to the live underline filter before
         // the first lint runs (spec Section 10).
         applyIgnoredRules(cfg.settings.ignoredGrammarRules ?? []);
+        const defaultFont = cfg.settings.defaultFont || "Segoe UI";
+        const defaultFontSize = cfg.settings.defaultFontSize || 14;
+        applyEditorFont(defaultFont, defaultFontSize);
         setState((s) => ({
           ...s,
           grammarEnabled: cfg.settings.grammarEnabled,
           spellcheckEnabled: cfg.settings.spellcheckEnabled,
+          defaultFont,
+          defaultFontSize,
           customDictionary: cfg.settings.customDictionary ?? [],
           ignoredGrammarRules: cfg.settings.ignoredGrammarRules ?? [],
           pageTemplates: cfg.pageTemplates ?? [],
@@ -628,6 +654,27 @@ export function VellumProvider({ children }: { children: ReactNode }) {
           ...cfg,
           settings: { ...cfg.settings, spellcheckEnabled: enabled },
         });
+      } catch (e) {
+        fail(e);
+      }
+    },
+    setDefaultFont: async (font) => {
+      // Optimistic state + live CSS-var apply, then persist into app.json.
+      setState((s) => ({ ...s, defaultFont: font }));
+      applyEditorFont(font, ref.current.defaultFontSize);
+      try {
+        const cfg = await api.getAppConfig();
+        await api.saveAppConfig({ ...cfg, settings: { ...cfg.settings, defaultFont: font } });
+      } catch (e) {
+        fail(e);
+      }
+    },
+    setDefaultFontSize: async (size) => {
+      setState((s) => ({ ...s, defaultFontSize: size }));
+      applyEditorFont(ref.current.defaultFont, size);
+      try {
+        const cfg = await api.getAppConfig();
+        await api.saveAppConfig({ ...cfg, settings: { ...cfg.settings, defaultFontSize: size } });
       } catch (e) {
         fail(e);
       }

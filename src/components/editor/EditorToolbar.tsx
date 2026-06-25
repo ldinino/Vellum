@@ -3,29 +3,10 @@ import { useEditorState, getMarkRange } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
 import { Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator } from "../ui/Toolbar";
 import { useActiveEditor } from "../../state/activeEditor";
+import { useVellum } from "../../state/vellum";
+import { FONTS, SIZES } from "../../data/fonts";
 import { LinkDialog } from "./LinkDialog";
 import "./EditorToolbar.css";
-
-const FONTS = [
-  "Segoe UI",
-  "Calibri",
-  "Cambria",
-  "Georgia",
-  "Times New Roman",
-  "Arial",
-  "Verdana",
-  "Consolas",
-  "Comic Sans MS",
-];
-const SIZES = ["10", "11", "12", "14", "16", "18", "24", "36"];
-
-// Effective defaults for text with no explicit textStyle mark: such text renders
-// via .v-prose CSS (--font-ui's first family / --text-size-editor in
-// styles/tokens.css), so the selects fall back to these to always show the
-// current font/size at a glance — OneNote-style — instead of a blank
-// "Font"/"Size" placeholder. Keep in sync with those tokens.
-const DEFAULT_FONT = "Segoe UI";
-const DEFAULT_SIZE = "14";
 
 interface FormattingGroupsProps {
   editor: Editor | null;
@@ -41,6 +22,10 @@ interface FormattingGroupsProps {
  */
 function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroupsProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // The editor's configured default font/size (Settings → Editor) is what
+  // unstyled text renders at, so the selects fall back to it instead of a blank
+  // placeholder — and stay accurate when the user changes the default.
+  const { defaultFont, defaultFontSize } = useVellum();
 
   // Tiptap v3's `useEditor` no longer re-renders on every transaction, so the
   // toolbar must subscribe explicitly to keep active states / select values in
@@ -87,8 +72,8 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
   // the document default (so unstyled text reads as "Segoe UI 14", not blank).
   // An out-of-list value (e.g. from pasted content) is added as an option so the
   // box never goes unexpectedly empty.
-  const displayFont = disabled ? "" : s?.fontFamily || DEFAULT_FONT;
-  const displaySize = disabled ? "" : s?.fontSize || DEFAULT_SIZE;
+  const displayFont = disabled ? "" : s?.fontFamily || defaultFont;
+  const displaySize = disabled ? "" : s?.fontSize || String(defaultFontSize);
   const fontOptions =
     displayFont && !FONTS.includes(displayFont) ? [displayFont, ...FONTS] : FONTS;
   const sizeOptions =

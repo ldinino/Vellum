@@ -112,6 +112,27 @@ export interface AppSettings {
   ignoredGrammarRules: string[];
 }
 
+/** App + component versions shown in Settings → About (spec Section 15). */
+export interface VersionInfo {
+  app: string;
+  harper: string;
+  ollama: string;
+}
+
+/** Filesystem locations resolved by the backend (Settings → General). */
+export interface AppPaths {
+  dataDir: string;
+  runtimeDir: string;
+}
+
+/** One file copied next to an exported page (an inline image or an attachment). */
+export interface ExportCopy {
+  /** Notebook-relative source path. */
+  srcRel: string;
+  /** Filename within the export's sibling files folder. */
+  destName: string;
+}
+
 /** One few-shot example pair rendered into the harness (spec Section 8). */
 export interface ExamplePair {
   input: string;

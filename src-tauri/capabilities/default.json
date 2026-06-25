@@ -24,6 +24,7 @@
     "fs:default",
     "dialog:default",
     "dialog:allow-ask",
+    "dialog:allow-save",
     "shell:default"
   ]
 }

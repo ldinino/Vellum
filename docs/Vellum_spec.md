@@ -491,11 +491,13 @@ No manual save. No save indicator. No "unsaved changes" state.
 
 ### 14. Export / Print
 
-**v1 scope:** Print current page only.
+**v1 scope:** Print the current page, and export the current page to Markdown.
 
-**Implementation:** Invoke the WebView2 print dialog (`window.print()`). A print stylesheet hides the navigation panels and renders only the page content and title. Attachments print as a simple list of filenames.
+**Print (as built):** **File ▸ Print** / **Ctrl+P** renders just the open page — its title, content, and attachment filenames — into an isolated hidden iframe and prints that document (`src/lib/print-page.ts`), so the app chrome never reaches the printer. Inline image paths are resolved to loadable asset URLs first, and images are awaited before printing. This replaced a `@media print` stylesheet over the live window, which printed the whole UI in the transparent WebView2 window. (Our Print / Ctrl+P also stand in for WebView2's native print, which is disabled in release builds.)
 
-No PDF export, no Markdown export, no HTML export in v1.
+**Markdown export (as built):** **File ▸ Export Page as Markdown…** converts the open page's editor HTML to Markdown, prompts for a `<name>.md` location, and copies the page's inline images and attachments into a sibling `<name> files/` folder that the Markdown links into. The conversion (turndown + GFM, `src/lib/export-markdown.ts`) is WYSIWYG: structure (headings, lists, tables, code, blockquotes, links, images) maps to Markdown, while formatting Markdown can't express (highlight, super/subscript, underline, text colour, font family/size, block alignment) is preserved as inline HTML — still valid Markdown that renders in most viewers. The backend `export_page` command owns the filesystem writes (source paths validated against the notebook dir, dest names sanitized). Export is current-page-only.
+
+No PDF or HTML export in v1.
 
 ---
 
@@ -510,7 +512,7 @@ No PDF export, no Markdown export, no HTML export in v1.
 | Refine | Enable toggle, Strict ↔ Liberal slider, model selector, Refine template manager, debug panel access |
 | About | Version, Harper version, Ollama runtime version, check for updates |
 
-> **As built:** the Settings dialog currently ships **Page Templates**, **Proofing**, and **Refine** tabs (General / Editor / About are planned). **Proofing** (Section 10) consolidates the spell- and grammar-check toggles with the custom-dictionary and ignored-rules managers, so everything that controls Harper lives in one place.
+> **As built:** the Settings dialog ships **General**, **Page Templates**, **Editor**, **Proofing**, **Refine**, and **About** tabs (Phase 10 added General / Editor / About). **General** shows the read-only `Documents\Vellum` data location with an Open-folder button; **Editor** sets the default font + size, applied live via CSS custom properties (`--editor-font` / `--editor-font-size`) so unstyled page text updates immediately and the toolbar's font/size fallback tracks it; **About** lists the app / Harper / Ollama versions and acknowledgements, with a disabled “Check for updates” (in-app updates are wired in Phase 11). **Proofing** (Section 10) consolidates the spell- and grammar-check toggles with the custom-dictionary and ignored-rules managers, so everything that controls Harper lives in one place.
 
 ---
 
@@ -549,7 +551,8 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 | 7 — Refine Templates + Refine Infrastructure | ✅ Complete |
 | 8 — Refine (Full Feature) | ✅ Complete |
 | 9 — UI Polish Pass | ✅ Complete |
-| 10–11 | ⬜ Not started — _Recycle Bin (Section 5.1) landed ahead of schedule_ |
+| 10 — Export/Print & Settings | ✅ Complete |
+| 11 — QA & Hardening | ⬜ Not started |
 
 ---
 
@@ -769,7 +772,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 ---
 
-### Phase 9 — UI Polish Pass 
+### Phase 9 — UI Polish Pass ✅
 
 **Goal:** Cohesive retro aesthetic across all surfaces.
 
@@ -818,6 +821,11 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
   only on permanent delete).
 
 **Exit criteria:** Export flow consistently succeeds. Print renders cleanly. All settings survive app restart. Deletes are recoverable from the Recycle Bin, and permanent purge removes the on-disk files/folder.
+
+> **Design note (as built):**
+> - **Markdown export.** `File ▸ Export Page as Markdown…` (disabled when no page is open). The renderer converts `editor.getHTML()` → Markdown with turndown + `turndown-plugin-gfm` (`src/lib/export-markdown.ts`), preserving Markdown-inexpressible formatting as inline HTML for WYSIWYG fidelity (chosen over a lossy plain-Markdown dump). Inline images are collected from the doc JSON and attachments from `list_attachments`; both are copied into a sibling `<name> files/` folder (deduped names) and linked with angle-bracketed relative paths. `@tauri-apps/plugin-dialog` `save()` picks the `.md` path (new `dialog:allow-save` capability); the backend `export_page` writes the file + copies (traversal-guarded, missing sources skipped, the folder created only when there's something to copy). Image `width` is kept via an HTML `<img>`; block alignment via a styled `<div>` wrapper that re-adds heading markers.
+> - **Print.** Renders the open page (title + editor HTML + attachment filename list) into an isolated hidden iframe and prints that (`src/lib/print-page.ts`), so only the content reaches the printer. Inline image srcs are resolved to asset URLs (getHTML emits raw relative paths) and awaited before printing. Wired to `File ▸ Print` + Ctrl+P (both gated on an open page). **This replaced an initial `@media print` stylesheet over the live window** — that printed the entire UI (toolbar, menus, the open dropdown, content) in the transparent WebView2 window, so it was dropped for the iframe, which is immune to the app's layout/chrome.
+> - **Settings — General / Editor / About.** Completed the dialog (Section 15). The Editor default font/size were dormant `app.json` fields (defaulted 11, never applied); they now drive `--editor-font` / `--editor-font-size` on the document root (`applyEditorFont` in `vellum.tsx`, consumed by `.v-prose` with the global tokens as fallback), and the Rust default was corrected to 14 to match the existing `--text-size-editor` look. New backend commands: `export_page`, `get_version_info` (app via `CARGO_PKG_VERSION`, Harper via a maintained const, Ollama from the manifest pin), `reveal_data_dir` (opener). About's update check stays disabled until Phase 11. **Needs on-Windows verification:** the save dialog, the copied-files layout, and print preview run in the user's desktop session, not the sandboxed tool environment.
 
 ---
 
