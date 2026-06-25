@@ -23,6 +23,7 @@ import { ResizableImage } from "./ResizableImage";
 import { SearchHighlight } from "./SearchHighlight";
 import { Find } from "./find";
 import { GrammarError } from "./GrammarError";
+import { MergePaste } from "./mergePaste";
 
 export function buildExtensions(): Extensions {
   return [
@@ -51,5 +52,6 @@ export function buildExtensions(): Extensions {
     SearchHighlight,
     Find,
     GrammarError,
+    MergePaste,
   ];
 }
