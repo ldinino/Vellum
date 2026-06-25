@@ -7,7 +7,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Editor } from "@tiptap/react";
-import { grammarHitAt, GrammarHit } from "./GrammarError";
+import { grammarHitAt, GrammarHit, suggestionLabel } from "./GrammarError";
 import "./GrammarPopover.css";
 
 interface Anchored {
@@ -74,8 +74,6 @@ export function GrammarPopover({
     setTooltip(null);
     onAfterAction();
   };
-
-  const suggestionLabel = (s: string) => (s === "" ? "Remove" : s);
 
   return (
     <>

@@ -80,6 +80,19 @@ export function clearGrammarLints(editor: Editor) {
   setGrammarLints(editor, []);
 }
 
+/**
+ * Human-readable label for a Harper suggestion button/menu item. Harper often
+ * suggests a deletion (empty string) or a pure-whitespace replacement (e.g. a
+ * single space to collapse a double space); both render as a blank, near-
+ * unclickable sliver, so describe them in words instead of showing the raw
+ * value. Suggestions with visible text are shown as-is.
+ */
+export function suggestionLabel(s: string): string {
+  if (s === "") return "Remove";
+  if (s.trim() === "") return s === " " ? "Single space" : "Fix spacing";
+  return s;
+}
+
 /** The lint at a document position (live coords), or null. */
 export function grammarHitAt(editor: Editor, pos: number): GrammarHit | null {
   const decoSet = grammarKey.getState(editor.state);
