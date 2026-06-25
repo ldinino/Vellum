@@ -163,6 +163,29 @@
   background: var(--selected-fill);
 }
 
+/* ---- Reorder drag-and-drop (notebooks + sections) ----------------------- */
+/* The dragged item fades so the copy under the cursor reads as the live one. */
+.v-nav__group--dragging,
+.v-nav__section--dragging {
+  opacity: 0.4;
+}
+
+/* Insertion line on the drop target's leading/trailing edge. Drawn with an inset
+   box-shadow (not ::after) so it isn't clipped by the group's overflow:hidden and
+   can't collide with pseudo-elements. Blue accent, distinct from the tints. */
+.v-nav__group--drop-before {
+  box-shadow: inset 0 3px 0 0 var(--accent);
+}
+.v-nav__group--drop-after {
+  box-shadow: inset 0 -3px 0 0 var(--accent);
+}
+.v-nav__section--drop-before {
+  box-shadow: inset 0 2px 0 0 var(--accent);
+}
+.v-nav__section--drop-after {
+  box-shadow: inset 0 -2px 0 0 var(--accent);
+}
+
 .v-nav__twisty {
   width: 0;
   height: 0;

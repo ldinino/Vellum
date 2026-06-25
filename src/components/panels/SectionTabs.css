@@ -146,6 +146,21 @@
   outline-offset: -3px;
 }
 
+/* ---- Reorder drag-and-drop ---------------------------------------------- */
+.v-sectiontabs__tab--dragging {
+  opacity: 0.4;
+}
+
+/* Insertion marker: a vertical accent line on the target tab's leading/trailing
+   inner edge. Box-shadow (not ::after) avoids colliding with the selected tab's
+   ::before/::after "feet". */
+.v-sectiontabs__tab--drop-before {
+  box-shadow: inset 2px 0 0 0 var(--accent);
+}
+.v-sectiontabs__tab--drop-after {
+  box-shadow: inset -2px 0 0 0 var(--accent);
+}
+
 .v-sectiontabs__tab-label {
   overflow: hidden;
   text-overflow: ellipsis;

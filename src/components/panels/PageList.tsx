@@ -6,7 +6,7 @@ import { ContextMenu, MenuItem } from "../ui/ContextMenu";
 import { useVellum } from "../../state/vellum";
 import { DEFAULT_SECTION_COLOR } from "../../data/palette";
 import type { PageSortDir, PageSortMode } from "../../data/types";
-import { reorderByDrop } from "../dnd";
+import { useReorderDrag } from "../useReorderDrag";
 import { handleListArrows } from "../keyboard";
 import "./PageList.css";
 
@@ -28,7 +28,15 @@ export function PageList() {
   } = useVellum();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
-  const [dragId, setDragId] = useState<string | null>(null);
+
+  // Manual page reorder (drag-and-drop) — shared logic, see useReorderDrag.
+  const dnd = useReorderDrag({
+    axis: "vertical",
+    idsOf: () => pages.map((p) => p.id),
+    onReorder: (order) =>
+      selectedNotebookId && actions.reorderPages(selectedNotebookId, order),
+    dropClassBase: "v-pagelist__item",
+  });
 
   if (!selectedNotebookId || !selectedSectionId) {
     return (
@@ -121,12 +129,6 @@ export function PageList() {
     },
   ];
 
-  const onDrop = (targetId: string) => {
-    if (!dragId || dragId === targetId) return;
-    const order = reorderByDrop(pages.map((p) => p.id), dragId, targetId);
-    actions.reorderPages(notebookId, order);
-  };
-
   return (
     <div className="v-pagelist">
       <div className="v-pagelist__header">
@@ -146,19 +148,24 @@ export function PageList() {
       <div
         className="v-pagelist__items"
         onKeyDown={(e) => handleListArrows(e, ".v-pagelist__item")}
+        onDragEnter={dnd.onContainerDragOver}
+        onDragOver={dnd.onContainerDragOver}
+        onDrop={dnd.onContainerDrop}
+        onDragLeave={dnd.onContainerDragLeave}
       >
         {pages.map((p) => (
           <div
             key={p.id}
+            data-dnd-id={p.id}
             className={[
               "v-pagelist__item",
               p.id === selectedPageId ? "v-pagelist__item--selected" : "",
+              p.id === dnd.draggingId ? "v-pagelist__item--dragging" : "",
+              dnd.dropClass(p.id),
             ].join(" ")}
             draggable={dragEnabled && editingId !== p.id}
-            onDragStart={() => dragEnabled && setDragId(p.id)}
-            onDragOver={(e) => dragId && e.preventDefault()}
-            onDrop={() => onDrop(p.id)}
-            onDragEnd={() => setDragId(null)}
+            onDragStart={(e) => dragEnabled && dnd.onItemDragStart(e, p.id)}
+            onDragEnd={dnd.onItemDragEnd}
             onClick={() => actions.selectPage(p.id)}
             onKeyDown={(e) => {
               if (e.key === "F2") {

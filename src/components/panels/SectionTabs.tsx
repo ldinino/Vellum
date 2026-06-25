@@ -15,7 +15,7 @@ import { ContextMenu, MenuItem } from "../ui/ContextMenu";
 import { useVellum } from "../../state/vellum";
 import { DEFAULT_NOTEBOOK_COLOR, DEFAULT_SECTION_COLOR } from "../../data/palette";
 import { buildSectionMenu } from "./sectionMenu";
-import { reorderByDrop } from "../dnd";
+import { useReorderDrag } from "../useReorderDrag";
 import "./SectionTabs.css";
 
 interface SectionTabsProps {
@@ -32,21 +32,22 @@ export function SectionTabs({
   const { notebooks, selectedNotebookId, selectedSectionId, actions } = useVellum();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
-  const [dragId, setDragId] = useState<string | null>(null);
 
   const notebook = notebooks.find((n) => n.id === selectedNotebookId) ?? null;
   const sections = notebook?.sections ?? [];
+
+  // Section reorder (drag-and-drop) across the horizontal tab row — shared logic.
+  const dnd = useReorderDrag({
+    axis: "horizontal",
+    idsOf: () => sections.map((s) => s.id),
+    onReorder: (order) => notebook && actions.reorderSections(notebook.id, order),
+    dropClassBase: "v-sectiontabs__tab",
+  });
 
   const openMenu = (e: React.MouseEvent, items: MenuItem[]) => {
     e.preventDefault();
     e.stopPropagation();
     setMenu({ x: e.clientX, y: e.clientY, items });
-  };
-
-  const onDrop = (targetId: string) => {
-    if (!notebook || !dragId || dragId === targetId) return;
-    const order = reorderByDrop(sections.map((s) => s.id), dragId, targetId);
-    actions.reorderSections(notebook.id, order);
   };
 
   return (
@@ -66,7 +67,14 @@ export function SectionTabs({
         </span>
       </button>
 
-      <div className="v-sectiontabs__tabs" role="tablist">
+      <div
+        className="v-sectiontabs__tabs"
+        role="tablist"
+        onDragEnter={dnd.onContainerDragOver}
+        onDragOver={dnd.onContainerDragOver}
+        onDrop={dnd.onContainerDrop}
+        onDragLeave={dnd.onContainerDragLeave}
+      >
         {sections.map((s) => {
           const selected = s.id === selectedSectionId;
           return (
@@ -74,16 +82,17 @@ export function SectionTabs({
               key={s.id}
               role="tab"
               aria-selected={selected}
+              data-dnd-id={s.id}
               className={[
                 "v-sectiontabs__tab",
                 selected ? "v-sectiontabs__tab--selected" : "",
+                s.id === dnd.draggingId ? "v-sectiontabs__tab--dragging" : "",
+                dnd.dropClass(s.id),
               ].join(" ")}
               style={{ ["--tab-color" as string]: s.color ?? DEFAULT_SECTION_COLOR }}
               draggable={editingId !== s.id}
-              onDragStart={() => setDragId(s.id)}
-              onDragOver={(e) => dragId && e.preventDefault()}
-              onDrop={() => onDrop(s.id)}
-              onDragEnd={() => setDragId(null)}
+              onDragStart={(e) => dnd.onItemDragStart(e, s.id)}
+              onDragEnd={dnd.onItemDragEnd}
               onClick={() => notebook && actions.selectSection(notebook.id, s.id)}
               onKeyDown={(e) => {
                 if (e.key === "F2") {

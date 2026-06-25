@@ -132,6 +132,37 @@
   outline-offset: -3px;
 }
 
+/* The row being dragged dims so the copy following the cursor reads as the live
+   one. */
+.v-pagelist__item--dragging {
+  opacity: 0.4;
+}
+
+/* Insertion line marking where the page will land, on the top or bottom edge of
+   the hovered row. Blue accent so it stands clear of the section-tinted tabs; the
+   row is position: relative, so the line is positioned to it and sits in the 2px
+   gutter between rows. */
+.v-pagelist__item--drop-before::after,
+.v-pagelist__item--drop-after::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.v-pagelist__item--drop-before::after {
+  top: -2px;
+}
+
+.v-pagelist__item--drop-after::after {
+  bottom: -2px;
+}
+
 .v-pagelist__title {
   flex: 1;
   font-size: var(--text-size-ui);

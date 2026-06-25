@@ -7,14 +7,9 @@ import { ContextMenu, MenuItem } from "../ui/ContextMenu";
 import { useVellum } from "../../state/vellum";
 import { DEFAULT_NOTEBOOK_COLOR, DEFAULT_SECTION_COLOR } from "../../data/palette";
 import { buildSectionMenu, colorSubmenu } from "./sectionMenu";
-import { reorderByDrop } from "../dnd";
+import { useReorderDrag } from "../useReorderDrag";
 import { handleListArrows } from "../keyboard";
 import "./NavPanel.css";
-
-type Drag =
-  | { kind: "notebook"; id: string }
-  | { kind: "section"; id: string; notebookId: string }
-  | null;
 
 interface MenuState {
   x: number;
@@ -35,7 +30,23 @@ export function NavPanel({ collapsed, onToggle, onOpenSectionProperties }: NavPa
   const { notebooks, selectedNotebookId, selectedSectionId, actions } = useVellum();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
-  const [drag, setDrag] = useState<Drag>(null);
+
+  // Reorder drag-and-drop — notebooks among notebooks, sections within their own
+  // notebook (data-dnd-group = notebook id). Both share the tree container; each
+  // hook acts only on its own kind of drag, so their handlers compose on it.
+  const nbDnd = useReorderDrag({
+    axis: "vertical",
+    idsOf: () => notebooks.map((n) => n.id),
+    onReorder: (order) => actions.reorderNotebooks(order),
+    dropClassBase: "v-nav__group",
+  });
+  const secDnd = useReorderDrag({
+    axis: "vertical",
+    idsOf: (group) =>
+      notebooks.find((n) => n.id === group)?.sections?.map((s) => s.id) ?? [],
+    onReorder: (order, group) => group && actions.reorderSections(group, order),
+    dropClassBase: "v-nav__section",
+  });
 
   const openMenu = (e: React.MouseEvent, items: MenuItem[]) => {
     e.preventDefault();
@@ -43,11 +54,20 @@ export function NavPanel({ collapsed, onToggle, onOpenSectionProperties }: NavPa
     setMenu({ x: e.clientX, y: e.clientY, items });
   };
 
+  // Invoked from both the expanded tree and the collapsed rail. The rail has no
+  // inline label to edit, so for the editing actions reveal the tree first:
+  // expand the panel (and the notebook itself for Add Section) before entering
+  // the editor. All no-ops when already expanded.
   const notebookMenu = (nbId: string, color: string | null): MenuItem[] => [
     {
       label: "Add Section",
       icon: "folder--plus",
       onSelect: async () => {
+        if (collapsed) {
+          onToggle();
+          const nb = notebooks.find((n) => n.id === nbId);
+          if (nb && !nb.expanded) await actions.toggleNotebook(nbId);
+        }
         const s = await actions.createSection(nbId, "New Section");
         if (s) setEditingId(s.id);
       },
@@ -55,7 +75,10 @@ export function NavPanel({ collapsed, onToggle, onOpenSectionProperties }: NavPa
     {
       label: "Rename",
       icon: "card--pencil",
-      onSelect: () => setEditingId(nbId),
+      onSelect: () => {
+        if (collapsed) onToggle();
+        setEditingId(nbId);
+      },
     },
     {
       label: "Change color",
@@ -79,28 +102,6 @@ export function NavPanel({ collapsed, onToggle, onOpenSectionProperties }: NavPa
     );
     if (ok) actions.deleteNotebook(nbId);
   }
-
-  const onNotebookDrop = (targetId: string) => {
-    if (drag?.kind !== "notebook" || drag.id === targetId) return;
-    const order = reorderByDrop(
-      notebooks.map((n) => n.id),
-      drag.id,
-      targetId,
-    );
-    actions.reorderNotebooks(order);
-  };
-
-  const onSectionDrop = (nbId: string, targetId: string) => {
-    if (drag?.kind !== "section" || drag.notebookId !== nbId) return;
-    const nb = notebooks.find((n) => n.id === nbId);
-    if (!nb?.sections) return;
-    const order = reorderByDrop(
-      nb.sections.map((s) => s.id),
-      drag.id,
-      targetId,
-    );
-    actions.reorderSections(nbId, order);
-  };
 
   if (collapsed) {
     return (
@@ -126,11 +127,15 @@ export function NavPanel({ collapsed, onToggle, onOpenSectionProperties }: NavPa
               style={{ ["--nb-color" as string]: nb.color ?? DEFAULT_NOTEBOOK_COLOR }}
               title={nb.name}
               onClick={() => actions.selectNotebook(nb.id)}
+              onContextMenu={(e) => openMenu(e, notebookMenu(nb.id, nb.color))}
             >
               <span className="v-nav__rail-label">{nb.name}</span>
             </button>
           ))}
         </div>
+        {menu && (
+          <ContextMenu items={menu.items} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />
+        )}
       </div>
     );
   }
@@ -165,21 +170,41 @@ export function NavPanel({ collapsed, onToggle, onOpenSectionProperties }: NavPa
         className="v-nav__tree"
         role="tree"
         onKeyDown={(e) => handleListArrows(e, ".v-nav__notebook, .v-nav__section")}
+        onDragEnter={(e) => {
+          nbDnd.onContainerDragOver(e);
+          secDnd.onContainerDragOver(e);
+        }}
+        onDragOver={(e) => {
+          nbDnd.onContainerDragOver(e);
+          secDnd.onContainerDragOver(e);
+        }}
+        onDrop={(e) => {
+          nbDnd.onContainerDrop(e);
+          secDnd.onContainerDrop(e);
+        }}
+        onDragLeave={(e) => {
+          nbDnd.onContainerDragLeave(e);
+          secDnd.onContainerDragLeave(e);
+        }}
       >
         {notebooks.map((nb) => (
           <div
             key={nb.id}
             role="treeitem"
             aria-expanded={nb.expanded}
-            className="v-nav__group"
+            data-dnd-id={nb.id}
+            className={[
+              "v-nav__group",
+              nb.id === nbDnd.draggingId ? "v-nav__group--dragging" : "",
+              nbDnd.dropClass(nb.id),
+            ].join(" ")}
             style={{ ["--nb-color" as string]: nb.color ?? DEFAULT_NOTEBOOK_COLOR }}
           >
             <div
               className="v-nav__notebook"
               draggable={editingId !== nb.id}
-              onDragStart={() => setDrag({ kind: "notebook", id: nb.id })}
-              onDragOver={(e) => drag?.kind === "notebook" && e.preventDefault()}
-              onDrop={() => onNotebookDrop(nb.id)}
+              onDragStart={(e) => nbDnd.onItemDragStart(e, nb.id)}
+              onDragEnd={nbDnd.onItemDragEnd}
               onClick={() => actions.toggleNotebook(nb.id)}
               onKeyDown={(e) => {
                 if (e.key === "F2") {
@@ -208,21 +233,20 @@ export function NavPanel({ collapsed, onToggle, onOpenSectionProperties }: NavPa
               (nb.sections ?? []).map((s) => (
                 <div
                   key={s.id}
+                  data-dnd-id={s.id}
+                  data-dnd-group={nb.id}
                   className={[
                     "v-nav__section",
                     s.id === selectedSectionId ? "v-nav__section--selected" : "",
+                    s.id === secDnd.draggingId ? "v-nav__section--dragging" : "",
+                    secDnd.dropClass(s.id),
                   ].join(" ")}
                   draggable={editingId !== s.id}
                   onDragStart={(e) => {
                     e.stopPropagation();
-                    setDrag({ kind: "section", id: s.id, notebookId: nb.id });
+                    secDnd.onItemDragStart(e, s.id, nb.id);
                   }}
-                  onDragOver={(e) =>
-                    drag?.kind === "section" &&
-                    drag.notebookId === nb.id &&
-                    e.preventDefault()
-                  }
-                  onDrop={() => onSectionDrop(nb.id, s.id)}
+                  onDragEnd={secDnd.onItemDragEnd}
                   onClick={() => actions.selectSection(nb.id, s.id)}
                   onKeyDown={(e) => {
                     if (e.key === "F2") {

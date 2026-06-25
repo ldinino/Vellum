@@ -3,6 +3,7 @@ import { useEditor, EditorContent, Editor } from "@tiptap/react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { buildExtensions } from "./extensions";
+import { isReorderDrag } from "../dnd";
 import { setImageSrcResolver } from "./ResizableImage";
 import { applySearchHighlight } from "./SearchHighlight";
 import { extractText, mapLints } from "./grammar";
@@ -108,6 +109,9 @@ export function PageEditor({
   const ids = useRef({ notebookId, pageId: page.id });
   ids.current = { notebookId, pageId: page.id };
   const editorRef = useRef<Editor | null>(null);
+  // The .v-editor wrapper — a capture-phase drag listener is attached here to
+  // block page-reorder drags before they reach the editable (see effect below).
+  const editorWrapRef = useRef<HTMLDivElement>(null);
 
   // Refine: refs keep the stable callbacks reading the latest library/settings.
   const refineEnabledRef = useRef(refineEnabled);
@@ -481,6 +485,26 @@ export function PageEditor({
     };
   }, [opSaver, snapSaver, grammarSaver]);
 
+  // ProseMirror's drop cursor and core drag handling attach their own listeners
+  // directly on the editable DOM, so React/editorProps can't suppress them. Catch
+  // page-reorder drags in the capture phase on the wrapper — before they descend
+  // to the editable — and stop propagation so neither the drop-cursor line nor a
+  // droppable cursor appears. preventDefault is intentionally left unset so the
+  // editor reads as a no-drop zone for pages; file/text drags are untouched.
+  useEffect(() => {
+    const el = editorWrapRef.current;
+    if (!el) return;
+    const block = (e: DragEvent) => {
+      if (isReorderDrag(e.dataTransfer)) e.stopPropagation();
+    };
+    el.addEventListener("dragover", block, true);
+    el.addEventListener("dragenter", block, true);
+    return () => {
+      el.removeEventListener("dragover", block, true);
+      el.removeEventListener("dragenter", block, true);
+    };
+  }, []);
+
   // Load this page's attachments.
   useEffect(() => {
     let active = true;
@@ -517,8 +541,11 @@ export function PageEditor({
   return (
     <div
       className="v-editor"
+      ref={editorWrapRef}
       // Catch-all so a file dropped on a dead zone (padding, title) doesn't make
       // the webview navigate to it; the bar and editor body handle real drops.
+      // Page-reorder drags are stopped earlier (capture listener in an effect),
+      // so they never reach here.
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => e.preventDefault()}
     >

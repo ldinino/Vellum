@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Icon } from "../ui/Icon";
 import { ContextMenu } from "../ui/ContextMenu";
+import { isReorderDrag } from "../dnd";
 import "./AttachmentBar.css";
 
 export interface AttachmentItem {
@@ -36,11 +37,15 @@ export function AttachmentBar({ attachments, onOpen, onRemove, onAttachFiles }: 
     <div
       className={classes.join(" ")}
       onDragOver={(e) => {
+        // Page-reorder drags aren't attachments — ignore so the bar doesn't
+        // light up as a drop target for them.
+        if (isReorderDrag(e.dataTransfer)) return;
         e.preventDefault();
         setDragOver(true);
       }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => {
+        if (isReorderDrag(e.dataTransfer)) return;
         e.preventDefault();
         e.stopPropagation();
         setDragOver(false);
