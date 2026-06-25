@@ -16,6 +16,7 @@ import type {
   PageSortDir,
   PageSortMode,
   ProcessStatus,
+  RecycleItem,
   RefineRequest,
   RefineResult,
   RuntimeStatus,
@@ -37,6 +38,12 @@ export const saveAppConfig = (config: AppConfig) =>
 export const grammarCheck = (text: string) =>
   invoke<GrammarSpan[]>("grammar_check", { text });
 
+/** Replace Harper's custom dictionary (spec Section 10). The word list is
+ * persisted in app.json by the caller; this syncs the in-memory engine so
+ * underlines refresh immediately after an add/remove. */
+export const setDictionaryWords = (words: string[]) =>
+  invoke<void>("set_dictionary_words", { words });
+
 // --- Links ------------------------------------------------------------------
 
 /** Best-effort fetch of a URL's page `<title>` so a pasted bare link can show a
@@ -57,8 +64,9 @@ export const renameNotebook = (notebookId: string, name: string) =>
 export const setNotebookColor = (notebookId: string, color: string | null) =>
   invoke<void>("set_notebook_color", { notebookId, color });
 
-export const deleteNotebook = (notebookId: string) =>
-  invoke<void>("delete_notebook", { notebookId });
+/** Move a notebook to the Recycle Bin (recoverable; spec Section 5.1). */
+export const softDeleteNotebook = (notebookId: string) =>
+  invoke<void>("soft_delete_notebook", { notebookId });
 
 export const reorderNotebooks = (orderedIds: string[]) =>
   invoke<void>("reorder_notebooks", { orderedIds });
@@ -82,8 +90,9 @@ export const updateSection = (
   pageTemplateId: string | null,
 ) => invoke<void>("update_section", { notebookId, sectionId, name, color, pageTemplateId });
 
-export const deleteSection = (notebookId: string, sectionId: string) =>
-  invoke<void>("delete_section", { notebookId, sectionId });
+/** Move a section (and its pages) to the Recycle Bin (spec Section 5.1). */
+export const softDeleteSection = (notebookId: string, sectionId: string) =>
+  invoke<void>("soft_delete_section", { notebookId, sectionId });
 
 export const reorderSections = (notebookId: string, orderedIds: string[]) =>
   invoke<void>("reorder_sections", { notebookId, orderedIds });
@@ -107,8 +116,9 @@ export const createPage = (notebookId: string, sectionId: string, title: string)
 export const setPageTitle = (notebookId: string, pageId: string, title: string) =>
   invoke<void>("set_page_title", { notebookId, pageId, title });
 
-export const deletePage = (notebookId: string, pageId: string) =>
-  invoke<void>("delete_page", { notebookId, pageId });
+/** Move a page to the Recycle Bin (spec Section 5.1). */
+export const softDeletePage = (notebookId: string, pageId: string) =>
+  invoke<void>("soft_delete_page", { notebookId, pageId });
 
 export const duplicatePage = (notebookId: string, pageId: string) =>
   invoke<Page>("duplicate_page", { notebookId, pageId });
@@ -164,12 +174,33 @@ export const addAttachment = (
   mimeType: string | null,
 ) => invoke<Attachment>("add_attachment", { notebookId, pageId, filename, bytes, mimeType });
 
-export const removeAttachment = (notebookId: string, attachmentId: string) =>
-  invoke<void>("remove_attachment", { notebookId, attachmentId });
+/** Remove an attachment from its page into the Recycle Bin (recoverable; the
+ * file stays on disk until purged — spec Section 5.1). */
+export const softDeleteAttachment = (notebookId: string, attachmentId: string) =>
+  invoke<void>("soft_delete_attachment", { notebookId, attachmentId });
 
 /** Open an attachment with the system default app. */
 export const openAttachment = (notebookId: string, path: string) =>
   invoke<void>("open_attachment", { notebookId, path });
+
+// --- Recycle Bin (spec Section 5.1) -----------------------------------------
+
+/** Every soft-deleted item across all notebooks, newest first. */
+export const listRecycleBin = () => invoke<RecycleItem[]>("list_recycle_bin");
+
+/** Count of items in the Recycle Bin, for the nav footer's empty/full icon. */
+export const countRecycleBin = () => invoke<number>("count_recycle_bin");
+
+/** Restore one item to where it came from. */
+export const restoreItem = (kind: string, notebookId: string, id: string) =>
+  invoke<void>("restore_item", { kind, notebookId, id });
+
+/** Permanently delete one item (and, for containers, everything inside). */
+export const purgeItem = (kind: string, notebookId: string, id: string) =>
+  invoke<void>("purge_item", { kind, notebookId, id });
+
+/** Permanently delete everything in the Recycle Bin. */
+export const emptyRecycleBin = () => invoke<void>("empty_recycle_bin");
 
 // --- Search (spec Section 11) -----------------------------------------------
 

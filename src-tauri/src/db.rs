@@ -93,6 +93,16 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE sections ADD COLUMN page_sort_mode TEXT NOT NULL DEFAULT 'custom';
     ALTER TABLE sections ADD COLUMN page_sort_dir  TEXT NOT NULL DEFAULT 'asc';
     "#,
+    // 5: soft-delete / Recycle Bin (spec Section 5.1). NULL = live; an RFC3339
+    //    timestamp = in the recycle bin. Only the directly-deleted row is
+    //    stamped — descendants are filtered transitively (a page is live iff it
+    //    AND its section have deleted_at NULL), so restoring is a single clear
+    //    and a child deleted before its parent keeps its own stamp.
+    r#"
+    ALTER TABLE sections    ADD COLUMN deleted_at TEXT;
+    ALTER TABLE pages       ADD COLUMN deleted_at TEXT;
+    ALTER TABLE attachments ADD COLUMN deleted_at TEXT;
+    "#,
 ];
 
 /// Open a single-connection pool to a notebook DB with foreign keys on and

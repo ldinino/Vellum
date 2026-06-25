@@ -41,6 +41,14 @@ pub struct AppSettings {
     /// Set once the starter Refine templates have been seeded (Phase 8). Gated
     /// on this flag so we never re-seed after the user deletes them.
     pub starters_seeded: bool,
+    /// Words the user added to the Harper spell-check dictionary (spec Section
+    /// 10). Global and persisted here so they survive restarts; merged into the
+    /// curated dictionary in `grammar.rs`.
+    pub custom_dictionary: Vec<String>,
+    /// Grammar lint categories (Harper `LintKind`, e.g. "Repetition") the user
+    /// chose to ignore via "Ignore this rule". Persisted so the choice is
+    /// reversible (managed in Settings → Proofing).
+    pub ignored_grammar_rules: Vec<String>,
 }
 
 impl Default for AppSettings {
@@ -57,6 +65,8 @@ impl Default for AppSettings {
             grammar_language: "en-US".into(),
             first_run_complete: false,
             starters_seeded: false,
+            custom_dictionary: Vec::new(),
+            ignored_grammar_rules: Vec::new(),
         }
     }
 }
@@ -121,6 +131,11 @@ pub struct NotebookMeta {
     pub color: Option<String>,
     pub sort_order: i64,
     pub created_at: String,
+    /// Soft-delete timestamp (RFC3339) for the Recycle Bin (spec Section 5.1).
+    /// None = live; Some = in the bin (the folder stays on disk until the
+    /// notebook is purged). Skipped on serialize so live notebooks stay clean.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted_at: Option<String>,
 }
 
 // ---------------------------------------------------------------------------

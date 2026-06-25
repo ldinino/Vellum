@@ -8,6 +8,8 @@ export interface Notebook {
   color: string | null;
   sortOrder: number;
   createdAt: string;
+  /** Soft-delete timestamp (RFC3339) while in the Recycle Bin; absent when live. */
+  deletedAt?: string | null;
 }
 
 /** Page sort preference for a section (spec Section 5 / Phase 9). */
@@ -58,6 +60,22 @@ export interface Attachment {
   size: number;
 }
 
+/** One entry in the global Recycle Bin (spec Section 5.1) — a soft-deleted
+ * notebook, section, page, or attachment, with context for display + restore. */
+export interface RecycleItem {
+  kind: "notebook" | "section" | "page" | "attachment";
+  id: string;
+  notebookId: string;
+  notebookName: string;
+  /** Notebook/section name, page title, or attachment filename. */
+  name: string;
+  /** Breadcrumb of where it lived (notebook, section, or "section / page"). */
+  parent: string | null;
+  /** Bytes (attachments only). */
+  size: number | null;
+  deletedAt: string;
+}
+
 export interface GrammarSpan {
   /** UTF-16 offsets into the submitted text (end exclusive). */
   start: number;
@@ -88,6 +106,10 @@ export interface AppSettings {
   firstRunComplete: boolean;
   /** Set once the starter Refine templates have been seeded (Phase 8). */
   startersSeeded: boolean;
+  /** Words the user added to the Harper spell-check dictionary (spec Section 10). */
+  customDictionary: string[];
+  /** Grammar lint categories the user chose to ignore via "Ignore this rule". */
+  ignoredGrammarRules: string[];
 }
 
 /** One few-shot example pair rendered into the harness (spec Section 8). */

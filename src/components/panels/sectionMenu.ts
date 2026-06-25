@@ -4,7 +4,6 @@
  * so the two entry points to a section never drift apart.
  */
 
-import { ask } from "@tauri-apps/plugin-dialog";
 import { PALETTE } from "../../data/palette";
 import type { MenuItem } from "../ui/ContextMenu";
 import type { Section } from "../../data/types";
@@ -68,13 +67,8 @@ export function buildSectionMenu({
       label: "Delete Section",
       icon: "cross",
       danger: true,
-      onSelect: async () => {
-        const ok = await ask(
-          `Delete section "${name}" and all its pages? This cannot be undone.`,
-          { title: "Delete Section", kind: "warning" },
-        );
-        if (ok) actions.deleteSection(notebookId, id);
-      },
+      // Recoverable via the Recycle Bin (spec Section 5.1) — no confirmation.
+      onSelect: () => actions.deleteSection(notebookId, id),
     },
   ];
 }

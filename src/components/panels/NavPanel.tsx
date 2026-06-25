@@ -22,12 +22,19 @@ interface NavPanelProps {
   collapsed: boolean;
   onToggle: () => void;
   onOpenSectionProperties: (notebookId: string, sectionId: string) => void;
+  onOpenRecycleBin: () => void;
 }
 
 /** Left panel: notebook → section tree, or a thin notebook rail when collapsed
  * (spec Section 5). */
-export function NavPanel({ collapsed, onToggle, onOpenSectionProperties }: NavPanelProps) {
-  const { notebooks, selectedNotebookId, selectedSectionId, actions } = useVellum();
+export function NavPanel({
+  collapsed,
+  onToggle,
+  onOpenSectionProperties,
+  onOpenRecycleBin,
+}: NavPanelProps) {
+  const { notebooks, selectedNotebookId, selectedSectionId, recycleBinCount, actions } =
+    useVellum();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
 
@@ -90,17 +97,29 @@ export function NavPanel({ collapsed, onToggle, onOpenSectionProperties }: NavPa
       label: "Delete Notebook",
       icon: "cross",
       danger: true,
-      onSelect: () => confirmDeleteNotebook(nbId),
+      // Recoverable via the Recycle Bin (spec Section 5.1) — no confirmation.
+      onSelect: () => actions.deleteNotebook(nbId),
     },
   ];
 
-  async function confirmDeleteNotebook(nbId: string) {
-    const nb = notebooks.find((n) => n.id === nbId);
+  // Right-click menu for the Recycle Bin button (both nav states).
+  const recycleBinMenu = (): MenuItem[] => [
+    { label: "Open Recycle Bin", icon: "bin-full", onSelect: onOpenRecycleBin },
+    {
+      label: "Empty Recycle Bin",
+      icon: "broom",
+      danger: true,
+      disabled: recycleBinCount === 0,
+      onSelect: confirmEmptyBin,
+    },
+  ];
+
+  async function confirmEmptyBin() {
     const ok = await ask(
-      `Delete notebook "${nb?.name}" and everything in it? This cannot be undone.`,
-      { title: "Delete Notebook", kind: "warning" },
+      `Permanently delete all ${recycleBinCount} item(s) in the Recycle Bin? This cannot be undone.`,
+      { title: "Empty Recycle Bin", kind: "warning" },
     );
-    if (ok) actions.deleteNotebook(nbId);
+    if (ok) actions.emptyRecycleBin();
   }
 
   if (collapsed) {
@@ -133,6 +152,16 @@ export function NavPanel({ collapsed, onToggle, onOpenSectionProperties }: NavPa
             </button>
           ))}
         </div>
+        <button
+          type="button"
+          className="v-nav__rail-bin"
+          title="Recycle Bin"
+          aria-label="Recycle Bin"
+          onClick={onOpenRecycleBin}
+          onContextMenu={(e) => openMenu(e, recycleBinMenu())}
+        >
+          <Icon name={recycleBinCount > 0 ? "bin-full" : "bin-metal"} />
+        </button>
         {menu && (
           <ContextMenu items={menu.items} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />
         )}
@@ -297,6 +326,17 @@ export function NavPanel({ collapsed, onToggle, onOpenSectionProperties }: NavPa
           </div>
         )}
       </div>
+
+      <button
+        type="button"
+        className="v-nav__recyclebin"
+        title="Recycle Bin"
+        onClick={onOpenRecycleBin}
+        onContextMenu={(e) => openMenu(e, recycleBinMenu())}
+      >
+        <Icon name={recycleBinCount > 0 ? "bin-full" : "bin-metal"} />
+        <span className="v-nav__recyclebin-label">Recycle Bin</span>
+      </button>
 
       {menu && (
         <ContextMenu items={menu.items} x={menu.x} y={menu.y} onClose={() => setMenu(null)} />

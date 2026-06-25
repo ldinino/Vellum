@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { ask } from "@tauri-apps/plugin-dialog";
 import { Button } from "../ui/Button";
 import { EditableLabel } from "../ui/EditableLabel";
 import { ContextMenu, MenuItem } from "../ui/ContextMenu";
@@ -95,7 +94,7 @@ export function PageList() {
     ];
   };
 
-  const pageMenu = (pageId: string, title: string): MenuItem[] => [
+  const pageMenu = (pageId: string): MenuItem[] => [
     { label: "Rename", icon: "card--pencil", onSelect: () => setEditingId(pageId) },
     {
       label: "Duplicate",
@@ -119,13 +118,8 @@ export function PageList() {
       label: "Delete Page",
       icon: "cross",
       danger: true,
-      onSelect: async () => {
-        const ok = await ask(`Delete page "${title || "Untitled page"}"? This cannot be undone.`, {
-          title: "Delete Page",
-          kind: "warning",
-        });
-        if (ok) actions.deletePage(notebookId, pageId);
-      },
+      // Recoverable via the Recycle Bin (spec Section 5.1) — no confirmation.
+      onSelect: () => actions.deletePage(notebookId, pageId),
     },
   ];
 
@@ -174,7 +168,7 @@ export function PageList() {
               }
             }}
             tabIndex={0}
-            onContextMenu={(e) => openMenu(e, pageMenu(p.id, p.title))}
+            onContextMenu={(e) => openMenu(e, pageMenu(p.id))}
           >
             <EditableLabel
               className="v-pagelist__title"

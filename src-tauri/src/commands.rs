@@ -203,6 +203,8 @@ pub fn save_app_config(app: AppHandle, config: AppConfig) -> Result<(), String> 
 #[tauri::command]
 pub fn list_notebooks(app: AppHandle) -> Result<Vec<NotebookMeta>, String> {
     let mut notebooks = config::load_registry(&app)?.notebooks;
+    // Hide notebooks that are in the Recycle Bin (spec Section 5.1).
+    notebooks.retain(|n| n.deleted_at.is_none());
     notebooks.sort_by_key(|n| n.sort_order);
     Ok(notebooks)
 }
@@ -245,6 +247,7 @@ pub async fn create_notebook(app: AppHandle, name: String) -> Result<NotebookMet
             .max()
             .map_or(0, |m| m + 1),
         created_at: chrono::Utc::now().to_rfc3339(),
+        deleted_at: None,
     };
     registry.notebooks.push(meta.clone());
     if let Err(e) = config::save_registry(&app, &registry) {
@@ -317,12 +320,32 @@ pub fn set_notebook_color(
     config::save_registry(&app, &registry)
 }
 
-/// Delete a notebook: remove its registry entry and its entire folder
-/// (notebook.db + attachments). Destructive and irreversible — the frontend
-/// confirms first.
+/// Soft-delete a notebook into the Recycle Bin (spec Section 5.1): stamp its
+/// registry entry's `deleted_at` so it drops out of the notebook list, and clear
+/// its rows from the master index. The folder (notebook.db + attachments) stays
+/// on disk until the notebook is purged, so it stays fully recoverable.
 #[tauri::command]
-pub async fn delete_notebook(app: AppHandle, notebook_id: String) -> Result<(), String> {
+pub async fn soft_delete_notebook(app: AppHandle, notebook_id: String) -> Result<(), String> {
     let mut registry = config::load_registry(&app)?;
+    let meta = registry
+        .notebooks
+        .iter_mut()
+        .find(|n| n.id == notebook_id)
+        .ok_or_else(|| format!("Unknown notebook id {notebook_id}"))?;
+    meta.deleted_at = Some(chrono::Utc::now().to_rfc3339());
+    config::save_registry(&app, &registry)?;
+
+    let master = search::open_master(&master_index_path(&app)?, true).await?;
+    let r = search::remove_notebook(&master, &notebook_id).await;
+    master.close().await;
+    r
+}
+
+/// Permanently delete a notebook: remove its registry entry, its entire folder
+/// (notebook.db + attachments), and its master-index rows. Backs the Recycle
+/// Bin's purge / empty actions — destructive and irreversible.
+async fn purge_notebook(app: &AppHandle, notebook_id: &str) -> Result<(), String> {
+    let mut registry = config::load_registry(app)?;
     let idx = registry
         .notebooks
         .iter()
@@ -332,9 +355,9 @@ pub async fn delete_notebook(app: AppHandle, notebook_id: String) -> Result<(), 
 
     // Update the registry first so a failed directory delete can't leave a
     // dangling entry pointing at a half-removed folder.
-    config::save_registry(&app, &registry)?;
+    config::save_registry(app, &registry)?;
 
-    let dir = paths::notebook_dir(&app, &meta.folder)?;
+    let dir = paths::notebook_dir(app, &meta.folder)?;
     if dir.is_dir() {
         std::fs::remove_dir_all(&dir)
             .map_err(|e| format!("remove {}: {e}", dir.display()))?;
@@ -342,8 +365,8 @@ pub async fn delete_notebook(app: AppHandle, notebook_id: String) -> Result<(), 
 
     // The notebook.db (and its fts_index) went with the folder; clear the
     // notebook's rows from the master index too.
-    let master = search::open_master(&master_index_path(&app)?, true).await?;
-    let r = search::remove_notebook(&master, &notebook_id).await;
+    let master = search::open_master(&master_index_path(app)?, true).await?;
+    let r = search::remove_notebook(&master, notebook_id).await;
     master.close().await;
     r
 }
@@ -420,14 +443,17 @@ pub async fn update_section(
     Ok(())
 }
 
+/// Soft-delete a section into the Recycle Bin (spec Section 5.1): its pages are
+/// hidden with it and drop out of search; everything stays in the DB until the
+/// section is purged.
 #[tauri::command]
-pub async fn delete_section(
+pub async fn soft_delete_section(
     app: AppHandle,
     notebook_id: String,
     section_id: String,
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
-    let r = notebook::delete_section(&pool, &section_id).await;
+    let r = notebook::soft_delete_section(&pool, &section_id).await;
     pool.close().await;
     let page_ids = r?;
     let master = search::open_master(&master_index_path(&app)?, true).await?;
@@ -437,6 +463,38 @@ pub async fn delete_section(
         }
     }
     master.close().await;
+    Ok(())
+}
+
+/// Permanently delete a section (cascade) and remove its pages' attachment files.
+async fn purge_section(
+    app: &AppHandle,
+    notebook_id: &str,
+    section_id: &str,
+) -> Result<(), String> {
+    let pool = pool_for(app, notebook_id).await?;
+    let r = notebook::delete_section(&pool, section_id).await;
+    pool.close().await;
+    let page_ids = r?;
+    let master = search::open_master(&master_index_path(app)?, true).await?;
+    for pid in &page_ids {
+        if let Err(e) = search::remove_page(&master, pid).await {
+            eprintln!("search index remove failed for page {pid}: {e}");
+        }
+    }
+    master.close().await;
+    // The attachment rows cascaded with the section; their files don't — remove
+    // each page's attachment folder (fixes a pre-Recycle-Bin disk leak).
+    if let Ok(dir) = notebook_folder(app, notebook_id) {
+        for pid in &page_ids {
+            let att = dir.join("attachments").join(pid);
+            if att.is_dir() {
+                if let Err(e) = std::fs::remove_dir_all(&att) {
+                    eprintln!("purge_section: remove attachments {}: {e}", att.display());
+                }
+            }
+        }
+    }
     Ok(())
 }
 
@@ -548,23 +606,35 @@ pub async fn set_page_title(
     Ok(())
 }
 
+/// Soft-delete a page into the Recycle Bin (spec Section 5.1): hidden from its
+/// section and dropped from search; its content + attachments stay until purge.
 #[tauri::command]
-pub async fn delete_page(
+pub async fn soft_delete_page(
     app: AppHandle,
     notebook_id: String,
     page_id: String,
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
-    let r = notebook::delete_page(&pool, &page_id).await;
+    let r = notebook::soft_delete_page(&pool, &page_id).await;
     pool.close().await;
     r?;
     unindex_page(&app, &page_id).await;
+    Ok(())
+}
+
+/// Permanently delete a page (cascade) and remove its attachment folder.
+async fn purge_page(app: &AppHandle, notebook_id: &str, page_id: &str) -> Result<(), String> {
+    let pool = pool_for(app, notebook_id).await?;
+    let r = notebook::delete_page(&pool, page_id).await;
+    pool.close().await;
+    r?;
+    unindex_page(app, page_id).await;
     // Remove the page's attachment files (the DB rows cascade, the files don't).
-    if let Ok(dir) = notebook_folder(&app, &notebook_id) {
-        let att = dir.join("attachments").join(&page_id);
+    if let Ok(dir) = notebook_folder(app, notebook_id) {
+        let att = dir.join("attachments").join(page_id);
         if att.is_dir() {
             if let Err(e) = std::fs::remove_dir_all(&att) {
-                eprintln!("delete_page: remove attachments {}: {e}", att.display());
+                eprintln!("purge_page: remove attachments {}: {e}", att.display());
             }
         }
     }
@@ -712,24 +782,43 @@ pub async fn add_attachment(
     Ok(att)
 }
 
+/// Remove an attachment from its page into the Recycle Bin (spec Section 5.1).
+/// The file is kept on disk (recoverable) until the attachment is purged; the
+/// page is reindexed so the filename drops from search immediately.
 #[tauri::command]
-pub async fn remove_attachment(
+pub async fn soft_delete_attachment(
     app: AppHandle,
     notebook_id: String,
     attachment_id: String,
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
-    let r = notebook::remove_attachment(&pool, &attachment_id).await;
+    let r = notebook::soft_delete_attachment(&pool, &attachment_id).await;
+    pool.close().await;
+    if let Some(page_id) = r? {
+        index_page(&app, &notebook_id, &page_id).await;
+    }
+    Ok(())
+}
+
+/// Permanently delete one attachment: remove its row, file, and (now-empty)
+/// folder, then reindex the page.
+async fn purge_attachment(
+    app: &AppHandle,
+    notebook_id: &str,
+    attachment_id: &str,
+) -> Result<(), String> {
+    let pool = pool_for(app, notebook_id).await?;
+    let r = notebook::remove_attachment(&pool, attachment_id).await;
     pool.close().await;
 
     if let Some((page_id, rel)) = r? {
-        let abs = notebook_folder(&app, &notebook_id)?.join(&rel);
+        let abs = notebook_folder(app, notebook_id)?.join(&rel);
         let _ = std::fs::remove_file(&abs);
         // The file lived in its own uuid folder; clean it up if now empty.
         if let Some(parent) = abs.parent() {
             let _ = std::fs::remove_dir(parent);
         }
-        index_page(&app, &notebook_id, &page_id).await;
+        index_page(app, notebook_id, &page_id).await;
     }
     Ok(())
 }
@@ -748,6 +837,252 @@ pub fn open_attachment(app: AppHandle, notebook_id: String, path: String) -> Res
     app.opener()
         .open_path(abs.to_string_lossy().to_string(), None::<&str>)
         .map_err(|e| format!("open attachment: {e}"))
+}
+
+// ---------------------------------------------------------------------------
+// Recycle Bin (spec Section 5.1)
+// ---------------------------------------------------------------------------
+
+/// One entry in the global Recycle Bin: a soft-deleted notebook, section, page,
+/// or attachment, with enough context to show and restore it.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecycleItem {
+    /// "notebook" | "section" | "page" | "attachment".
+    pub kind: String,
+    pub id: String,
+    pub notebook_id: String,
+    pub notebook_name: String,
+    /// Display name: notebook/section name, page title, or attachment filename.
+    pub name: String,
+    /// Breadcrumb of where it lived (notebook, section, or "section / page").
+    pub parent: Option<String>,
+    /// Byte size (attachments only).
+    pub size: Option<i64>,
+    pub deleted_at: String,
+}
+
+/// Every item currently in the Recycle Bin, across all notebooks, newest first.
+/// Soft-deleted notebooks are listed as single entries; live notebooks are
+/// scanned for binned sections/pages/attachments whose ancestors are still live.
+#[tauri::command]
+pub async fn list_recycle_bin(app: AppHandle) -> Result<Vec<RecycleItem>, String> {
+    let registry = config::load_registry(&app)?;
+    let mut items: Vec<RecycleItem> = Vec::new();
+
+    for nb in registry.notebooks.iter().filter(|n| n.deleted_at.is_some()) {
+        items.push(RecycleItem {
+            kind: "notebook".into(),
+            id: nb.id.clone(),
+            notebook_id: nb.id.clone(),
+            notebook_name: nb.name.clone(),
+            name: nb.name.clone(),
+            parent: None,
+            size: None,
+            deleted_at: nb.deleted_at.clone().unwrap_or_default(),
+        });
+    }
+
+    for nb in registry.notebooks.iter().filter(|n| n.deleted_at.is_none()) {
+        let pool = match pool_for(&app, &nb.id).await {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("recycle bin: open {}: {e}", nb.id);
+                continue;
+            }
+        };
+        let sections = notebook::deleted_sections(&pool).await;
+        let pages = notebook::deleted_pages(&pool).await;
+        let attachments = notebook::deleted_attachments(&pool).await;
+        pool.close().await;
+
+        for s in sections.unwrap_or_default() {
+            items.push(RecycleItem {
+                kind: "section".into(),
+                id: s.id,
+                notebook_id: nb.id.clone(),
+                notebook_name: nb.name.clone(),
+                name: s.name,
+                parent: Some(nb.name.clone()),
+                size: None,
+                deleted_at: s.deleted_at,
+            });
+        }
+        for p in pages.unwrap_or_default() {
+            items.push(RecycleItem {
+                kind: "page".into(),
+                id: p.id,
+                notebook_id: nb.id.clone(),
+                notebook_name: nb.name.clone(),
+                name: if p.title.is_empty() { "Untitled page".into() } else { p.title },
+                parent: Some(p.section_name),
+                size: None,
+                deleted_at: p.deleted_at,
+            });
+        }
+        for a in attachments.unwrap_or_default() {
+            let page = if a.page_title.is_empty() {
+                "Untitled page".to_string()
+            } else {
+                a.page_title
+            };
+            items.push(RecycleItem {
+                kind: "attachment".into(),
+                id: a.id,
+                notebook_id: nb.id.clone(),
+                notebook_name: nb.name.clone(),
+                name: a.filename,
+                parent: Some(format!("{} / {}", a.section_name, page)),
+                size: Some(a.size),
+                deleted_at: a.deleted_at,
+            });
+        }
+    }
+
+    items.sort_by(|a, b| b.deleted_at.cmp(&a.deleted_at));
+    Ok(items)
+}
+
+/// Count of items in the Recycle Bin, for the nav footer's empty/full icon.
+/// Mirrors `list_recycle_bin`'s ancestor rules via the same queries.
+#[tauri::command]
+pub async fn count_recycle_bin(app: AppHandle) -> Result<i64, String> {
+    let registry = config::load_registry(&app)?;
+    let mut count: i64 = registry
+        .notebooks
+        .iter()
+        .filter(|n| n.deleted_at.is_some())
+        .count() as i64;
+    for nb in registry.notebooks.iter().filter(|n| n.deleted_at.is_none()) {
+        let pool = match pool_for(&app, &nb.id).await {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        let s = notebook::deleted_sections(&pool).await.map(|v| v.len()).unwrap_or(0);
+        let p = notebook::deleted_pages(&pool).await.map(|v| v.len()).unwrap_or(0);
+        let a = notebook::deleted_attachments(&pool).await.map(|v| v.len()).unwrap_or(0);
+        pool.close().await;
+        count += (s + p + a) as i64;
+    }
+    Ok(count)
+}
+
+/// Restore one Recycle Bin item to where it came from. Re-indexes the affected
+/// page(s) so restored content is searchable again.
+#[tauri::command]
+pub async fn restore_item(
+    app: AppHandle,
+    kind: String,
+    notebook_id: String,
+    id: String,
+) -> Result<(), String> {
+    match kind.as_str() {
+        "notebook" => {
+            let mut registry = config::load_registry(&app)?;
+            let meta = registry
+                .notebooks
+                .iter_mut()
+                .find(|n| n.id == notebook_id)
+                .ok_or_else(|| format!("Unknown notebook id {notebook_id}"))?;
+            meta.deleted_at = None;
+            config::save_registry(&app, &registry)?;
+            // Re-mirror the notebook's live pages into the master index.
+            reindex_notebook(&app, &notebook_id).await;
+            Ok(())
+        }
+        "section" => {
+            let pool = pool_for(&app, &notebook_id).await?;
+            let r = notebook::restore_section(&pool, &id).await;
+            pool.close().await;
+            let page_ids = r?;
+            reindex_pages(&app, &notebook_id, &page_ids).await;
+            Ok(())
+        }
+        "page" => {
+            let pool = pool_for(&app, &notebook_id).await?;
+            let r = notebook::restore_page(&pool, &id).await;
+            pool.close().await;
+            r?;
+            index_page(&app, &notebook_id, &id).await;
+            Ok(())
+        }
+        "attachment" => {
+            let pool = pool_for(&app, &notebook_id).await?;
+            let r = notebook::restore_attachment(&pool, &id).await;
+            pool.close().await;
+            if let Some(page_id) = r? {
+                index_page(&app, &notebook_id, &page_id).await;
+            }
+            Ok(())
+        }
+        other => Err(format!("Unknown recycle item kind: {other}")),
+    }
+}
+
+/// Permanently delete one Recycle Bin item (and, for containers, everything
+/// inside). Irreversible — the frontend confirms first.
+#[tauri::command]
+pub async fn purge_item(
+    app: AppHandle,
+    kind: String,
+    notebook_id: String,
+    id: String,
+) -> Result<(), String> {
+    match kind.as_str() {
+        "notebook" => purge_notebook(&app, &notebook_id).await,
+        "section" => purge_section(&app, &notebook_id, &id).await,
+        "page" => purge_page(&app, &notebook_id, &id).await,
+        "attachment" => purge_attachment(&app, &notebook_id, &id).await,
+        other => Err(format!("Unknown recycle item kind: {other}")),
+    }
+}
+
+/// Permanently delete everything in the Recycle Bin (spec Section 5.1).
+/// Irreversible — the frontend confirms first. Best effort: a failure on one
+/// item is logged and the rest still run.
+#[tauri::command]
+pub async fn empty_recycle_bin(app: AppHandle) -> Result<(), String> {
+    let registry = config::load_registry(&app)?;
+
+    let deleted_notebooks: Vec<String> = registry
+        .notebooks
+        .iter()
+        .filter(|n| n.deleted_at.is_some())
+        .map(|n| n.id.clone())
+        .collect();
+    for id in &deleted_notebooks {
+        if let Err(e) = purge_notebook(&app, id).await {
+            eprintln!("empty bin: purge notebook {id}: {e}");
+        }
+    }
+
+    for nb in registry.notebooks.iter().filter(|n| n.deleted_at.is_none()) {
+        let pool = match pool_for(&app, &nb.id).await {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        let sections = notebook::deleted_sections(&pool).await.unwrap_or_default();
+        let pages = notebook::deleted_pages(&pool).await.unwrap_or_default();
+        let attachments = notebook::deleted_attachments(&pool).await.unwrap_or_default();
+        pool.close().await;
+
+        for s in sections {
+            if let Err(e) = purge_section(&app, &nb.id, &s.id).await {
+                eprintln!("empty bin: purge section {}: {e}", s.id);
+            }
+        }
+        for p in pages {
+            if let Err(e) = purge_page(&app, &nb.id, &p.id).await {
+                eprintln!("empty bin: purge page {}: {e}", p.id);
+            }
+        }
+        for a in attachments {
+            if let Err(e) = purge_attachment(&app, &nb.id, &a.id).await {
+                eprintln!("empty bin: purge attachment {}: {e}", a.id);
+            }
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -823,10 +1158,16 @@ pub async fn reindex_all(app: AppHandle) -> Result<(), String> {
     let registry = config::load_registry(&app)?;
     let master = search::open_master(&master_index_path(&app)?, true).await?;
 
-    let keep: Vec<String> = registry.notebooks.iter().map(|n| n.id.clone()).collect();
+    let keep: Vec<String> = registry
+        .notebooks
+        .iter()
+        .filter(|n| n.deleted_at.is_none())
+        .map(|n| n.id.clone())
+        .collect();
     search::prune_notebooks(&master, &keep).await?;
 
-    for nb in &registry.notebooks {
+    // Soft-deleted notebooks (Recycle Bin) stay out of search until restored.
+    for nb in registry.notebooks.iter().filter(|n| n.deleted_at.is_none()) {
         // Skip notebooks whose DB is missing rather than failing the whole rebuild.
         let path = match paths::notebook_dir(&app, &nb.folder) {
             Ok(dir) => dir.join("notebook.db"),
@@ -884,6 +1225,14 @@ pub async fn grammar_check(text: String) -> Result<Vec<GrammarSpan>, String> {
     tauri::async_runtime::spawn_blocking(move || grammar::check(&text))
         .await
         .map_err(|e| format!("grammar task join error: {e}"))
+}
+
+/// Replace Harper's custom dictionary with `words` (spec Section 10). The
+/// renderer persists the list in `app.json`; this just syncs the in-memory
+/// engine so underlines update immediately after add/remove.
+#[tauri::command]
+pub fn set_dictionary_words(words: Vec<String>) {
+    grammar::set_user_words(words);
 }
 
 // ---------------------------------------------------------------------------

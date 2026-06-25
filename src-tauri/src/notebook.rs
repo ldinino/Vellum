@@ -40,7 +40,7 @@ pub struct Section {
 pub async fn list_sections(pool: &Pool<Sqlite>) -> Result<Vec<Section>, String> {
     sqlx::query_as::<_, Section>(
         "SELECT id, name, color, sort_order, page_template_id, page_sort_mode, page_sort_dir \
-         FROM sections ORDER BY sort_order, name",
+         FROM sections WHERE deleted_at IS NULL ORDER BY sort_order, name",
     )
     .fetch_all(pool)
     .await
@@ -141,6 +141,53 @@ pub async fn delete_section(pool: &Pool<Sqlite>, id: &str) -> Result<Vec<String>
         .map_err(|e| format!("delete section: {e}"))?;
     tx.commit().await.map_err(|e| format!("commit delete section: {e}"))?;
     Ok(page_ids)
+}
+
+/// Soft-delete a section (Recycle Bin, spec Section 5.1): stamp `deleted_at` and
+/// drop its live pages' `fts_index` rows, returning those page ids so the caller
+/// can purge them from the master index. The pages keep `deleted_at` NULL — the
+/// section's stamp hides them — so restoring the section brings exactly them back.
+pub async fn soft_delete_section(pool: &Pool<Sqlite>, id: &str) -> Result<Vec<String>, String> {
+    let page_ids: Vec<String> = sqlx::query_scalar(
+        "SELECT id FROM pages WHERE section_id = ?1 AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("section page ids: {e}"))?;
+
+    let mut tx = pool.begin().await.map_err(|e| format!("begin soft delete section: {e}"))?;
+    for pid in &page_ids {
+        sqlx::query("DELETE FROM fts_index WHERE page_id = ?1")
+            .bind(pid)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("soft delete section fts: {e}"))?;
+    }
+    sqlx::query("UPDATE sections SET deleted_at = ?1 WHERE id = ?2")
+        .bind(now())
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("soft delete section: {e}"))?;
+    tx.commit().await.map_err(|e| format!("commit soft delete section: {e}"))?;
+    Ok(page_ids)
+}
+
+/// Restore a soft-deleted section, returning its live page ids so the caller can
+/// re-index them. (Pages individually deleted before the section keep their own
+/// `deleted_at` and stay in the bin.)
+pub async fn restore_section(pool: &Pool<Sqlite>, id: &str) -> Result<Vec<String>, String> {
+    sqlx::query("UPDATE sections SET deleted_at = NULL WHERE id = ?1")
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("restore section: {e}"))?;
+    sqlx::query_scalar("SELECT id FROM pages WHERE section_id = ?1 AND deleted_at IS NULL")
+        .bind(id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("restored section page ids: {e}"))
 }
 
 /// The page-template id assigned to a section (spec Section 7), if any.
@@ -254,7 +301,7 @@ pub async fn list_pages(pool: &Pool<Sqlite>, section_id: &str) -> Result<Vec<Pag
 
     let sql = format!(
         "SELECT id, section_id, title, sort_order, updated_at, preview \
-         FROM pages WHERE section_id = ?1 ORDER BY {}",
+         FROM pages WHERE section_id = ?1 AND deleted_at IS NULL ORDER BY {}",
         page_order_clause(&mode, &dir)
     );
     sqlx::query_as::<_, Page>(&sql)
@@ -324,6 +371,36 @@ pub async fn delete_page(pool: &Pool<Sqlite>, id: &str) -> Result<(), String> {
         .execute(pool)
         .await
         .map_err(|e| format!("delete page: {e}"))?;
+    Ok(())
+}
+
+/// Soft-delete a page (Recycle Bin, spec Section 5.1): stamp `deleted_at` and
+/// drop its `fts_index` row. The caller purges it from the master index;
+/// attachment files stay on disk until the page is purged from the bin.
+pub async fn soft_delete_page(pool: &Pool<Sqlite>, id: &str) -> Result<(), String> {
+    let mut tx = pool.begin().await.map_err(|e| format!("begin soft delete page: {e}"))?;
+    sqlx::query("DELETE FROM fts_index WHERE page_id = ?1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("soft delete page fts: {e}"))?;
+    sqlx::query("UPDATE pages SET deleted_at = ?1 WHERE id = ?2")
+        .bind(now())
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("soft delete page: {e}"))?;
+    tx.commit().await.map_err(|e| format!("commit soft delete page: {e}"))?;
+    Ok(())
+}
+
+/// Restore a soft-deleted page (clear `deleted_at`). The caller re-indexes it.
+pub async fn restore_page(pool: &Pool<Sqlite>, id: &str) -> Result<(), String> {
+    sqlx::query("UPDATE pages SET deleted_at = NULL WHERE id = ?1")
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("restore page: {e}"))?;
     Ok(())
 }
 
@@ -551,7 +628,7 @@ pub async fn list_attachments(
 ) -> Result<Vec<Attachment>, String> {
     sqlx::query_as::<_, Attachment>(
         "SELECT id, page_id, filename, path, mime_type, size \
-         FROM attachments WHERE page_id = ?1 ORDER BY created_at",
+         FROM attachments WHERE page_id = ?1 AND deleted_at IS NULL ORDER BY created_at",
     )
     .bind(page_id)
     .fetch_all(pool)
@@ -614,6 +691,134 @@ pub async fn remove_attachment(
     Ok(Some((page_id, path)))
 }
 
+/// Soft-delete an attachment (Recycle Bin, spec Section 5.1): stamp `deleted_at`,
+/// returning its page id so the caller can reindex the page (its filename drops
+/// from search). The file stays on disk until the attachment is purged from the
+/// bin — this is what makes a removed attachment recoverable instead of orphaned.
+pub async fn soft_delete_attachment(
+    pool: &Pool<Sqlite>,
+    attachment_id: &str,
+) -> Result<Option<String>, String> {
+    let page_id: Option<String> = sqlx::query_scalar(
+        "SELECT page_id FROM attachments WHERE id = ?1 AND deleted_at IS NULL",
+    )
+    .bind(attachment_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| format!("read attachment: {e}"))?;
+    let Some(page_id) = page_id else {
+        return Ok(None);
+    };
+    sqlx::query("UPDATE attachments SET deleted_at = ?1 WHERE id = ?2")
+        .bind(now())
+        .bind(attachment_id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("soft delete attachment: {e}"))?;
+    Ok(Some(page_id))
+}
+
+/// Restore a soft-deleted attachment (clear `deleted_at`), returning its page id
+/// so the caller can reindex the page.
+pub async fn restore_attachment(
+    pool: &Pool<Sqlite>,
+    attachment_id: &str,
+) -> Result<Option<String>, String> {
+    let page_id: Option<String> =
+        sqlx::query_scalar("SELECT page_id FROM attachments WHERE id = ?1")
+            .bind(attachment_id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| format!("read attachment: {e}"))?;
+    let Some(page_id) = page_id else {
+        return Ok(None);
+    };
+    sqlx::query("UPDATE attachments SET deleted_at = NULL WHERE id = ?1")
+        .bind(attachment_id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("restore attachment: {e}"))?;
+    Ok(Some(page_id))
+}
+
+// ---------------------------------------------------------------------------
+// Recycle Bin listing (spec Section 5.1)
+// ---------------------------------------------------------------------------
+//
+// Only items whose ancestors are still live are listed: a deleted section shows
+// as one entry (its pages aren't listed individually), and a deleted notebook's
+// internals aren't scanned at all (commands.rs lists the notebook itself).
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletedSection {
+    pub id: String,
+    pub name: String,
+    pub deleted_at: String,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletedPage {
+    pub id: String,
+    pub title: String,
+    pub section_id: String,
+    pub section_name: String,
+    pub deleted_at: String,
+}
+
+#[derive(Debug, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletedAttachment {
+    pub id: String,
+    pub filename: String,
+    pub page_id: String,
+    pub page_title: String,
+    pub section_name: String,
+    pub size: i64,
+    pub deleted_at: String,
+}
+
+/// Sections in the recycle bin.
+pub async fn deleted_sections(pool: &Pool<Sqlite>) -> Result<Vec<DeletedSection>, String> {
+    sqlx::query_as::<_, DeletedSection>(
+        "SELECT id, name, deleted_at FROM sections \
+         WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("deleted sections: {e}"))
+}
+
+/// Pages in the recycle bin whose section is still live (a deleted section is
+/// one entry; its pages aren't listed individually).
+pub async fn deleted_pages(pool: &Pool<Sqlite>) -> Result<Vec<DeletedPage>, String> {
+    sqlx::query_as::<_, DeletedPage>(
+        "SELECT p.id, p.title, p.section_id, s.name AS section_name, p.deleted_at \
+         FROM pages p JOIN sections s ON s.id = p.section_id \
+         WHERE p.deleted_at IS NOT NULL AND s.deleted_at IS NULL \
+         ORDER BY p.deleted_at DESC",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("deleted pages: {e}"))
+}
+
+/// Attachments in the recycle bin whose page and section are still live.
+pub async fn deleted_attachments(pool: &Pool<Sqlite>) -> Result<Vec<DeletedAttachment>, String> {
+    sqlx::query_as::<_, DeletedAttachment>(
+        "SELECT a.id, a.filename, a.page_id, p.title AS page_title, \
+         s.name AS section_name, a.size, a.deleted_at \
+         FROM attachments a JOIN pages p ON p.id = a.page_id \
+         JOIN sections s ON s.id = p.section_id \
+         WHERE a.deleted_at IS NOT NULL AND p.deleted_at IS NULL AND s.deleted_at IS NULL \
+         ORDER BY a.deleted_at DESC",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("deleted attachments: {e}"))
+}
+
 // ---------------------------------------------------------------------------
 // Search indexing (spec Section 11)
 // ---------------------------------------------------------------------------
@@ -662,15 +867,25 @@ pub async fn reindex_page(
     pool: &Pool<Sqlite>,
     page_id: &str,
 ) -> Result<Option<PageIndexData>, String> {
+    // A page in the recycle bin (its own or its section's deleted_at set) must
+    // never be indexed. Treat it like a missing page: drop any stale fts row and
+    // return None so the caller also clears it from the master index. This keeps
+    // every reindex path (save, reindex_section/notebook/all) bin-aware.
     let row: Option<(String, String, String, String)> = sqlx::query_as(
         "SELECT p.section_id, p.title, p.created_at, p.updated_at \
-         FROM pages p WHERE p.id = ?1",
+         FROM pages p JOIN sections s ON s.id = p.section_id \
+         WHERE p.id = ?1 AND p.deleted_at IS NULL AND s.deleted_at IS NULL",
     )
     .bind(page_id)
     .fetch_optional(pool)
     .await
     .map_err(|e| format!("reindex read page: {e}"))?;
     let Some((section_id, title, created_at, updated_at)) = row else {
+        sqlx::query("DELETE FROM fts_index WHERE page_id = ?1")
+            .bind(page_id)
+            .execute(pool)
+            .await
+            .map_err(|e| format!("reindex drop fts: {e}"))?;
         return Ok(None);
     };
 

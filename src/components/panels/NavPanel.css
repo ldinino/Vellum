@@ -67,6 +67,8 @@
   align-items: center;
   gap: var(--space-2);
   width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
 }
@@ -230,4 +232,51 @@
   font-size: var(--text-size-small);
   color: var(--text-muted);
   line-height: 1.5;
+}
+
+/* ---- Recycle Bin: footer button (expanded) + rail button (collapsed) ----- */
+/* Pinned to the lower-left: .v-nav__tree has flex:1, so this sits at the bottom.
+   The icon is bin-full when the bin has items, bin-metal when empty. */
+.v-nav__recyclebin {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  border-top: 1px solid var(--border-faint);
+  background: transparent;
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.v-nav__recyclebin:hover {
+  background: var(--gradient-hover);
+  color: var(--text-primary);
+}
+
+.v-nav__recyclebin-label {
+  flex: 1;
+}
+
+.v-nav__rail-bin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 26px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--gradient-button);
+  cursor: pointer;
+}
+
+.v-nav__rail-bin:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
 }

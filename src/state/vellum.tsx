@@ -16,12 +16,14 @@ import {
 } from "react";
 import * as api from "../data/api";
 import { randomPaletteColor } from "../data/palette";
+import { setIgnoredRules as applyIgnoredRules } from "../components/editor/grammar";
 import type {
   Notebook,
   Page,
   PageSortDir,
   PageSortMode,
   PageTemplate,
+  RecycleItem,
   RefineTemplate,
   Section,
 } from "../data/types";
@@ -45,6 +47,10 @@ interface VellumState {
   grammarEnabled: boolean;
   /** Spell check on/off (Harper spelling, persisted in app.json). */
   spellcheckEnabled: boolean;
+  /** Words the user added to the Harper dictionary (app.json, spec Section 10). */
+  customDictionary: string[];
+  /** Grammar lint categories the user has ignored via "Ignore this rule". */
+  ignoredGrammarRules: string[];
   /** Page template library (app.json). */
   pageTemplates: PageTemplate[];
   /** Refine settings + library (app.json; spec Sections 8, 9). */
@@ -57,6 +63,13 @@ interface VellumState {
   /** False until app.json has been read once, so the first-run screen doesn't
    * flash before we know whether setup is already done. */
   configLoaded: boolean;
+  /** Soft-deleted items across all notebooks (Recycle Bin; spec Section 5.1). */
+  recycleBin: RecycleItem[];
+  /** Count of Recycle Bin entries, for the nav footer's empty/full icon. */
+  recycleBinCount: number;
+  /** Bumped when an attachment is restored from the bin so the open page's
+   * attachment bar re-lists (it otherwise loads only once on mount). */
+  attachmentsRefreshTick: number;
   error: string | null;
 }
 
@@ -69,6 +82,8 @@ const initial: VellumState = {
   searchHighlight: "",
   grammarEnabled: true,
   spellcheckEnabled: true,
+  customDictionary: [],
+  ignoredGrammarRules: [],
   pageTemplates: [],
   refineEnabled: false,
   refineAdherence: 0.5,
@@ -76,6 +91,9 @@ const initial: VellumState = {
   refineTemplates: [],
   firstRunComplete: false,
   configLoaded: false,
+  recycleBin: [],
+  recycleBinCount: 0,
+  attachmentsRefreshTick: 0,
   error: null,
 };
 
@@ -128,6 +146,14 @@ export interface VellumActions {
 
   setGrammarEnabled: (enabled: boolean) => Promise<void>;
   setSpellcheckEnabled: (enabled: boolean) => Promise<void>;
+  /** Add a word to the Harper dictionary (persisted + synced to the engine). */
+  addDictionaryWord: (word: string) => Promise<void>;
+  /** Remove a word from the Harper dictionary. */
+  removeDictionaryWord: (word: string) => Promise<void>;
+  /** Ignore a grammar rule category persistently ("Ignore this rule"). */
+  ignoreGrammarRule: (kind: string) => Promise<void>;
+  /** Stop ignoring a grammar rule category (re-enables its underlines). */
+  unignoreGrammarRule: (kind: string) => Promise<void>;
   /** Persist the page-template library to app.json. */
   savePageTemplates: (templates: PageTemplate[]) => Promise<void>;
 
@@ -146,6 +172,17 @@ export interface VellumActions {
   duplicatePage: (notebookId: string, pageId: string) => Promise<void>;
   movePage: (notebookId: string, pageId: string, toSectionId: string) => Promise<void>;
   reorderPages: (notebookId: string, orderedIds: string[]) => Promise<void>;
+
+  /** Remove an attachment from a page into the Recycle Bin (spec Section 5.1). */
+  softDeleteAttachment: (notebookId: string, attachmentId: string) => Promise<void>;
+  /** Refresh the Recycle Bin list + count from the backend. */
+  loadRecycleBin: () => Promise<void>;
+  /** Restore one Recycle Bin item to where it came from. */
+  restoreItem: (item: RecycleItem) => Promise<void>;
+  /** Permanently delete one Recycle Bin item. */
+  purgeItem: (item: RecycleItem) => Promise<void>;
+  /** Permanently delete everything in the Recycle Bin. */
+  emptyRecycleBin: () => Promise<void>;
 }
 
 type VellumContextValue = VellumState & { actions: VellumActions };
@@ -267,9 +304,26 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     }
   }, [fail]);
 
+  // Recycle Bin (spec Section 5.1): the list + count of soft-deleted items
+  // across all notebooks. Loaded on startup for the nav footer's empty/full
+  // icon and refreshed whenever the bin changes (restore / purge / empty).
+  const loadRecycleBin = useCallback(async () => {
+    try {
+      const items = await api.listRecycleBin();
+      setState((s) => ({ ...s, recycleBin: items, recycleBinCount: items.length }));
+    } catch (e) {
+      fail(e);
+    }
+  }, [fail]);
+
   useEffect(() => {
     reload();
   }, [reload]);
+
+  // Reflect any existing Recycle Bin contents in the nav footer icon on launch.
+  useEffect(() => {
+    loadRecycleBin();
+  }, [loadRecycleBin]);
 
   // Rebuild the master search index once on startup so global search is complete
   // and self-heals any drift (deletes/edits made while the app was closed).
@@ -281,11 +335,16 @@ export function VellumProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     api
       .getAppConfig()
-      .then((cfg) =>
+      .then((cfg) => {
+        // Apply the persisted ignored rules to the live underline filter before
+        // the first lint runs (spec Section 10).
+        applyIgnoredRules(cfg.settings.ignoredGrammarRules ?? []);
         setState((s) => ({
           ...s,
           grammarEnabled: cfg.settings.grammarEnabled,
           spellcheckEnabled: cfg.settings.spellcheckEnabled,
+          customDictionary: cfg.settings.customDictionary ?? [],
+          ignoredGrammarRules: cfg.settings.ignoredGrammarRules ?? [],
           pageTemplates: cfg.pageTemplates ?? [],
           refineEnabled: cfg.settings.refineEnabled,
           refineAdherence: cfg.settings.refineAdherence,
@@ -293,8 +352,8 @@ export function VellumProvider({ children }: { children: ReactNode }) {
           refineTemplates: cfg.refineTemplates ?? [],
           firstRunComplete: cfg.settings.firstRunComplete,
           configLoaded: true,
-        })),
-      )
+        }));
+      })
       .catch((e) => {
         console.error("load app config failed", e);
         // Don't trap the app behind a never-loading first-run gate.
@@ -573,6 +632,69 @@ export function VellumProvider({ children }: { children: ReactNode }) {
         fail(e);
       }
     },
+    addDictionaryWord: async (word) => {
+      // Config is the source of truth: read-modify-write it, then sync the engine
+      // (so underlines refresh) and mirror into state. Dedup case-insensitively
+      // since Harper accepts any capitalization of a known word.
+      const w = word.trim();
+      if (!w) return;
+      try {
+        const cfg = await api.getAppConfig();
+        const current = cfg.settings.customDictionary ?? [];
+        if (current.some((x) => x.toLowerCase() === w.toLowerCase())) {
+          setState((s) => ({ ...s, customDictionary: current }));
+          return;
+        }
+        const next = [...current, w];
+        await api.saveAppConfig({ ...cfg, settings: { ...cfg.settings, customDictionary: next } });
+        await api.setDictionaryWords(next);
+        setState((s) => ({ ...s, customDictionary: next }));
+      } catch (e) {
+        fail(e);
+      }
+    },
+    removeDictionaryWord: async (word) => {
+      try {
+        const cfg = await api.getAppConfig();
+        const next = (cfg.settings.customDictionary ?? []).filter((x) => x !== word);
+        await api.saveAppConfig({ ...cfg, settings: { ...cfg.settings, customDictionary: next } });
+        await api.setDictionaryWords(next);
+        setState((s) => ({ ...s, customDictionary: next }));
+      } catch (e) {
+        fail(e);
+      }
+    },
+    ignoreGrammarRule: async (kind) => {
+      try {
+        const cfg = await api.getAppConfig();
+        const current = cfg.settings.ignoredGrammarRules ?? [];
+        const next = current.includes(kind) ? current : [...current, kind];
+        if (next !== current) {
+          await api.saveAppConfig({
+            ...cfg,
+            settings: { ...cfg.settings, ignoredGrammarRules: next },
+          });
+        }
+        applyIgnoredRules(next);
+        setState((s) => ({ ...s, ignoredGrammarRules: next }));
+      } catch (e) {
+        fail(e);
+      }
+    },
+    unignoreGrammarRule: async (kind) => {
+      try {
+        const cfg = await api.getAppConfig();
+        const next = (cfg.settings.ignoredGrammarRules ?? []).filter((k) => k !== kind);
+        await api.saveAppConfig({
+          ...cfg,
+          settings: { ...cfg.settings, ignoredGrammarRules: next },
+        });
+        applyIgnoredRules(next);
+        setState((s) => ({ ...s, ignoredGrammarRules: next }));
+      } catch (e) {
+        fail(e);
+      }
+    },
     savePageTemplates: async (templates) => {
       // Optimistic, then persist into app.json (preserving other fields).
       setState((s) => ({ ...s, pageTemplates: templates }));
@@ -674,7 +796,7 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     },
     deleteNotebook: async (id) => {
       try {
-        await api.deleteNotebook(id);
+        await api.softDeleteNotebook(id);
         setState((s) => {
           const wasSelected = s.selectedNotebookId === id;
           return {
@@ -683,6 +805,7 @@ export function VellumProvider({ children }: { children: ReactNode }) {
             selectedSectionId: wasSelected ? null : s.selectedSectionId,
             selectedPageId: wasSelected ? null : s.selectedPageId,
             pages: wasSelected ? [] : s.pages,
+            recycleBinCount: s.recycleBinCount + 1,
           };
         });
         await reload();
@@ -745,7 +868,8 @@ export function VellumProvider({ children }: { children: ReactNode }) {
         const neighbor =
           idx >= 0 ? sections[idx + 1] ?? sections[idx - 1] ?? null : null;
 
-        await api.deleteSection(notebookId, sectionId);
+        await api.softDeleteSection(notebookId, sectionId);
+        setState((s) => ({ ...s, recycleBinCount: s.recycleBinCount + 1 }));
         await afterSectionChange(notebookId);
 
         if (wasSelected) {
@@ -813,7 +937,8 @@ export function VellumProvider({ children }: { children: ReactNode }) {
         const neighborId =
           idx >= 0 ? (cur[idx + 1] ?? cur[idx - 1])?.id ?? null : null;
 
-        await api.deletePage(notebookId, pageId);
+        await api.softDeletePage(notebookId, pageId);
+        setState((s) => ({ ...s, recycleBinCount: s.recycleBinCount + 1 }));
         await refreshSelectedPages();
         if (wasSelected) {
           setState((s) => ({ ...s, selectedPageId: neighborId }));
@@ -855,6 +980,54 @@ export function VellumProvider({ children }: { children: ReactNode }) {
       try {
         await api.reorderPages(notebookId, orderedIds);
         await refreshSelectedPages();
+      } catch (e) {
+        fail(e);
+      }
+    },
+
+    loadRecycleBin,
+    softDeleteAttachment: async (notebookId, attachmentId) => {
+      // Let errors propagate so the caller (PageEditor) keeps the chip on
+      // failure; on success bump the footer count (reconciled by loadRecycleBin).
+      await api.softDeleteAttachment(notebookId, attachmentId);
+      setState((s) => ({ ...s, recycleBinCount: s.recycleBinCount + 1 }));
+    },
+    restoreItem: async (item) => {
+      try {
+        const hadSections = !!ref.current.notebooks.find(
+          (n) => n.id === item.notebookId,
+        )?.sections;
+        await api.restoreItem(item.kind, item.notebookId, item.id);
+        // Bring the restored item back into view: notebooks re-list, and the
+        // owning notebook's sections/pages refresh if they're on screen.
+        await reload();
+        if (hadSections) await reloadSections(item.notebookId);
+        await refreshSelectedPages();
+        // A restored attachment may belong to the page open right now; nudge its
+        // editor to re-list attachments (the bar loads only once on mount).
+        if (item.kind === "attachment") {
+          setState((s) => ({
+            ...s,
+            attachmentsRefreshTick: s.attachmentsRefreshTick + 1,
+          }));
+        }
+        await loadRecycleBin();
+      } catch (e) {
+        fail(e);
+      }
+    },
+    purgeItem: async (item) => {
+      try {
+        await api.purgeItem(item.kind, item.notebookId, item.id);
+        await loadRecycleBin();
+      } catch (e) {
+        fail(e);
+      }
+    },
+    emptyRecycleBin: async () => {
+      try {
+        await api.emptyRecycleBin();
+        await loadRecycleBin();
       } catch (e) {
         fail(e);
       }

@@ -135,7 +135,7 @@ export function PageEditor({
   page: Page;
   highlightQuery?: string;
 }) {
-  const { actions, grammarEnabled, spellcheckEnabled, refineEnabled, refineTemplates, refineAdherence } =
+  const { actions, grammarEnabled, spellcheckEnabled, refineEnabled, refineTemplates, refineAdherence, attachmentsRefreshTick } =
     useVellum();
   const { setActiveEditor } = useActiveEditor();
   const [title, setTitle] = useState(page.title);
@@ -586,7 +586,8 @@ export function PageEditor({
     };
   }, []);
 
-  // Load this page's attachments.
+  // Load this page's attachments. Re-runs when an attachment is restored from
+  // the Recycle Bin (attachmentsRefreshTick) so the bar reflects it immediately.
   useEffect(() => {
     let active = true;
     api
@@ -596,7 +597,7 @@ export function PageEditor({
     return () => {
       active = false;
     };
-  }, [notebookId, page.id]);
+  }, [notebookId, page.id, attachmentsRefreshTick]);
 
   const openAttachment = (id: string) => {
     const a = attachments.find((x) => x.id === id);
@@ -608,8 +609,8 @@ export function PageEditor({
   };
 
   const removeAttachment = (id: string) => {
-    api
-      .removeAttachment(ids.current.notebookId, id)
+    actions
+      .softDeleteAttachment(ids.current.notebookId, id)
       .then(() => setAttachments((prev) => prev.filter((x) => x.id !== id)))
       .catch((e) => console.error("remove attachment failed", e));
   };
@@ -656,10 +657,16 @@ export function PageEditor({
         />
         <EditorContent editor={editor} className="v-editor__content" />
       </div>
-      <GrammarPopover editor={editor} onAfterAction={() => void runGrammarRef.current()} />
+      <GrammarPopover
+        editor={editor}
+        onAfterAction={() => void runGrammarRef.current()}
+        onAddToDictionary={(word) => actions.addDictionaryWord(word)}
+      />
       <EditorContextMenu
         editor={editor}
         onAfterAction={() => void runGrammarRef.current()}
+        onAddToDictionary={(word) => actions.addDictionaryWord(word)}
+        onIgnoreRule={(kind) => actions.ignoreGrammarRule(kind)}
         buildRefineItems={buildRefineItems}
       />
       <RefinePreviewModal

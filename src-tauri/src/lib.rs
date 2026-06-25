@@ -28,6 +28,12 @@ pub fn run() {
         .manage(refine::runtime::InstallState::default())
         .setup(|app| {
             paths::ensure_data_layout(&app.handle().clone())?;
+            // Load the user's saved custom dictionary into the grammar engine so
+            // the very first lint already accepts their words (spec Section 10),
+            // independent of when the renderer syncs.
+            if let Ok(cfg) = config::load_app_config(app.handle()) {
+                grammar::set_user_words(cfg.settings.custom_dictionary);
+            }
             // Real Aero-style glass behind the chrome (Phase 9): acrylic
             // translucency on the main window. Windows-only; best-effort, so a
             // failure (older build / unsupported) just leaves the window opaque.
@@ -68,19 +74,19 @@ pub fn run() {
             commands::open_notebook,
             commands::rename_notebook,
             commands::set_notebook_color,
-            commands::delete_notebook,
+            commands::soft_delete_notebook,
             commands::reorder_notebooks,
             commands::list_sections,
             commands::create_section,
             commands::rename_section,
             commands::update_section,
-            commands::delete_section,
+            commands::soft_delete_section,
             commands::reorder_sections,
             commands::set_section_sort,
             commands::list_pages,
             commands::create_page,
             commands::set_page_title,
-            commands::delete_page,
+            commands::soft_delete_page,
             commands::duplicate_page,
             commands::move_page,
             commands::reorder_pages,
@@ -91,11 +97,17 @@ pub fn run() {
             commands::save_page_image,
             commands::list_attachments,
             commands::add_attachment,
-            commands::remove_attachment,
+            commands::soft_delete_attachment,
             commands::open_attachment,
+            commands::list_recycle_bin,
+            commands::count_recycle_bin,
+            commands::restore_item,
+            commands::purge_item,
+            commands::empty_recycle_bin,
             commands::search,
             commands::reindex_all,
             commands::grammar_check,
+            commands::set_dictionary_words,
             commands::fetch_link_title,
             commands::ollama_start,
             commands::ollama_stop,

@@ -4,6 +4,7 @@ import { PageList } from "./panels/PageList";
 import { EditorArea } from "./panels/EditorArea";
 import { SectionTabs } from "./panels/SectionTabs";
 import { SectionPropertiesModal } from "./panels/SectionPropertiesModal";
+import { RecycleBinModal } from "./panels/RecycleBinModal";
 import { MenuBar } from "./MenuBar";
 import { TopToolbar } from "./editor/EditorToolbar";
 import { SearchBox } from "./search/SearchBar";
@@ -31,6 +32,7 @@ export function VellumShell() {
     null,
   );
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [recycleBinOpen, setRecycleBinOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem(NAV_COLLAPSED_KEY) === "1";
@@ -106,6 +108,7 @@ export function VellumShell() {
           collapsed={navCollapsed}
           onToggle={toggleNav}
           onOpenSectionProperties={openSectionProperties}
+          onOpenRecycleBin={() => setRecycleBinOpen(true)}
         />
         <div className="v-shell__main">
           {/* Tab row spans the editor + page strip: section tabs on the left,
@@ -136,6 +139,7 @@ export function VellumShell() {
       )}
 
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <RecycleBinModal open={recycleBinOpen} onClose={() => setRecycleBinOpen(false)} />
       <FirstRunModal />
       <AppContextMenus />
     </div>

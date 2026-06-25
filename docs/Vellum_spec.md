@@ -72,11 +72,11 @@ OneDrive (and other sync clients) cover this path by default on Windows — no c
 
 **SQLite schema (per notebook):**
 
-- `sections` — id, name, color, sort_order, page_template_id (nullable), created_at, updated_at
-- `pages` — id, section_id, title, sort_order, created_at, updated_at
+- `sections` — id, name, color, sort_order, page_template_id (nullable), created_at, updated_at, deleted_at (nullable — Recycle Bin)
+- `pages` — id, section_id, title, sort_order, created_at, updated_at, deleted_at (nullable)
 - `page_content` — page_id, content_json (Tiptap JSON doc), updated_at
 - `page_ops` — id, page_id, op_json, created_at (operation log for crash recovery)
-- `attachments` — id, page_id, filename, path, mime_type, created_at
+- `attachments` — id, page_id, filename, path, mime_type, created_at, deleted_at (nullable)
 - `fts_index` — FTS5 virtual table over page title + content text + attachment filenames
 
 **app.json stores:**
@@ -85,6 +85,8 @@ OneDrive (and other sync clients) cover this path by default on Windows — no c
 - App-level settings
 
 **Search across notebooks:** A lightweight master index DB (`search-index.db`) lives in the Vellum root and maintains a cross-notebook FTS5 index, updated on every save. Both global and scoped search query it (scope = a notebook filter); the per-notebook FTS5 index is maintained as the durable source the master is rebuilt from. See the Section 11 design note.
+
+> **Design note (Recycle Bin, as built):** deletion is soft (Section 5.1). `sections`, `pages`, and `attachments` carry a nullable `deleted_at` (migration 5); a soft-deleted notebook is flagged with `deletedAt` in its `notebooks.json` entry and its folder is kept on disk. Only the directly-deleted row is stamped — descendants are filtered transitively (a page is live iff it *and* its section have `deleted_at` NULL) — so restore clears a single timestamp and a child deleted before its parent stays in the bin. Soft-deleted content is dropped from both FTS indexes (re-added on restore); a notebook's folder, a page's attachment files, etc. are erased only on permanent delete / Empty Recycle Bin.
 
 ---
 
@@ -113,6 +115,10 @@ right (above the page strip), OneNote-style.
 - Toggle with the « / » chevron in the nav header, or by clicking the notebook
   label at the left of the section-tab row (no chevron there); the choice
   persists across sessions (localStorage).
+- A **Recycle Bin** is pinned to the bottom of the nav (lower-left) in both
+  states: a labeled button when expanded, an icon button on the collapsed rail.
+  Its glyph is full when the bin holds items and empty otherwise; clicking it
+  opens the Recycle Bin (Section 5.1).
 
 ```
 [ + New Notebook ]
@@ -135,6 +141,9 @@ right (above the page strip), OneNote-style.
 - Right-click section: Rename, Delete, Add Page, Change color, **Properties**.
 - Section Properties modal: name, color, page template assignment (dropdown: None / [template names]).
 - Drag to reorder sections within a notebook.
+- Deleting a notebook, section, or page moves it to the Recycle Bin (Section 5.1)
+  with no confirmation — it's recoverable. Permanent deletion happens only from
+  the bin.
 
 **Section tabs (above the editor)**
 
@@ -167,6 +176,37 @@ right (above the page strip), OneNote-style.
 - Drag to reorder.
 
 **No floating elements.**
+
+**5.1 Recycle Bin (recoverable deletion)**
+
+Deleting a notebook, section, page, or attachment is non-destructive: the item
+moves to a global Recycle Bin instead of being erased, and stays fully
+recoverable until the user empties the bin. This also closes the gap where a
+removed attachment's file was orphaned on disk forever — the file is now kept
+until the item is purged.
+
+- **Entry point:** the Recycle Bin button in the lower-left of the notebook nav
+  (labeled when expanded, an icon on the collapsed rail); `bin-full` glyph when
+  it has items, `bin-metal` when empty. Click to open it; right-click for
+  **Open Recycle Bin** / **Empty Recycle Bin**.
+- **Scope:** one global bin aggregating soft-deleted items across all notebooks.
+  A deleted notebook appears as a single entry (its folder is kept on disk but
+  hidden from the list); live notebooks contribute their deleted sections, pages,
+  and attachments whose ancestors are still present.
+- **Bin window:** a flat, newest-first list; each row shows a type icon, name, a
+  breadcrumb rooted at its notebook, the deleted timestamp, and (attachments)
+  size. Per-row **Restore** and **Delete Permanently**, plus **Empty Recycle
+  Bin** in the footer.
+- **Restore** returns the item to where it came from (its parents are guaranteed
+  to still exist, since an item is only listed while its ancestors are live) and
+  re-indexes it for search.
+- **Confirmation:** deleting to the bin is silent (it's recoverable); only
+  permanent removal — per-item or Empty Recycle Bin — confirms.
+- **Retention:** manual only. Nothing auto-purges; the bin persists across
+  sessions and is OneDrive-synced like the rest of the data.
+- **Data model:** a nullable `deleted_at` on sections / pages / attachments plus
+  a `deletedAt` flag on the notebook registry entry (Section 4 design note);
+  soft-deleted items leave the search indexes immediately and return on restore.
 
 ---
 
@@ -351,9 +391,9 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 
 **UI behavior:**
 - Grammar errors underlined in a distinct color (green wavy); spelling errors in a distinct color (red wavy) — both separate from Refine suggestions (purple).
-- Hover underline: shows Harper's suggested correction(s) and rule/message.
+- Hover underline: shows Harper's suggested correction(s) and rule/message; spelling underlines also show a **"+" Add to Dictionary** button (tooltip "Add to dictionary").
 - Click suggestion to accept.
-- Right-click (via the unified editor context menu, Section 5): grammar → Accept / Ignore / Ignore Rule; spelling → suggestion(s) / Ignore.
+- Right-click (via the unified editor context menu, Section 5): spelling → suggestion(s) / **Add to Dictionary** / **Ignore once**; grammar → suggestion(s) / **Ignore once** / **Ignore this rule**. Added words and ignored rules are reversible in **Settings → Proofing**.
 
 **Scope:** Runs on the current page only. Does not scan across pages or notebooks in the background.
 
@@ -363,7 +403,8 @@ Not surfaced in normal use. Intended for development, model evaluation, and powe
 > - **Dependency footprint (decided):** `harper-core` 2.5 runs its POS tagger on a small neural model via the **Burn** ML framework (`harper-brill` → `harper-pos-utils` → `burn`), compiled in on the CPU `burn-ndarray` backend — **no GPU / `wgpu` is compiled**, fully offline. This adds a few MB to the binary and some Rust build time, which we accept: grammar quality is what users feel, a slightly larger binary is not. No revisit planned.
 > - **Offsets:** the command returns **UTF-16** offsets (Harper works in Unicode scalars) so they index a JS string directly. The renderer extracts the page's plain text — newline between blocks so Harper sees sentence boundaries — while recording each text node's offset→ProseMirror-position map, then maps spans back. Verified against multi-block docs.
 > - **Decorations, not a mark:** grammar errors are ProseMirror **decorations** (never stored in the doc or the search index); the set is mapped through edits between re-checks. The check is debounced ~2s after the last keystroke and runs on a `spawn_blocking` thread (linter is cached per thread — `LintGroup` isn't `Send`).
-> - **Ignore is per app-session** (module-level sets spanning page switches): "Ignore" keys on the lint's kind + message + matched text; "Ignore Rule" keys on the lint kind.
+> - **Custom dictionary + reversible ignore (persistent, as built).** Words added via "Add to Dictionary" (the hover "+" or the right-click menu) and rule categories hidden via "Ignore this rule" are stored in `app.json` (`settings.customDictionary` / `settings.ignoredGrammarRules`) — global, surviving restarts — and are reviewable/removable in **Settings → Proofing**. The dictionary is enforced in the backend: `grammar.rs` builds the linter over a `MergedDictionary` (curated + a `MutableDictionary` of the user's words) and — critically — parses the document with that **same** merged dictionary (`Document::new_plain_english`, not the curated-only constructor), otherwise an added word is still tagged "unknown" at parse time and re-flagged. A generation counter invalidates each worker thread's cached linter when the word list changes; the `set_dictionary_words` command syncs the engine after the renderer persists the list, and startup seeds it from `app.json`. Ignored *rules* key on the lint kind and are filtered in `mapLints`.
+> - **"Ignore once" stays per app-session** (a module-level set spanning page switches), keyed on the lint's kind + message + matched text — intentionally temporary (it resets on restart and is not listed in Settings), so a one-off false positive can be dismissed without polluting the permanent dictionary/rule lists.
 > - **Spelling from Harper, not WebView2 (changed from §6's original plan).** The native `spellcheck` attribute is set to `false`. Rationale: WebView2's spelling correction suggestions are only reachable through its native right-click menu and aren't exposed to JS, so they can't populate our themed menu; keeping it on would also double-underline (native red squiggle + Harper). Harper already produces `LintKind::Spelling` lints with suggestions, so we draw spelling ourselves (red wavy) and serve corrections from our own menu. Trade-off accepted: Harper's dictionary, not WebView2's, defines "misspelled". Spelling and grammar each have their own on/off toggle (Section 15) and `mapLints` filters by category.
 
 ---
@@ -412,7 +453,7 @@ they remain available for future use, but they are not exposed in the UI.
 
 **Storage:** Files are copied to `[Notebook]\attachments\[page-id]\` at drop time. The original file is not moved or modified. The attachment record in the DB references the relative path.
 
-**Right-click attachment:** Open, Remove (removes from page and deletes the copy in the attachments folder).
+**Right-click attachment:** Open, Remove (moves the attachment to the Recycle Bin — Section 5.1 — keeping its file on disk until the bin is emptied).
 
 **Search:** Attachment filenames and MIME types are indexed in FTS5. Search results show an attachment indicator; matching on attachment filename surfaces the page.
 
@@ -420,7 +461,7 @@ they remain available for future use, but they are not exposed in the UI.
 
 > **Design note (as built):**
 > - **Drop routing:** dropping on the attachment bar attaches (any type); dropping in the editor body inserts images inline and attaches everything else (you can't inline a PDF). The bar is always shown as a stable drop target — when empty it's a slim "Drag files here to attach" hint.
-> - **Storage:** each file goes in its own `attachments/<page-id>/<uuid>/<original-name>` folder, so the display name stays pristine and two files with the same name never collide. The DB row stores filename, relative path, MIME type, and byte size (size added in migration 3). Deleting a page removes its whole attachment folder (the rows cascade, the files don't).
+> - **Storage:** each file goes in its own `attachments/<page-id>/<uuid>/<original-name>` folder, so the display name stays pristine and two files with the same name never collide. The DB row stores filename, relative path, MIME type, byte size (size added in migration 3), and a nullable `deleted_at` (migration 5). Removing an attachment soft-deletes it to the Recycle Bin (Section 5.1) — the row is flagged and the file kept — so only **permanent** deletion (purge / Empty Recycle Bin, or permanently deleting its page) erases the file. Permanently deleting a page removes its whole attachment folder (the rows cascade, the files don't).
 > - **Open:** backend `open_attachment` resolves the path under the notebook dir (rejecting `..` traversal) and launches the system default app via the opener plugin.
 > - **Search:** filename + MIME type are written into both the per-notebook and master FTS indexes on every reindex; a hit sets the result's attachment indicator.
 
@@ -444,6 +485,8 @@ No manual save. No save indicator. No "unsaved changes" state.
 
 **App-level registry** (`notebooks.json`) is written atomically (write to temp file, rename) to prevent corruption on crash during notebook create/rename/delete.
 
+**Deletion is recoverable.** Notebooks, sections, pages, and attachments are soft-deleted to the Recycle Bin (Section 5.1) rather than erased, so an accidental delete is undoable; permanent removal is an explicit, separate action (per-item or Empty Recycle Bin).
+
 ---
 
 ### 14. Export / Print
@@ -462,10 +505,12 @@ No PDF export, no Markdown export, no HTML export in v1.
 |---|---|
 | General | App data location (read-only, shows Documents path) |
 | Templates | Page template library: create, edit, delete |
-| Editor | Default font, default font size, spell check on/off (Harper spelling, English) |
-| Grammar | Grammar check on/off (Harper, English) |
+| Editor | Default font, default font size |
+| Proofing | Spell check + grammar check on/off (Harper, English); custom dictionary (add/remove words); ignored grammar rules (review/restore). See Section 10. |
 | Refine | Enable toggle, Strict ↔ Liberal slider, model selector, Refine template manager, debug panel access |
 | About | Version, Harper version, Ollama runtime version, check for updates |
+
+> **As built:** the Settings dialog currently ships **Page Templates**, **Proofing**, and **Refine** tabs (General / Editor / About are planned). **Proofing** (Section 10) consolidates the spell- and grammar-check toggles with the custom-dictionary and ignored-rules managers, so everything that controls Harper lives in one place.
 
 ---
 
@@ -504,7 +549,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 | 7 — Refine Templates + Refine Infrastructure | ✅ Complete |
 | 8 — Refine (Full Feature) | ✅ Complete |
 | 9 — UI Polish Pass | ✅ Complete |
-| 10–11 | ⬜ Not started |
+| 10–11 | ⬜ Not started — _Recycle Bin (Section 5.1) landed ahead of schedule_ |
 
 ---
 
@@ -766,8 +811,13 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 - Wire `window.print()` to print button / keyboard shortcut
 - Settings modal: all sections from spec (General, Templates, Editor, Grammar, Refine, About)
 - Verify all settings persist correctly and apply immediately where expected
+- Recycle Bin (Section 5.1): recoverable deletion of notebooks / sections / pages /
+  attachments via a lower-left nav entry — soft-delete + restore + permanent purge /
+  Empty. **Built** (a nullable `deleted_at` per item + a `deletedAt` registry flag;
+  soft-deleted content leaves search and returns on restore; files/folders are erased
+  only on permanent delete).
 
-**Exit criteria:** Export flow consistently succeeds. Print renders cleanly. All settings survive app restart.
+**Exit criteria:** Export flow consistently succeeds. Print renders cleanly. All settings survive app restart. Deletes are recoverable from the Recycle Bin, and permanent purge removes the on-disk files/folder.
 
 ---
 
