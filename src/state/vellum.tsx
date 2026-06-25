@@ -796,19 +796,40 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     },
     deleteNotebook: async (id) => {
       try {
+        // Capture the neighbor (prefer the next notebook, else the previous one)
+        // before deleting so deleting the notebook you're inside navigates there
+        // instead of dropping to a blank "no notebook" state.
+        const wasSelected = ref.current.selectedNotebookId === id;
+        const notebooks = ref.current.notebooks;
+        const idx = notebooks.findIndex((n) => n.id === id);
+        const neighbor =
+          idx >= 0 ? notebooks[idx + 1] ?? notebooks[idx - 1] ?? null : null;
+
         await api.softDeleteNotebook(id);
-        setState((s) => {
-          const wasSelected = s.selectedNotebookId === id;
-          return {
-            ...s,
-            selectedNotebookId: wasSelected ? null : s.selectedNotebookId,
-            selectedSectionId: wasSelected ? null : s.selectedSectionId,
-            selectedPageId: wasSelected ? null : s.selectedPageId,
-            pages: wasSelected ? [] : s.pages,
-            recycleBinCount: s.recycleBinCount + 1,
-          };
-        });
+        setState((s) => ({ ...s, recycleBinCount: s.recycleBinCount + 1 }));
         await reload();
+
+        if (wasSelected) {
+          if (neighbor) {
+            // Expand the neighbor in the tree and open its first section/page.
+            setState((s) => ({
+              ...s,
+              notebooks: s.notebooks.map((n) =>
+                n.id === neighbor.id ? { ...n, expanded: true } : n,
+              ),
+            }));
+            await selectNotebook(neighbor.id);
+          } else {
+            // The last notebook is gone — nothing to navigate to.
+            setState((s) => ({
+              ...s,
+              selectedNotebookId: null,
+              selectedSectionId: null,
+              selectedPageId: null,
+              pages: [],
+            }));
+          }
+        }
       } catch (e) {
         fail(e);
       }
