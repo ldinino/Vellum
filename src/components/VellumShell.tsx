@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { NavPanel } from "./panels/NavPanel";
 import { PageList } from "./panels/PageList";
 import { EditorArea } from "./panels/EditorArea";
@@ -14,6 +15,7 @@ import { SettingsModal } from "./settings/SettingsModal";
 import { FirstRunModal } from "./settings/FirstRunModal";
 import { AppContextMenus } from "./AppContextMenus";
 import { useVellum } from "../state/vellum";
+import { useActiveEditor } from "../state/activeEditor";
 import { DEFAULT_SECTION_COLOR } from "../data/palette";
 import { Icon } from "./ui/Icon";
 import "./VellumShell.css";
@@ -28,6 +30,39 @@ const NAV_COLLAPSED_KEY = "vellum.navCollapsed";
  */
 export function VellumShell() {
   const { error, actions, notebooks, selectedNotebookId, selectedSectionId } = useVellum();
+  const { active } = useActiveEditor();
+  // Always-current ref to the open page's inline-image cleanup, so the close
+  // listener (registered once) sweeps whichever page is open at quit time.
+  const cleanupImagesRef = useRef<(() => Promise<void>) | null>(null);
+  cleanupImagesRef.current = active?.cleanupImages ?? null;
+
+  // Final check before the window closes: run the open page's inline-image
+  // cleanup (it never gets a navigate-away), then destroy the window. Catches the
+  // titlebar close, File ▸ Exit, and Alt+F4 — all call window.close().
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    const win = getCurrentWindow();
+    let closing = false;
+    let unlisten: (() => void) | undefined;
+    win
+      .onCloseRequested(async (event) => {
+        if (closing) return;
+        closing = true;
+        event.preventDefault();
+        try {
+          const run = cleanupImagesRef.current?.() ?? Promise.resolve();
+          await Promise.race([run, new Promise<void>((r) => setTimeout(r, 1500))]);
+        } catch {
+          /* best effort — never block the close */
+        }
+        await win.destroy();
+      })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => {});
+    return () => unlisten?.();
+  }, []);
   const [secProps, setSecProps] = useState<{ notebookId: string; sectionId: string } | null>(
     null,
   );

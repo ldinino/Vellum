@@ -14,6 +14,9 @@ export interface ActiveEditor {
   editor: Editor;
   /** Store an image file and embed it at the caret (owned by PageEditor). */
   insertImage: (file: File) => void;
+  /** Delete this page's now-unreferenced inline-image files (navigate-away / app
+   * close). Resolves when the sweep finishes, or immediately if not applicable. */
+  cleanupImages: () => Promise<void>;
 }
 
 interface ActiveEditorContextValue {

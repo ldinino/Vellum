@@ -48,6 +48,27 @@ function derivePreview(text: string): string {
   return text.replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
+// Normalize an image src to a notebook-relative, forward-slash path so it can be
+// compared against on-disk attachment paths.
+function normalizeSrc(src: string): string {
+  return src.replace(/\\/g, "/").replace(/^\/+/, "");
+}
+
+// The page's OWN inline-image paths still present in the document (under
+// attachments/<pageId>/). These are the files to KEEP; any other immediate file
+// in that folder is an orphan the backend cleanup may remove.
+function collectPageImageSrcs(editor: Editor, pageId: string): string[] {
+  const prefix = `attachments/${pageId}/`;
+  const srcs = new Set<string>();
+  editor.state.doc.descendants((node) => {
+    if (node.type.name === "image") {
+      const src = normalizeSrc((node.attrs as { src?: string }).src ?? "");
+      if (src.startsWith(prefix)) srcs.add(src);
+    }
+  });
+  return [...srcs];
+}
+
 // A pasted plain-text token that is a single http(s) URL → the trimmed URL
 // (preserving exactly what was pasted), else null. Lets a pasted bare link get
 // a readable label instead of showing the raw address.
@@ -159,6 +180,17 @@ export function PageEditor({
   const ids = useRef({ notebookId, pageId: page.id });
   ids.current = { notebookId, pageId: page.id };
   const editorRef = useRef<Editor | null>(null);
+  // True only once this page's saved content has loaded into the editor. The
+  // inline-image cleanup keys on this: an empty doc from a not-yet-loaded or
+  // failed load must NOT read as "no images" (that would delete the page's files).
+  const loadedOkRef = useRef(false);
+  // This page's own inline-image paths still referenced by the doc, refreshed on
+  // load + every edit. Read by the cleanup so it never has to touch the editor
+  // at unmount (when Tiptap may already be tearing it down).
+  const lastImageSrcsRef = useRef<string[]>([]);
+  // Foreign image srcs currently being re-homed (copied into this page), so a
+  // burst of updates doesn't copy the same file twice.
+  const rehomingRef = useRef<Set<string>>(new Set());
   // The .v-editor wrapper — a capture-phase drag listener is attached here to
   // block page-reorder drags before they reach the editable (see effect below).
   const editorWrapRef = useRef<HTMLDivElement>(null);
@@ -353,6 +385,64 @@ export function PageEditor({
     }
   };
 
+  // Remove this page's inline-image files that the live document no longer
+  // references. Files stay on disk during editing (so undo always works); this
+  // runs on navigate-away (fire-and-forget) and on app close (awaited). No-ops
+  // until content has loaded, so a blank/not-yet-loaded doc can never wipe the
+  // page's images.
+  const cleanupImages = useCallback(async () => {
+    if (!loadedOkRef.current) return;
+    const { notebookId, pageId } = ids.current;
+    try {
+      await api.cleanupPageImages(notebookId, pageId, lastImageSrcsRef.current);
+    } catch (e) {
+      console.error("image cleanup failed", e);
+    }
+  }, []);
+
+  // After a paste carried an image node from another page, copy that file into
+  // THIS page's folder and repoint the node, so every page owns its inline
+  // images (and per-page cleanup can't delete a file another page still shows).
+  const rehomeForeignImages = useCallback(() => {
+    const ed = editorRef.current;
+    if (!ed || ed.isDestroyed) return;
+    const { notebookId, pageId } = ids.current;
+    const own = `attachments/${pageId}/`;
+    const foreign = new Set<string>();
+    ed.state.doc.descendants((node) => {
+      if (node.type.name === "image") {
+        const src = normalizeSrc((node.attrs as { src?: string }).src ?? "");
+        if (src.startsWith("attachments/") && !src.startsWith(own)) foreign.add(src);
+      }
+    });
+    for (const src of foreign) {
+      if (rehomingRef.current.has(src)) continue;
+      rehomingRef.current.add(src);
+      api
+        .copyImageToPage(notebookId, src, pageId)
+        .then((newRel) => {
+          const ed2 = editorRef.current;
+          if (!ed2 || ed2.isDestroyed) return;
+          let tr = ed2.state.tr;
+          let changed = false;
+          ed2.state.doc.descendants((node, pos) => {
+            if (
+              node.type.name === "image" &&
+              normalizeSrc((node.attrs as { src?: string }).src ?? "") === src
+            ) {
+              tr = tr.setNodeMarkup(pos, undefined, { ...node.attrs, src: newRel });
+              changed = true;
+            }
+          });
+          // Repoint outside undo history: undoing the paste removes the node
+          // entirely, and the now-unreferenced copy is swept on navigate-away.
+          if (changed) ed2.view.dispatch(tr.setMeta("addToHistory", false));
+        })
+        .catch((e) => console.error("re-home image failed", e))
+        .finally(() => rehomingRef.current.delete(src));
+    }
+  }, []);
+
   const editor = useEditor({
     extensions: buildExtensions(),
     editorProps: {
@@ -415,6 +505,10 @@ export function PageEditor({
             return true;
           }
         }
+        // Rich/HTML paste may carry an image node copied from another page; once
+        // the default paste lands, re-home any that aren't ours so this page owns
+        // its inline-image files.
+        queueMicrotask(rehomeForeignImages);
         return false;
       },
       handleDrop: (_view, event) => {
@@ -437,6 +531,9 @@ export function PageEditor({
       const json = JSON.stringify(editor.getJSON());
       const preview = derivePreview(editor.getText());
       const { notebookId, pageId } = ids.current;
+      // Keep the referenced-image set current so navigate-away / close cleanup
+      // can run without reading the (possibly tearing-down) editor.
+      lastImageSrcsRef.current = collectPageImageSrcs(editor, pageId);
       opSaver.schedule(() => {
         api.appendPageOp(notebookId, pageId, json).catch((e) =>
           console.error("op save failed", e),
@@ -461,9 +558,9 @@ export function PageEditor({
   // switch / close) so the toolbar disables when no page is open.
   useEffect(() => {
     if (!editor) return;
-    setActiveEditor({ editor, insertImage });
+    setActiveEditor({ editor, insertImage, cleanupImages });
     return () => setActiveEditor(null);
-  }, [editor, insertImage, setActiveEditor]);
+  }, [editor, insertImage, cleanupImages, setActiveEditor]);
 
   // Point the image NodeView's src resolver at this notebook so relative
   // attachment paths resolve to loadable asset:// URLs.
@@ -491,12 +588,16 @@ export function PageEditor({
     if (!editor) return;
     let cancelled = false;
     loadingRef.current = true;
+    loadedOkRef.current = false;
     api
       .loadPageContent(notebookId, page.id)
       .then((json) => {
         if (cancelled) return;
         const doc = json ? JSON.parse(json) : EMPTY_DOC;
         editor.commands.setContent(doc, { emitUpdate: false });
+        // Content is now authoritative: the cleanup may trust the doc's images.
+        loadedOkRef.current = true;
+        lastImageSrcsRef.current = collectPageImageSrcs(editor, page.id);
       })
       .catch((e) => console.error("load page content failed", e))
       .finally(() => {
@@ -563,8 +664,11 @@ export function PageEditor({
       snapSaver.flush();
       grammarSaver.cancel();
       if (idleTimerRef.current != null) window.clearTimeout(idleTimerRef.current);
+      // Navigate-away: sweep this page's now-unreferenced inline images
+      // (fire-and-forget; no-ops until content has loaded).
+      void cleanupImages();
     };
-  }, [opSaver, snapSaver, grammarSaver]);
+  }, [opSaver, snapSaver, grammarSaver, cleanupImages]);
 
   // ProseMirror's drop cursor and core drag handling attach their own listeners
   // directly on the editable DOM, so React/editorProps can't suppress them. Catch

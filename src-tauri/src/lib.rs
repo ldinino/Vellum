@@ -95,6 +95,8 @@ pub fn run() {
             commands::save_page_snapshot,
             commands::notebook_path,
             commands::save_page_image,
+            commands::cleanup_page_images,
+            commands::copy_image_to_page,
             commands::list_attachments,
             commands::add_attachment,
             commands::soft_delete_attachment,

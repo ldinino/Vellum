@@ -733,6 +733,110 @@ pub fn save_page_image(
     Ok(rel)
 }
 
+/// Delete inline-image files under `attachments/<page_id>/` that the page no
+/// longer references. `keep_srcs` is the set of image `src`s still in the live
+/// document (notebook-relative paths). Only immediate FILES are considered — the
+/// DB-tracked attachments (AttachmentBar) live in per-uuid SUBDIRS and are never
+/// touched, and the Recycle Bin isn't involved (these inline images aren't DB-
+/// tracked). Returns the number of files removed. Best effort: a file that won't
+/// delete is skipped.
+#[tauri::command]
+pub fn cleanup_page_images(
+    app: AppHandle,
+    notebook_id: String,
+    page_id: String,
+    keep_srcs: Vec<String>,
+) -> Result<u32, String> {
+    if page_id.is_empty() || page_id.contains('/') || page_id.contains('\\') || page_id.contains("..")
+    {
+        return Err("Invalid page id".into());
+    }
+    let folder = notebook_folder(&app, &notebook_id)?
+        .join("attachments")
+        .join(&page_id);
+    if !folder.is_dir() {
+        return Ok(0);
+    }
+
+    // Normalize the keep set to compare against `attachments/<page>/<file>` rels.
+    let keep: std::collections::HashSet<String> = keep_srcs
+        .into_iter()
+        .map(|s| s.replace('\\', "/").trim_start_matches('/').to_string())
+        .collect();
+
+    let entries = std::fs::read_dir(&folder).map_err(|e| format!("read_dir: {e}"))?;
+    let mut removed = 0u32;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue; // DB-attachment subdirs stay put
+        }
+        let Ok(name) = entry.file_name().into_string() else {
+            continue;
+        };
+        let rel = format!("attachments/{page_id}/{name}");
+        if !keep.contains(&rel) && std::fs::remove_file(&path).is_ok() {
+            removed += 1;
+        }
+    }
+
+    // Tidy up a now-empty page folder (best effort; ignored if files remain).
+    let _ = std::fs::remove_dir(&folder);
+    Ok(removed)
+}
+
+/// Copy an inline image that belongs to another page into `page_id`'s own
+/// attachments folder, returning the new notebook-relative path. Used when an
+/// image node is pasted from a different page so each page owns its files (and
+/// per-page orphan cleanup can't delete a file another page still references).
+#[tauri::command]
+pub fn copy_image_to_page(
+    app: AppHandle,
+    notebook_id: String,
+    src_rel: String,
+    page_id: String,
+) -> Result<String, String> {
+    if page_id.is_empty() || page_id.contains('/') || page_id.contains('\\') || page_id.contains("..")
+    {
+        return Err("Invalid page id".into());
+    }
+    // The path comes from our own doc, but reject traversal / anything outside
+    // the attachments tree defensively.
+    let norm = src_rel.replace('\\', "/");
+    let norm = norm.trim_start_matches('/');
+    if !norm.starts_with("attachments/") || norm.split('/').any(|c| c == "..") {
+        return Err("Invalid image path".into());
+    }
+
+    let dir = notebook_folder(&app, &notebook_id)?;
+    let abs_src = dir.join(norm);
+    if !abs_src.is_file() {
+        return Err(format!("Image missing: {}", abs_src.display()));
+    }
+
+    // Keep only a safe, short extension; default to png.
+    let ext: String = norm
+        .rsplit('.')
+        .next()
+        .filter(|e| !e.contains('/'))
+        .unwrap_or("png")
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(5)
+        .collect::<String>()
+        .to_lowercase();
+    let ext = if ext.is_empty() { "png".to_string() } else { ext };
+
+    let rel = format!("attachments/{page_id}/{}.{ext}", uuid::Uuid::new_v4());
+    let abs = dir.join(&rel);
+    if let Some(parent) = abs.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("create {}: {e}", parent.display()))?;
+    }
+    std::fs::copy(&abs_src, &abs).map_err(|e| format!("copy image: {e}"))?;
+    Ok(rel)
+}
+
 // ---------------------------------------------------------------------------
 // Attachments (spec Section 12)
 // ---------------------------------------------------------------------------

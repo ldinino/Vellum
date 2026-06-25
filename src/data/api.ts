@@ -161,6 +161,17 @@ export const savePageImage = (
   ext: string,
 ) => invoke<string>("save_page_image", { notebookId, pageId, bytes, ext });
 
+/** Delete inline-image files under attachments/<page>/ that the live document no
+ * longer references (keepSrcs = image srcs still in the doc). Fire-and-forget on
+ * navigate-away / app close; returns the number of files removed. */
+export const cleanupPageImages = (notebookId: string, pageId: string, keepSrcs: string[]) =>
+  invoke<number>("cleanup_page_images", { notebookId, pageId, keepSrcs });
+
+/** Copy an inline image pasted from another page into this page's own folder so
+ * each page owns its files; returns the new relative path. */
+export const copyImageToPage = (notebookId: string, srcRel: string, pageId: string) =>
+  invoke<string>("copy_image_to_page", { notebookId, srcRel, pageId });
+
 // --- Attachments (spec Section 12) ------------------------------------------
 
 export const listAttachments = (notebookId: string, pageId: string) =>
