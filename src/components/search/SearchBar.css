@@ -142,6 +142,23 @@
   opacity: 0.7;
 }
 
+/* Matched attachment filenames — shown (highlighted) so a filename hit reads as
+   the file it matched, not just a bare paperclip. */
+.v-search__attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: 3px;
+}
+
+.v-search__attach-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--text-size-small);
+  color: var(--text-secondary);
+}
+
 .v-search__snippet {
   font-size: var(--text-size-ui);
   color: var(--text-secondary);
@@ -154,7 +171,8 @@
 }
 
 .v-search__snippet mark,
-.v-search__title mark {
+.v-search__title mark,
+.v-search__attach-name mark {
   background: #ffd86b;
   border-radius: 2px;
   padding: 0 1px;

@@ -627,7 +627,11 @@ pub struct PageIndexData {
     pub section_name: String,
     pub title: String,
     pub content_text: String,
+    /// Filename + MIME of every attachment, space-joined — the *searchable* text.
     pub attachment_names: String,
+    /// Filenames only (no MIME), newline-joined — the clean list the search UI
+    /// shows. Newline-separated because filenames may contain spaces.
+    pub attachment_filenames: String,
     pub created_at: String,
     pub updated_at: String,
     pub has_attachment: bool,
@@ -689,7 +693,10 @@ pub async fn reindex_page(
         .map(crate::search::flatten_text)
         .unwrap_or_default();
 
-    // Index attachment filenames + MIME types (spec Section 12).
+    // Index attachment filenames + MIME types (spec Section 12). `attachment_names`
+    // (filename + MIME, space-joined) is the searchable text; `attachment_filenames`
+    // (filenames only, newline-joined) is the clean list the search UI displays for
+    // filename matches — newline-separated because filenames may contain spaces.
     let attachments: Vec<(String, Option<String>)> =
         sqlx::query_as("SELECT filename, mime_type FROM attachments WHERE page_id = ?1")
             .bind(page_id)
@@ -697,6 +704,11 @@ pub async fn reindex_page(
             .await
             .map_err(|e| format!("reindex attachments: {e}"))?;
     let has_attachment = !attachments.is_empty();
+    let attachment_filenames = attachments
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
     let attachment_names = attachments
         .into_iter()
         .map(|(name, mime)| match mime {
@@ -732,6 +744,7 @@ pub async fn reindex_page(
         title,
         content_text,
         attachment_names,
+        attachment_filenames,
         created_at,
         updated_at,
         has_attachment,

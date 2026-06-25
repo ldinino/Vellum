@@ -55,6 +55,12 @@ pub struct SearchHit {
     pub created_at: String,
     pub updated_at: String,
     pub has_attachment: bool,
+    /// Filenames of the page's attachments (display-only, no MIME). The search UI
+    /// highlights those matching the query so a filename hit isn't shown as just a
+    /// bare paperclip. `#[sqlx(skip)]`: it's built manually in `search` (`Vec<String>`
+    /// has no SQLite decoder, and the derived `FromRow` is unused by the real query).
+    #[sqlx(skip)]
+    pub attachment_filenames: Vec<String>,
 }
 
 /// Flatten a Tiptap document JSON into searchable plain text: every `text` node
@@ -101,6 +107,11 @@ pub fn fts_query(raw: &str) -> Option<String> {
 // Master index DB
 // ---------------------------------------------------------------------------
 
+/// Bump when the `search_index` schema changes. The master is a derived cache
+/// (rebuilt from the per-notebook indexes by `reindex_all` on startup), so on a
+/// version mismatch we drop and recreate it rather than migrate in place.
+const MASTER_SCHEMA_VERSION: i64 = 2;
+
 /// Open (creating if asked) the master cross-notebook index and ensure its
 /// schema. Single-connection pool, WAL — same rationale as `db::open_pool`.
 pub async fn open_master(db_path: &Path, create: bool) -> Result<Pool<Sqlite>, String> {
@@ -114,8 +125,25 @@ pub async fn open_master(db_path: &Path, create: bool) -> Result<Pool<Sqlite>, S
         .await
         .map_err(|e| format!("open master index {}: {e}", db_path.display()))?;
 
+    // The schema is versioned via PRAGMA user_version. An older (or pre-version)
+    // table is dropped and recreated rather than migrated — startup `reindex_all`
+    // repopulates it from the authoritative per-notebook indexes, so no data is
+    // lost.
+    let version: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| format!("read master user_version: {e}"))?;
+    if version < MASTER_SCHEMA_VERSION {
+        sqlx::query("DROP TABLE IF EXISTS search_index")
+            .execute(&pool)
+            .await
+            .map_err(|e| format!("drop stale master schema: {e}"))?;
+    }
+
     // One FTS5 table holds the searchable text plus UNINDEXED breadcrumb/filter
-    // columns, so a global query needs no joins.
+    // columns, so a global query needs no joins. `attachment_filenames` is a
+    // display-only (UNINDEXED) clean list and must stay LAST so `content` keeps
+    // column index 6 for the positional `snippet()` call in `search`.
     sqlx::query(
         "CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(\
             page_id UNINDEXED,\
@@ -128,12 +156,20 @@ pub async fn open_master(db_path: &Path, create: bool) -> Result<Pool<Sqlite>, S
             attachment_names,\
             created_at UNINDEXED,\
             updated_at UNINDEXED,\
-            has_attachment UNINDEXED\
+            has_attachment UNINDEXED,\
+            attachment_filenames UNINDEXED\
         )",
     )
     .execute(&pool)
     .await
     .map_err(|e| format!("create master schema: {e}"))?;
+
+    // Record the schema version so the next open skips the drop/recreate. The
+    // value is a compile-time constant, not user input, so the format! is safe.
+    sqlx::query(&format!("PRAGMA user_version = {MASTER_SCHEMA_VERSION}"))
+        .execute(&pool)
+        .await
+        .map_err(|e| format!("set master user_version: {e}"))?;
 
     Ok(pool)
 }
@@ -153,8 +189,9 @@ pub async fn upsert_master(
         .map_err(|e| format!("master delete: {e}"))?;
     sqlx::query(
         "INSERT INTO search_index (page_id, notebook_id, notebook_name, section_id, \
-         section_name, title, content, attachment_names, created_at, updated_at, has_attachment) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+         section_name, title, content, attachment_names, created_at, updated_at, has_attachment, \
+         attachment_filenames) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
     )
     .bind(&data.page_id)
     .bind(notebook_id)
@@ -167,6 +204,7 @@ pub async fn upsert_master(
     .bind(&data.created_at)
     .bind(&data.updated_at)
     .bind(if data.has_attachment { "1" } else { "0" })
+    .bind(&data.attachment_filenames)
     .execute(&mut *tx)
     .await
     .map_err(|e| format!("master insert: {e}"))?;
@@ -229,7 +267,7 @@ pub async fn search(
     let select = format!(
         "SELECT page_id, notebook_id, notebook_name, section_id, section_name, title, \
          snippet(search_index, 6, char({}), char({}), '…', 12) AS snippet, \
-         created_at, updated_at, has_attachment \
+         created_at, updated_at, has_attachment, attachment_filenames \
          FROM search_index WHERE search_index MATCH ",
         HL_OPEN as u32,
         HL_CLOSE as u32,
@@ -288,6 +326,12 @@ pub async fn search(
             created_at: r.get("created_at"),
             updated_at: r.get("updated_at"),
             has_attachment: r.get::<String, _>("has_attachment") == "1",
+            attachment_filenames: r
+                .get::<String, _>("attachment_filenames")
+                .split('\n')
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect(),
         })
         .collect())
 }
@@ -328,6 +372,7 @@ mod tests {
             title: title.into(),
             content_text: content.into(),
             attachment_names: String::new(),
+            attachment_filenames: String::new(),
             created_at: "2026-01-01T00:00:00Z".into(),
             updated_at: "2026-06-01T00:00:00Z".into(),
             has_attachment,
@@ -391,6 +436,38 @@ mod tests {
         assert_eq!(search(&pool, "kittens", &SearchFilters::default()).await.unwrap().len(), 0);
         prune_notebooks(&pool, &["nb-none".into()]).await.unwrap();
         assert_eq!(search(&pool, "milk", &SearchFilters::default()).await.unwrap().len(), 0);
+
+        pool.close().await;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn attachment_filename_search_returns_clean_names() {
+        let (pool, dir) = master().await;
+
+        let mut page = data("p1", "Trip", "see attached", true);
+        // Filenames are newline-joined (they may contain spaces); the searchable
+        // text additionally carries the MIME types, space-joined.
+        page.attachment_filenames = "Chess.bmp\nThe Mysterious Outlook Outbox.pdf".into();
+        page.attachment_names =
+            "Chess.bmp image/bmp The Mysterious Outlook Outbox.pdf application/pdf".into();
+        upsert_master(&pool, "nb1", "Work", &page).await.unwrap();
+
+        // A filename token matches and the clean filename list comes back split.
+        let hits = search(&pool, "chess", &SearchFilters::default()).await.unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(
+            hits[0].attachment_filenames,
+            vec!["Chess.bmp".to_string(), "The Mysterious Outlook Outbox.pdf".to_string()],
+        );
+
+        // A space-containing filename is searchable by its words and stays intact.
+        let hits = search(&pool, "mysterious", &SearchFilters::default()).await.unwrap();
+        assert_eq!(hits.len(), 1);
+        assert!(hits[0]
+            .attachment_filenames
+            .iter()
+            .any(|n| n == "The Mysterious Outlook Outbox.pdf"));
 
         pool.close().await;
         let _ = std::fs::remove_dir_all(&dir);

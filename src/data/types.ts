@@ -269,4 +269,7 @@ export interface SearchHit {
   createdAt: string;
   updatedAt: string;
   hasAttachment: boolean;
+  /** Filenames of the page's attachments (no MIME). The UI highlights those
+   * matching the query so a filename hit isn't shown as just a paperclip. */
+  attachmentFilenames: string[];
 }

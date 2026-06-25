@@ -71,6 +71,18 @@ function highlightTitle(text: string, terms: string[]) {
   });
 }
 
+/**
+ * Does any whole word in `text` start with one of the query terms? Mirrors
+ * `highlightTitle`'s tokenization (and the backend's prefix-on-token match) so
+ * the result list flags exactly the attachment filenames the query hit.
+ */
+function nameMatchesTerms(text: string, terms: string[]) {
+  const needles = terms.map((t) => t.toLowerCase()).filter(Boolean);
+  if (needles.length === 0) return false;
+  const words = text.match(/[\p{L}\p{N}]+/gu) ?? [];
+  return words.some((w) => needles.some((n) => w.toLowerCase().startsWith(n)));
+}
+
 function formatDate(iso: string) {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString();
@@ -268,32 +280,47 @@ export function SearchBox() {
           ) : results.length === 0 ? (
             <div className="v-search__status">No results for “{query.trim()}”.</div>
           ) : (
-            results.map((hit) => (
-              <button
-                key={hit.pageId}
-                type="button"
-                className="v-search__result"
-                onClick={() => onPick(hit)}
-                role="option"
-              >
-                <div className="v-search__crumb">
-                  <Icon name="book" />
-                  <span>{hit.notebookName}</span>
-                  <span className="v-search__sep">›</span>
-                  <span>{hit.sectionName}</span>
-                </div>
-                <div className="v-search__title">
-                  {highlightTitle(hit.title || "Untitled page", terms)}
-                  {hit.hasAttachment && (
-                    <Icon name="paper-clip-small" className="v-search__attach" label="Has attachment" />
+            results.map((hit) => {
+              const matchedAttachments = hit.attachmentFilenames.filter((name) =>
+                nameMatchesTerms(name, terms),
+              );
+              return (
+                <button
+                  key={hit.pageId}
+                  type="button"
+                  className="v-search__result"
+                  onClick={() => onPick(hit)}
+                  role="option"
+                >
+                  <div className="v-search__crumb">
+                    <Icon name="book" />
+                    <span>{hit.notebookName}</span>
+                    <span className="v-search__sep">›</span>
+                    <span>{hit.sectionName}</span>
+                  </div>
+                  <div className="v-search__title">
+                    {highlightTitle(hit.title || "Untitled page", terms)}
+                    {hit.hasAttachment && matchedAttachments.length === 0 && (
+                      <Icon name="paper-clip-small" className="v-search__attach" label="Has attachment" />
+                    )}
+                  </div>
+                  {hit.snippet && (
+                    <div className="v-search__snippet">{renderSnippet(hit.snippet)}</div>
                   )}
-                </div>
-                {hit.snippet && (
-                  <div className="v-search__snippet">{renderSnippet(hit.snippet)}</div>
-                )}
-                <div className="v-search__meta">{formatDate(hit.updatedAt)}</div>
-              </button>
-            ))
+                  {matchedAttachments.length > 0 && (
+                    <div className="v-search__attachments">
+                      {matchedAttachments.map((name) => (
+                        <span key={name} className="v-search__attach-name">
+                          <Icon name="paper-clip-small" />
+                          <span>{highlightTitle(name, terms)}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="v-search__meta">{formatDate(hit.updatedAt)}</div>
+                </button>
+              );
+            })
           )}
           </div>,
           document.body,
