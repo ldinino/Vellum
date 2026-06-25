@@ -25,6 +25,12 @@ import "./editor.css";
  * Section 9 as decided). */
 const REFINE_IDLE_RELEASE_MS = 5 * 60 * 1000;
 
+/** ProseMirror `doc.content.size` past which a page counts as "large" for
+ * grammar: the lint pass (text extraction + span mapping + decoration rebuild)
+ * is debounced more loosely so it never runs mid-keystroke (spec Section 10 /
+ * Phase 11 — keep Harper off the UI thread on very large pages). */
+const GRAMMAR_LARGE_DOC_SIZE = 20000;
+
 // Fetched once per session: whether this machine is CPU-only (spec Section 9), so
 // the Refine preview can warn it may be slow. Module-scoped so it isn't
 // re-detected per page.
@@ -569,7 +575,15 @@ export function PageEditor({
           .catch((e) => console.error("snapshot save failed", e));
       });
       if (grammarEnabledRef.current || spellcheckEnabledRef.current) {
-        grammarSaver.schedule(() => void runGrammarRef.current());
+        // On very large pages the lint pass is heavier, so settle longer and
+        // defer further during continuous typing — never force a mid-burst check
+        // the next keystroke would discard. Harper itself already runs off the UI
+        // thread (spawn_blocking in the backend).
+        const overrides =
+          editor.state.doc.content.size > GRAMMAR_LARGE_DOC_SIZE
+            ? { wait: 3500, maxWait: 30000 }
+            : undefined;
+        grammarSaver.schedule(() => void runGrammarRef.current(), overrides);
       }
       // Editing counts as activity: push back the keep-warm idle release.
       if (refineUsedRef.current) scheduleIdleRelease();

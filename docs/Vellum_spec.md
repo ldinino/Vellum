@@ -834,7 +834,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 **Goal:** Ship-ready on Windows. Mac/Linux builds verified.
 
 - Background process error handling: Ollama fails to start, crashes mid-use, or port unavailable — **in progress**: these failures are now recorded in the diagnostic log (see design note); UI-level recovery flows are still being refined
-- Grammar check robustness: Harper handles very large pages without blocking the UI thread (debounce/offload as needed)
+- Grammar check robustness: Harper handles very large pages without blocking the UI thread (debounce/offload as needed) — **done** (see design note: Harper already lints on a `spawn_blocking` thread; the renderer-side span→position mapping is now a binary search instead of a per-offset linear scan, and the lint debounce widens on large pages)
 - SQLite integrity: run `PRAGMA integrity_check` on notebook open; surface error if DB is corrupt — **done** (`open_notebook` runs it and errors out if the DB fails the check)
 - Large notebook performance: test with 1000+ pages, 10+ notebooks
 - Search performance: verify <100ms at scale
@@ -859,6 +859,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 > **Design note (as built):**
 > - **Diagnostic log + Settings ▸ About viewer.** A bounded in-memory ring buffer of structured entries (`timestamp`, `level`, `area`, `message`) backs a log viewer in **Settings ▸ About** (Refresh / **Export logs…** / Clear), mirrored to a size-rotating plain-text file at `%LOCALAPPDATA%\Vellum\logs\vellum.log` — machine-local, never OneDrive-synced — for durable export and post-crash diagnosis (`src-tauri/src/applog.rs`, managed `AppLog` state). A panic hook routes Rust panics into the log, and the renderer's error banner (`fail` in `vellum.tsx`) forwards user-visible failures via `log_frontend_event`, so a single export covers both ends. Commands: `get_app_log`, `clear_app_log`, `export_app_log`, `log_frontend_event`. Instrumentation begins with the highest-risk areas — Ollama lifecycle (spawn failure, the 15s port timeout, and an unexpected exit detected on next use), notebook DB open (missing file / failed `integrity_check`), and the runtime download — and is extended as real failures surface.
+> - **Grammar on very large pages (keep Harper off the UI thread).** The Harper lint itself already runs on a `spawn_blocking` thread in the backend (the renderer `await`s it), so the work that could actually jank the editor was renderer-side. Two fixes: (1) `mapOffset` (`src/components/editor/grammar.ts`), which resolves each Harper span back to a ProseMirror position, is now a **binary search** over the document's text segments instead of a linear scan — the segments are in document order so `textStart` is monotonic; the old scan was O(spans × text-nodes) per check and could stall on a page with thousands of nodes. (2) The grammar debounce is **size-adaptive**: when `doc.content.size` exceeds a threshold the trailing wait lengthens and the maxWait ceiling rises sharply (`Debouncer.schedule` gained optional per-call `wait`/`maxWait` overrides), so on a long page the lint pass waits for a real pause and is never forced mid-keystroke (where the result would be discarded by the next edit anyway). Small pages keep the snappy ~2 s default.
 
 ---
 

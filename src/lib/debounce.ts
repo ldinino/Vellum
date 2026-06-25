@@ -5,7 +5,13 @@
  * when switching pages so the outgoing page persists immediately).
  */
 export interface Debouncer {
-  schedule: (fn: () => void) => void;
+  /**
+   * Queue `fn` to run after the trailing delay. Optional per-call `overrides`
+   * adjust this schedule's wait / maxWait without changing the debouncer's
+   * defaults — e.g. grammar checks settle longer and defer further on very large
+   * pages so the lint pass never runs mid-keystroke.
+   */
+  schedule: (fn: () => void, overrides?: { wait?: number; maxWait?: number }) => void;
   flush: () => void;
   cancel: () => void;
 }
@@ -31,13 +37,15 @@ export function createDebouncer(wait: number, maxWait: number): Debouncer {
   };
 
   return {
-    schedule(fn) {
+    schedule(fn, overrides) {
       pending = fn;
       const now = Date.now();
       if (firstScheduledAt === 0) firstScheduledAt = now;
       if (timer) clearTimeout(timer);
+      const effWait = overrides?.wait ?? wait;
+      const effMaxWait = overrides?.maxWait ?? maxWait;
       const sinceFirst = now - firstScheduledAt;
-      const delay = Math.max(0, Math.min(wait, maxWait - sinceFirst));
+      const delay = Math.max(0, Math.min(effWait, effMaxWait - sinceFirst));
       timer = setTimeout(run, delay);
     },
     flush() {

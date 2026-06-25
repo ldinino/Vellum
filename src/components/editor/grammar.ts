@@ -66,12 +66,34 @@ export function extractText(doc: PMNode): ExtractedText {
   return { text, segments };
 }
 
-/** Map a text offset to a ProseMirror position, or null if it falls in a gap. */
+/**
+ * Map a text offset to a ProseMirror position, or null if it falls in a gap.
+ *
+ * `segments` is in document order, so `textStart` is strictly increasing and the
+ * ranges are non-overlapping — a binary search makes each lookup O(log n). The
+ * old linear scan was O(segments) per offset, so mapping every span on a very
+ * large page (thousands of text nodes) was O(spans × segments) and could stall
+ * the UI thread. Find the last segment starting at or before `offset`, then
+ * confirm `offset` lands within that node's text rather than in a following gap
+ * (the newline inserted between blocks).
+ */
 function mapOffset(segments: Segment[], offset: number): number | null {
-  for (const s of segments) {
-    if (offset >= s.textStart && offset <= s.textStart + s.length) {
-      return s.from + (offset - s.textStart);
+  let lo = 0;
+  let hi = segments.length - 1;
+  let found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (segments[mid].textStart <= offset) {
+      found = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
     }
+  }
+  if (found === -1) return null;
+  const s = segments[found];
+  if (offset <= s.textStart + s.length) {
+    return s.from + (offset - s.textStart);
   }
   return null;
 }
