@@ -41,6 +41,10 @@ pub struct AppSettings {
     /// Set once the starter Refine templates have been seeded (Phase 8). Gated
     /// on this flag so we never re-seed after the user deletes them.
     pub starters_seeded: bool,
+    /// Set once the first-launch "Welcome to Vellum" notebook has been seeded
+    /// (Phase 11). Gated on this flag so it is created exactly once and never
+    /// reappears after the user deletes it.
+    pub welcome_seeded: bool,
     /// Words the user added to the Harper spell-check dictionary (spec Section
     /// 10). Global and persisted here so they survive restarts; merged into the
     /// curated dictionary in `grammar.rs`.
@@ -67,6 +71,7 @@ impl Default for AppSettings {
             grammar_language: "en-US".into(),
             first_run_complete: false,
             starters_seeded: false,
+            welcome_seeded: false,
             custom_dictionary: Vec::new(),
             ignored_grammar_rules: Vec::new(),
         }

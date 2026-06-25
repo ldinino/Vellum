@@ -400,6 +400,29 @@ export function PageEditor({
     }
   }, []);
 
+  // Persist the latest content synchronously and await it. The app-close path
+  // (VellumShell) calls this before destroying the window: the editor isn't
+  // unmounted on close, so the pending debounced snapshot would otherwise die
+  // with the window. Cancels the debouncers to avoid a duplicate write, and
+  // no-ops until content has loaded so a blank pre-load doc can't overwrite it.
+  const flushSaves = useCallback(async () => {
+    const ed = editorRef.current;
+    if (!ed || !loadedOkRef.current) return;
+    opSaver.cancel();
+    snapSaver.cancel();
+    const { notebookId, pageId } = ids.current;
+    try {
+      await api.savePageSnapshot(
+        notebookId,
+        pageId,
+        JSON.stringify(ed.getJSON()),
+        derivePreview(ed.getText()),
+      );
+    } catch (e) {
+      console.error("flush saves failed", e);
+    }
+  }, [opSaver, snapSaver]);
+
   // After a paste carried an image node from another page, copy that file into
   // THIS page's folder and repoint the node, so every page owns its inline
   // images (and per-page cleanup can't delete a file another page still shows).
@@ -558,9 +581,9 @@ export function PageEditor({
   // switch / close) so the toolbar disables when no page is open.
   useEffect(() => {
     if (!editor) return;
-    setActiveEditor({ editor, insertImage, cleanupImages });
+    setActiveEditor({ editor, insertImage, cleanupImages, flushSaves });
     return () => setActiveEditor(null);
-  }, [editor, insertImage, cleanupImages, setActiveEditor]);
+  }, [editor, insertImage, cleanupImages, flushSaves, setActiveEditor]);
 
   // Point the image NodeView's src resolver at this notebook so relative
   // attachment paths resolve to loadable asset:// URLs.
@@ -723,6 +746,13 @@ export function PageEditor({
     const trimmed = title.trim();
     if (trimmed !== page.title) actions.setPageTitle(notebookId, page.id, trimmed);
   };
+  // Also commit a pending title edit on unmount: keyboard/programmatic page
+  // switches (and app close) never blur the title input, so onBlur wouldn't fire
+  // and the edit would be lost. A latest-ref lets the unmount cleanup commit the
+  // current value without re-running on every keystroke.
+  const commitTitleRef = useRef(commitTitle);
+  commitTitleRef.current = commitTitle;
+  useEffect(() => () => commitTitleRef.current(), []);
 
   return (
     <div

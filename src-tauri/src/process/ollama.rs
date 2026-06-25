@@ -11,6 +11,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 
 use super::{ManagedChild, LogSink, ProcessStatus};
+use crate::applog::AppLog;
 use crate::refine::events;
 use crate::refine::logbuf::{LogBuffer, LogLine};
 use crate::{config, paths};
@@ -76,6 +77,11 @@ pub fn start(app: &AppHandle, state: &OllamaState) -> Result<ProcessStatus, Stri
                 port: Some(OLLAMA_PORT),
             });
         }
+        // A child we still tracked is gone — it exited/crashed since last use.
+        app.state::<AppLog>().warn(
+            "ollama",
+            format!("Ollama process (pid {}) exited unexpectedly; restarting", existing.pid),
+        );
         guard.take();
     }
 
@@ -99,16 +105,24 @@ pub fn start(app: &AppHandle, state: &OllamaState) -> Result<ProcessStatus, Stri
         let _ = app_for_log.emit(events::OLLAMA_LOG, LogLine { line });
     });
 
-    let child = ManagedChild::spawn_with_stderr(cmd, Some(sink))?;
+    let child = match ManagedChild::spawn_with_stderr(cmd, Some(sink)) {
+        Ok(child) => child,
+        Err(e) => {
+            app.state::<AppLog>()
+                .error("ollama", format!("Failed to spawn Ollama: {e}"));
+            return Err(e);
+        }
+    };
     let pid = child.pid;
     *guard = Some(child);
     drop(guard);
 
     if !super::wait_for_port(OLLAMA_PORT, Duration::from_secs(15)) {
         stop(state)?;
-        return Err(format!(
-            "Ollama did not start listening on port {OLLAMA_PORT} within 15s"
-        ));
+        let msg =
+            format!("Ollama did not start listening on port {OLLAMA_PORT} within 15s");
+        app.state::<AppLog>().error("ollama", msg.as_str());
+        return Err(msg);
     }
 
     Ok(ProcessStatus {

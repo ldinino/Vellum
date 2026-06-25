@@ -803,7 +803,7 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 ---
 
-### Phase 10 — Export/Print & Settings
+### Phase 10 — Export/Print & Settings ✅
 
 **Goal:** Export or Print current page. Complete Settings UI.
 
@@ -833,9 +833,9 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 
 **Goal:** Ship-ready on Windows. Mac/Linux builds verified.
 
-- Background process error handling: Ollama fails to start, crashes mid-use, or port unavailable
+- Background process error handling: Ollama fails to start, crashes mid-use, or port unavailable — **in progress**: these failures are now recorded in the diagnostic log (see design note); UI-level recovery flows are still being refined
 - Grammar check robustness: Harper handles very large pages without blocking the UI thread (debounce/offload as needed)
-- SQLite integrity: run `PRAGMA integrity_check` on notebook open; surface error if DB is corrupt
+- SQLite integrity: run `PRAGMA integrity_check` on notebook open; surface error if DB is corrupt — **done** (`open_notebook` runs it and errors out if the DB fails the check)
 - Large notebook performance: test with 1000+ pages, 10+ notebooks
 - Search performance: verify <100ms at scale
 - Crash recovery: systematic testing of crash at various save states
@@ -845,16 +845,20 @@ Phases are ordered by dependency. Each phase should be shippable/testable before
 - Installer: Tauri NSIS bundler, per-user install (`installMode: "currentUser"`, no admin elevation). No code signing — SmartScreen warning accepted for v1.
 - In-app updates: `tauri-plugin-updater` against GitHub Releases (`tauri-action` builds, signs with local minisign key, uploads artifacts + `latest.json`)
 - Runtime component download flows: failure, retry, disk-full, and offline behavior verified for the Ollama component
+- First-launch welcome content: on first launch (no notebooks yet), auto-create a **"Welcome to Vellum"** notebook with one section per topic — **Welcome**, **Editing & Features**, **Refine**, and **Settings & Tips** — each a single page that explains the app (navigation, the editor and its features, Refine, and where settings/data live). Seeded once and gated by a `welcomeSeeded` flag in `app.json` (mirrors `startersSeeded`): never recreated if the user deletes it, and an install that already has notebooks records the flag without injecting the notebook. Pages are authored as HTML and converted to the editor's document JSON at seed time (`generateJSON`).
 
 > **Deferred from the Phase 0–6 debug pass (known issues, intentionally not fixed earlier):**
-> A debug pass after Phase 6 fixed the felt/correctness bugs (toolbar reactivity, duplicate-notebook creation via UUID folders, the section color menu wiping its page template, and stale search breadcrumbs on rename) and deferred the following hardening items to here:
-> - **Atomic notebook create/delete.** `create_notebook` now rolls back its folder on failure, but `delete_notebook` (`src-tauri/src/commands.rs`) still removes the registry entry *before* the folder, so a failed `remove_dir_all` (file locked / OneDrive sync) leaves an orphaned folder with no registry entry. Make create/delete fully transactional (or add an orphan-folder sweep on startup). Folders are now UUID-named, so an orphan no longer blocks creation — it just leaks disk.
-> - **App-close save-flush guarantee.** `Debouncer.flush()` ([src/lib/debounce.ts]) dispatches the async IPC save without awaiting it; the `PageEditor` unmount cleanup returns immediately. Page *switches* are safe (Tauri invokes complete after unmount), but window teardown can drop an in-flight save — up to ~1s of edits (mostly covered by the 300ms `page_ops` checkpoint). Make the close path await pending saves. Fold into "Crash recovery: systematic testing of crash at various save states."
-> - **FTS5 punctuation-only query guard.** `fts_query` (`src-tauri/src/search.rs`) quotes tokens (so operators are literal), but a token with no alphanumerics (e.g. searching just `*` or `.`) yields an empty FTS phrase and a query error surfaced to the user. Drop alphanumeric-empty tokens, or catch and treat the error as "no results."
-> - **Attachment size backfill.** Migration 3 added `attachments.size` with `DEFAULT 0`; rows written before it show `0 B`. Backfill from on-disk file sizes (cosmetic only).
-> - **Title not committed on programmatic page switch.** `commitTitle` fires on input blur/Enter; a page switch that doesn't blur the title input (e.g. keyboard/programmatic navigation) can drop an uncommitted title edit. Commit the title in the `PageEditor` unmount cleanup.
+> A debug pass after Phase 6 fixed the felt/correctness bugs (toolbar reactivity, duplicate-notebook creation via UUID folders, the section color menu wiping its page template, and stale search breadcrumbs on rename) and deferred the following hardening items to here. Four were resolved in this phase (marked **[Resolved]**); the notebook create/delete item is mitigated and intentionally left as-is:
+> - **Atomic notebook create/delete.** `create_notebook` now rolls back its folder on failure, but `delete_notebook` (`src-tauri/src/commands.rs`) still removes the registry entry *before* the folder, so a failed `remove_dir_all` (file locked / OneDrive sync) leaves an orphaned folder with no registry entry. Make create/delete fully transactional (or add an orphan-folder sweep on startup). Folders are now UUID-named, so an orphan no longer blocks creation — it just leaks disk. **[As-is — mitigated]** Create is already atomic (rolls back its folder on failure). `purge_notebook` deliberately removes the registry entry *before* the folder, so a failed delete can't leave a dangling entry pointing at a half-removed notebook; the residual is a harmless, UUID-named orphan folder that only leaks disk. An automatic startup sweep was rejected — it can't tell a failed-purge orphan from a folder a user restored from backup, so it risks deleting real data.
+> - **App-close save-flush guarantee.** `Debouncer.flush()` ([src/lib/debounce.ts]) dispatches the async IPC save without awaiting it; the `PageEditor` unmount cleanup returns immediately. Page *switches* are safe (Tauri invokes complete after unmount), but window teardown can drop an in-flight save — up to ~1s of edits (mostly covered by the 300ms `page_ops` checkpoint). Make the close path await pending saves. Fold into "Crash recovery: systematic testing of crash at various save states." **[Resolved]** The active editor now exposes `flushSaves()`, which synchronously snapshots the current doc and *awaits* `save_page_snapshot`; the `onCloseRequested` handler (`VellumShell`) awaits it — in parallel with the inline-image sweep, under one timeout cap — before `destroy()`.
+> - **FTS5 punctuation-only query guard.** `fts_query` (`src-tauri/src/search.rs`) quotes tokens (so operators are literal), but a token with no alphanumerics (e.g. searching just `*` or `.`) yields an empty FTS phrase and a query error surfaced to the user. Drop alphanumeric-empty tokens, or catch and treat the error as "no results." **[Resolved]** `fts_query` now drops tokens with no alphanumerics, so a pure-punctuation query yields no terms → `None` → "no results" instead of a query error.
+> - **Attachment size backfill.** Migration 3 added `attachments.size` with `DEFAULT 0`; rows written before it show `0 B`. Backfill from on-disk file sizes (cosmetic only). **[Resolved]** `list_attachments` lazily backfills any `size = 0` row by stat-ing the file on disk and persisting its length.
+> - **Title not committed on programmatic page switch.** `commitTitle` fires on input blur/Enter; a page switch that doesn't blur the title input (e.g. keyboard/programmatic navigation) can drop an uncommitted title edit. Commit the title in the `PageEditor` unmount cleanup. **[Resolved]** A latest-ref to `commitTitle` is invoked from a `PageEditor` unmount effect, committing a pending title edit on keyboard/programmatic page switches (and app close).
 
-**Exit criteria:** No data loss scenarios. Background processes are robust. Installer runs cleanly on a clean Windows 10 VM.
+**Exit criteria:** No data loss scenarios. Background processes are robust. Installer runs cleanly on a clean Windows 10 VM. First launch seeds the **Welcome to Vellum** notebook exactly once, and it is not recreated after deletion.
+
+> **Design note (as built):**
+> - **Diagnostic log + Settings ▸ About viewer.** A bounded in-memory ring buffer of structured entries (`timestamp`, `level`, `area`, `message`) backs a log viewer in **Settings ▸ About** (Refresh / **Export logs…** / Clear), mirrored to a size-rotating plain-text file at `%LOCALAPPDATA%\Vellum\logs\vellum.log` — machine-local, never OneDrive-synced — for durable export and post-crash diagnosis (`src-tauri/src/applog.rs`, managed `AppLog` state). A panic hook routes Rust panics into the log, and the renderer's error banner (`fail` in `vellum.tsx`) forwards user-visible failures via `log_frontend_event`, so a single export covers both ends. Commands: `get_app_log`, `clear_app_log`, `export_app_log`, `log_frontend_event`. Instrumentation begins with the highest-risk areas — Ollama lifecycle (spawn failure, the 15s port timeout, and an unexpected exit detected on next use), notebook DB open (missing file / failed `integrity_check`), and the runtime download — and is extended as real failures surface.
 
 ---
 

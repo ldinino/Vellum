@@ -93,7 +93,9 @@ pub fn fts_query(raw: &str) -> Option<String> {
         .split_whitespace()
         // Drop the FTS phrase delimiter so our own quoting can't be broken out of.
         .map(|t| t.replace('"', ""))
-        .filter(|t| !t.is_empty())
+        // Require at least one alphanumeric: a pure-punctuation token (e.g. "*"
+        // or ".") tokenizes to an empty FTS phrase, which errors on MATCH.
+        .filter(|t| t.chars().any(char::is_alphanumeric))
         .map(|t| format!("\"{t}\"*"))
         .collect();
     if terms.is_empty() {

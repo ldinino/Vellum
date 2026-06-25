@@ -12,6 +12,7 @@ import type {
   ExportCopy,
   GrammarSpan,
   InstalledModel,
+  LogEntry,
   Manifest,
   Notebook,
   Page,
@@ -42,6 +43,25 @@ export const getPaths = () => invoke<AppPaths>("get_paths");
 
 /** App / Harper / Ollama versions (Settings → About). */
 export const getVersionInfo = () => invoke<VersionInfo>("get_version_info");
+
+// --- Diagnostics / app log (Phase 11) ---------------------------------------
+
+/** Recent app-log entries (oldest → newest) for Settings → About. */
+export const getAppLog = () => invoke<LogEntry[]>("get_app_log");
+
+/** Clear the in-memory log view (the on-disk file is kept for export). */
+export const clearAppLog = () => invoke<void>("clear_app_log");
+
+/** Write the full on-disk diagnostic log to a chosen path. */
+export const exportAppLog = (destPath: string) =>
+  invoke<void>("export_app_log", { destPath });
+
+/** Record a renderer-side event in the app log (best-effort). */
+export const logFrontendEvent = (
+  level: "error" | "warn" | "info",
+  area: string,
+  message: string,
+) => invoke<void>("log_frontend_event", { level, area, message });
 
 /** Reveal Documents\Vellum in the system file manager (Settings → General). */
 export const revealDataDir = () => invoke<void>("reveal_data_dir");

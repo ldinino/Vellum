@@ -1,3 +1,4 @@
+mod applog;
 mod commands;
 mod config;
 mod db;
@@ -24,10 +25,26 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .manage(OllamaState::default())
+        .manage(applog::AppLog::default())
         .manage(refine::logbuf::LogBuffer::default())
         .manage(refine::runtime::InstallState::default())
         .setup(|app| {
             paths::ensure_data_layout(&app.handle().clone())?;
+
+            // Diagnostic log (Phase 11): open the on-disk file, record a startup
+            // line, and route panics into the log so an export captures crashes.
+            let app_log = app.state::<applog::AppLog>().inner().clone();
+            if let Ok(p) = paths::log_file_path(app.handle()) {
+                app_log.init_file(p);
+            }
+            app_log.info("app", format!("Vellum {} starting", env!("CARGO_PKG_VERSION")));
+            let panic_log = app_log.clone();
+            let default_hook = std::panic::take_hook();
+            std::panic::set_hook(Box::new(move |info| {
+                panic_log.error("panic", info.to_string());
+                default_hook(info);
+            }));
+
             // Load the user's saved custom dictionary into the grammar engine so
             // the very first lint already accepts their words (spec Section 10),
             // independent of when the renderer syncs.
@@ -131,6 +148,10 @@ pub fn run() {
             commands::refine_generate,
             commands::refine_release,
             commands::refine_cancel,
+            commands::get_app_log,
+            commands::clear_app_log,
+            commands::export_app_log,
+            commands::log_frontend_event,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

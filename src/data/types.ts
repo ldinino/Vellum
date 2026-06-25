@@ -106,6 +106,9 @@ export interface AppSettings {
   firstRunComplete: boolean;
   /** Set once the starter Refine templates have been seeded (Phase 8). */
   startersSeeded: boolean;
+  /** Set once the first-launch "Welcome to Vellum" notebook has been seeded
+   * (Phase 11); ensures it is created exactly once and never recreated. */
+  welcomeSeeded: boolean;
   /** Words the user added to the Harper spell-check dictionary (spec Section 10). */
   customDictionary: string[];
   /** Grammar lint categories the user chose to ignore via "Ignore this rule". */
@@ -117,6 +120,16 @@ export interface VersionInfo {
   app: string;
   harper: string;
   ollama: string;
+}
+
+/** One diagnostic log entry (Settings → About; spec Phase 11). */
+export interface LogEntry {
+  /** RFC 3339, local time. */
+  timestamp: string;
+  level: "error" | "warn" | "info";
+  /** Short subsystem tag (e.g. "ollama", "db", "runtime", "ui"). */
+  area: string;
+  message: string;
 }
 
 /** Filesystem locations resolved by the backend (Settings → General). */

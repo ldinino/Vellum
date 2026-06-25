@@ -17,6 +17,9 @@ export interface ActiveEditor {
   /** Delete this page's now-unreferenced inline-image files (navigate-away / app
    * close). Resolves when the sweep finishes, or immediately if not applicable. */
   cleanupImages: () => Promise<void>;
+  /** Persist the latest content synchronously and await it (app-close path), so
+   * window teardown can't drop the final debounced save. No-op until loaded. */
+  flushSaves: () => Promise<void>;
 }
 
 interface ActiveEditorContextValue {

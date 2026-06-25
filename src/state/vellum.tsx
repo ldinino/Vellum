@@ -16,6 +16,7 @@ import {
 } from "react";
 import * as api from "../data/api";
 import { randomPaletteColor } from "../data/palette";
+import { WELCOME_NOTEBOOK_NAME, buildWelcomePages } from "../data/welcome-content";
 import { setIgnoredRules as applyIgnoredRules } from "../components/editor/grammar";
 import type {
   Notebook,
@@ -64,6 +65,9 @@ interface VellumState {
   refineTemplates: RefineTemplate[];
   /** Whether first-run setup has been completed (gates the setup screen). */
   firstRunComplete: boolean;
+  /** Whether the first-launch "Welcome to Vellum" notebook has been seeded
+   * (Phase 11); gates the one-time seeding effect. */
+  welcomeSeeded: boolean;
   /** False until app.json has been read once, so the first-run screen doesn't
    * flash before we know whether setup is already done. */
   configLoaded: boolean;
@@ -96,6 +100,7 @@ const initial: VellumState = {
   refineModelTier: null,
   refineTemplates: [],
   firstRunComplete: false,
+  welcomeSeeded: false,
   configLoaded: false,
   recycleBin: [],
   recycleBinCount: 0,
@@ -272,7 +277,10 @@ export function VellumProvider({ children }: { children: ReactNode }) {
   }, [state]);
 
   const fail = useCallback((e: unknown) => {
-    setState((s) => ({ ...s, error: typeof e === "string" ? e : String(e) }));
+    const message = typeof e === "string" ? e : String(e);
+    setState((s) => ({ ...s, error: message }));
+    // Mirror user-visible failures into the diagnostic log (best-effort).
+    api.logFrontendEvent("error", "ui", message).catch(() => {});
   }, []);
 
   const reloadSections = useCallback(
@@ -324,6 +332,75 @@ export function VellumProvider({ children }: { children: ReactNode }) {
       fail(e);
     }
   }, [fail]);
+
+  // First-launch welcome content (spec Phase 11). Persist the "seeded" flag so
+  // the welcome notebook is created exactly once, ever — even if the user later
+  // deletes it. Optimistic state update, then write app.json (preserving the
+  // rest of settings).
+  const markWelcomeSeeded = useCallback(async () => {
+    setState((s) => ({ ...s, welcomeSeeded: true }));
+    try {
+      const cfg = await api.getAppConfig();
+      await api.saveAppConfig({
+        ...cfg,
+        settings: { ...cfg.settings, welcomeSeeded: true },
+      });
+    } catch (e) {
+      console.error("persist welcomeSeeded failed", e);
+    }
+  }, []);
+
+  // Create the "Welcome to Vellum" notebook: one section per topic, each with a
+  // single page whose authored HTML is converted to editor JSON. Builds the tree
+  // from fresh fetches (not reload()'s timing) and lands the user on the first
+  // page. Sets the seeded flag *after* the content is written, so a crash
+  // mid-seed simply retries next launch (a rare, tolerable double-seed).
+  const seedWelcomeNotebook = useCallback(async () => {
+    const created = await api.createNotebook(WELCOME_NOTEBOOK_NAME);
+    await api.setNotebookColor(created.id, randomPaletteColor());
+
+    let firstSectionId: string | null = null;
+    let firstPageId: string | null = null;
+    for (const wp of buildWelcomePages()) {
+      const section = await api.createSection(created.id, wp.sectionName);
+      await api.updateSection(
+        created.id,
+        section.id,
+        section.name,
+        randomPaletteColor(),
+        section.pageTemplateId,
+      );
+      const page = await api.createPage(created.id, section.id, wp.pageTitle);
+      await api.savePageSnapshot(created.id, page.id, wp.contentJson, wp.preview);
+      if (!firstSectionId) {
+        firstSectionId = section.id;
+        firstPageId = page.id;
+      }
+    }
+
+    await markWelcomeSeeded();
+
+    // Build the tree from fresh fetches, expand the welcome notebook, and open
+    // its first page so launch never lands on a blank state.
+    const nbs = await api.listNotebooks();
+    const sections = await api.listSections(created.id);
+    const pages = firstSectionId ? await api.listPages(created.id, firstSectionId) : [];
+    setState((s) => ({
+      ...s,
+      notebooks: nbs.map((nb) => {
+        const prev = s.notebooks.find((p) => p.id === nb.id);
+        return {
+          ...nb,
+          expanded: nb.id === created.id ? true : prev?.expanded ?? false,
+          sections: nb.id === created.id ? sections : prev?.sections ?? null,
+        };
+      }),
+      selectedNotebookId: created.id,
+      selectedSectionId: firstSectionId,
+      selectedPageId: firstPageId,
+      pages,
+    }));
+  }, [markWelcomeSeeded]);
 
   // Recycle Bin (spec Section 5.1): the list + count of soft-deleted items
   // across all notebooks. Loaded on startup for the nav footer's empty/full
@@ -377,6 +454,7 @@ export function VellumProvider({ children }: { children: ReactNode }) {
           refineModelTier: cfg.settings.refineModelTier,
           refineTemplates: cfg.refineTemplates ?? [],
           firstRunComplete: cfg.settings.firstRunComplete,
+          welcomeSeeded: cfg.settings.welcomeSeeded,
           configLoaded: true,
         }));
       })
@@ -386,6 +464,27 @@ export function VellumProvider({ children }: { children: ReactNode }) {
         setState((s) => ({ ...s, configLoaded: true }));
       });
   }, []);
+
+  // First-launch welcome content: seed the "Welcome to Vellum" notebook once,
+  // ever. The persisted `welcomeSeeded` flag is the authoritative gate; we also
+  // require the registry to be empty so an install that already has notebooks
+  // never gets a welcome notebook injected (it just records the flag). Ref-
+  // guarded against React StrictMode's double-invoke.
+  const welcomeSeedStarted = useRef(false);
+  useEffect(() => {
+    if (!state.configLoaded || state.welcomeSeeded || welcomeSeedStarted.current) return;
+    welcomeSeedStarted.current = true;
+    (async () => {
+      try {
+        const nbs = await api.listNotebooks();
+        if (nbs.length === 0) await seedWelcomeNotebook();
+        else await markWelcomeSeeded();
+      } catch (e) {
+        console.error("welcome notebook seed failed", e);
+        welcomeSeedStarted.current = false; // flag stays false → retry next launch
+      }
+    })();
+  }, [state.configLoaded, state.welcomeSeeded, seedWelcomeNotebook, markWelcomeSeeded]);
 
   // Restore the last-open notebook → section → page once on startup (or fall
   // back to the first of each), so launch never lands on the unreachable

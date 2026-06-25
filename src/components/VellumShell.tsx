@@ -37,6 +37,10 @@ export function VellumShell() {
   // listener (registered once) sweeps whichever page is open at quit time.
   const cleanupImagesRef = useRef<(() => Promise<void>) | null>(null);
   cleanupImagesRef.current = active?.cleanupImages ?? null;
+  // Always-current ref to the open page's save-flush, so the close listener
+  // persists the final debounced edits before the window is destroyed.
+  const flushSavesRef = useRef<(() => Promise<void>) | null>(null);
+  flushSavesRef.current = active?.flushSaves ?? null;
 
   // Final check before the window closes: run the open page's inline-image
   // cleanup (it never gets a navigate-away), then destroy the window. Catches the
@@ -52,8 +56,14 @@ export function VellumShell() {
         closing = true;
         event.preventDefault();
         try {
-          const run = cleanupImagesRef.current?.() ?? Promise.resolve();
-          await Promise.race([run, new Promise<void>((r) => setTimeout(r, 1500))]);
+          // Persist the final (debounced) edits and sweep this page's now-
+          // unreferenced inline images before the window dies. Both run in
+          // parallel under one timeout cap so close can never hang.
+          const work = Promise.all([
+            flushSavesRef.current?.() ?? Promise.resolve(),
+            cleanupImagesRef.current?.() ?? Promise.resolve(),
+          ]);
+          await Promise.race([work, new Promise<void>((r) => setTimeout(r, 1500))]);
         } catch {
           /* best effort — never block the close */
         }

@@ -39,6 +39,16 @@ pub fn notebooks_json_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(data_dir(app)?.join("notebooks.json"))
 }
 
+/// Diagnostic log file: `%LOCALAPPDATA%\Vellum\logs\vellum.log` — machine-local,
+/// never OneDrive-synced (sits alongside the runtime, not under Documents).
+pub fn log_file_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let local = app
+        .path()
+        .local_data_dir()
+        .map_err(|e| format!("cannot resolve local data directory: {e}"))?;
+    Ok(local.join("Vellum").join("logs").join("vellum.log"))
+}
+
 /// Directory holding one notebook's `notebook.db` and `attachments\`.
 pub fn notebook_dir(app: &AppHandle, folder_name: &str) -> Result<PathBuf, String> {
     Ok(data_dir(app)?.join(folder_name))

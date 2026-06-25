@@ -6,6 +6,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use sqlx::{Pool, Sqlite};
 
+use crate::applog::{AppLog, LogEntry};
 use crate::config::{self, AppConfig, NotebookMeta};
 use crate::notebook::{self, Page, Section};
 use crate::process::ollama::{self, OllamaState};
@@ -372,13 +373,25 @@ pub async fn open_notebook(app: AppHandle, notebook_id: String) -> Result<String
         .ok_or_else(|| format!("Unknown notebook id {notebook_id}"))?;
     let db_path = paths::notebook_dir(&app, &meta.folder)?.join("notebook.db");
     if !db_path.is_file() {
-        return Err(format!("Notebook database missing: {}", db_path.display()));
+        let msg = format!("Notebook database missing: {}", db_path.display());
+        app.state::<AppLog>().error("db", msg.as_str());
+        return Err(msg);
     }
-    if !db::integrity_check(&db_path).await? {
-        return Err(format!(
-            "Notebook database failed integrity check: {}",
-            db_path.display()
-        ));
+    match db::integrity_check(&db_path).await {
+        Ok(true) => {}
+        Ok(false) => {
+            let msg = format!(
+                "Notebook database failed integrity check: {}",
+                db_path.display()
+            );
+            app.state::<AppLog>().error("db", msg.as_str());
+            return Err(msg);
+        }
+        Err(e) => {
+            app.state::<AppLog>()
+                .error("db", format!("Integrity check error: {e}"));
+            return Err(e);
+        }
     }
     db::create_or_migrate(&db_path).await?;
     Ok(db_path.display().to_string())
@@ -950,9 +963,29 @@ pub async fn list_attachments(
     page_id: String,
 ) -> Result<Vec<notebook::Attachment>, String> {
     let pool = pool_for(&app, &notebook_id).await?;
-    let r = notebook::list_attachments(&pool, &page_id).await;
+    let mut attachments = match notebook::list_attachments(&pool, &page_id).await {
+        Ok(a) => a,
+        Err(e) => {
+            pool.close().await;
+            return Err(e);
+        }
+    };
+    // Backfill sizes for rows written before the `size` column existed (they
+    // default to 0): stat the file and persist its length so the UI stops
+    // showing "0 B". Best-effort — a missing file is left at 0.
+    if let Ok(dir) = notebook_folder(&app, &notebook_id) {
+        for att in attachments.iter_mut().filter(|a| a.size == 0) {
+            if let Ok(meta) = std::fs::metadata(dir.join(&att.path)) {
+                let len = meta.len() as i64;
+                if len > 0 {
+                    let _ = notebook::set_attachment_size(&pool, &att.id, len).await;
+                    att.size = len;
+                }
+            }
+        }
+    }
     pool.close().await;
-    r
+    Ok(attachments)
 }
 
 /// Copy a dropped file into `attachments/<page-id>/<uuid>/<name>`, record it, and
@@ -1497,6 +1530,42 @@ pub fn refine_ollama_log(app: AppHandle) -> Result<Vec<String>, String> {
     Ok(app.state::<crate::refine::logbuf::LogBuffer>().snapshot())
 }
 
+// ---------------------------------------------------------------------------
+// Diagnostics / app log (Phase 11)
+// ---------------------------------------------------------------------------
+
+/// Recent app-log entries (oldest → newest) for the Settings → About viewer.
+#[tauri::command]
+pub fn get_app_log(app: AppHandle) -> Vec<LogEntry> {
+    app.state::<AppLog>().snapshot()
+}
+
+/// Clear the in-memory log view. The on-disk file is kept so a later export
+/// still has the durable history.
+#[tauri::command]
+pub fn clear_app_log(app: AppHandle) {
+    app.state::<AppLog>().clear();
+}
+
+/// Write the full diagnostic log (on-disk, spanning sessions) to `dest_path`.
+#[tauri::command]
+pub fn export_app_log(app: AppHandle, dest_path: String) -> Result<(), String> {
+    let text = app.state::<AppLog>().export_text();
+    std::fs::write(&dest_path, text).map_err(|e| format!("write {dest_path}: {e}"))
+}
+
+/// Record a renderer-side event in the app log (routed from the UI's error
+/// banner and key catch sites) so one export covers both ends.
+#[tauri::command]
+pub fn log_frontend_event(app: AppHandle, level: String, area: String, message: String) {
+    let log = app.state::<AppLog>();
+    match level.as_str() {
+        "error" => log.error(&area, message),
+        "warn" => log.warn(&area, message),
+        _ => log.info(&area, message),
+    }
+}
+
 /// Whether the pinned Ollama runtime is installed under %LOCALAPPDATA%.
 #[tauri::command]
 pub fn refine_runtime_status(
@@ -1511,7 +1580,12 @@ pub fn refine_runtime_status(
 pub async fn refine_install_runtime(
     app: AppHandle,
 ) -> Result<crate::refine::runtime::RuntimeStatus, String> {
-    crate::refine::runtime::install_runtime(app).await
+    let r = crate::refine::runtime::install_runtime(app.clone()).await;
+    if let Err(e) = &r {
+        app.state::<AppLog>()
+            .error("runtime", format!("Runtime install failed: {e}"));
+    }
+    r
 }
 
 /// Request cancellation of an in-progress runtime download.

@@ -668,6 +668,23 @@ pub async fn add_attachment(
     })
 }
 
+/// Backfill an attachment's byte size on disk into the row. Rows written before
+/// the `size` column existed (migration 3) default to 0; this persists the real
+/// length so the UI stops showing "0 B". Called lazily from `list_attachments`.
+pub async fn set_attachment_size(
+    pool: &Pool<Sqlite>,
+    attachment_id: &str,
+    size: i64,
+) -> Result<(), String> {
+    sqlx::query("UPDATE attachments SET size = ?1 WHERE id = ?2")
+        .bind(size)
+        .bind(attachment_id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("set attachment size: {e}"))?;
+    Ok(())
+}
+
 /// Delete an attachment row, returning its (page_id, relative path) so the
 /// caller can delete the file and reindex the page. None if it doesn't exist.
 pub async fn remove_attachment(
