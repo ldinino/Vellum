@@ -66,9 +66,10 @@ Vellum targets **Windows 10 and 11**.
    [Releases](https://github.com/ldinino/Vellum/releases) page.
 2. Run it. Vellum installs per-user — no administrator rights required.
 
-Vellum isn't code-signed yet, so Windows SmartScreen may show a "Windows
+Vellum isn't code-signed, so Windows SmartScreen may show a "Windows
 protected your PC" warning on first run. Choose **More info → Run anyway** to
-continue. In-app updates arrive with the first public release.
+continue. After that, Vellum checks for updates automatically and installs them
+in place, prompting you to restart when one is ready.
 
 Your notes are stored under `Documents\Vellum`.
 

@@ -38,6 +38,8 @@ Initial release.
   controls.
 - **Windows installer** — Per-user installation, no administrator rights
   required.
+- **In-app updates** — Automatic background update checks delivered from GitHub
+  Releases, with a one-click restart to apply.
 
 [Unreleased]: https://github.com/ldinino/Vellum/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/ldinino/Vellum/releases/tag/v0.1.0

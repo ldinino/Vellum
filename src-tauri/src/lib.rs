@@ -13,8 +13,10 @@ mod search;
 use process::ollama::{self, OllamaState};
 use tauri::Manager;
 
-// NOTE: tauri-plugin-updater and tauri-plugin-process are intentionally NOT
-// registered here until the minisign keypair exists (Phase 11) — see CLAUDE.md.
+// Auto-updater (Phase 11): tauri-plugin-updater verifies and installs signed
+// releases against the GitHub Releases endpoint; tauri-plugin-process provides
+// relaunch() after an update is applied. Update artifacts are signed with a
+// local minisign key — that is not code signing. See CLAUDE.md.
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -24,6 +26,8 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(OllamaState::default())
         .manage(applog::AppLog::default())
         .manage(refine::logbuf::LogBuffer::default())

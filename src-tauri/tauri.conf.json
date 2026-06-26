@@ -33,7 +33,8 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "resources": ["resources/models.json"],
     "icon": [
       "icons/32x32.png",
@@ -41,6 +42,19 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/ldinino/Vellum/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQwMDk5RjVDREFCRDVGQTEKUldTaFg3M2FYSjhKUU1GV0twdHJtemh4SUJ2S05ZTGgrSHI5ejBQU2c1NWtTdFVzY3NNU3k5STIK"
+    }
   }
 }

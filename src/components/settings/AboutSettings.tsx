@@ -9,11 +9,30 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { Button } from "../ui/Button";
 import * as api from "../../data/api";
 import type { LogEntry, VersionInfo } from "../../data/types";
+import { useUpdater, type UpdaterStatus } from "../../state/updater";
 import "./SettingsPanels.css";
+
+function updateHint(s: UpdaterStatus): string {
+  switch (s.kind) {
+    case "checking":
+      return "Checking for updates…";
+    case "downloading":
+      return s.percent != null ? `Downloading update… ${s.percent}%` : "Downloading update…";
+    case "ready":
+      return `Vellum ${s.version} is ready. Restart to finish updating.`;
+    case "uptodate":
+      return "Vellum is up to date.";
+    case "error":
+      return `Couldn't check for updates: ${s.message}`;
+    default:
+      return "Vellum checks for updates automatically. You can also check now.";
+  }
+}
 
 export function AboutSettings() {
   const [info, setInfo] = useState<VersionInfo | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const updater = useUpdater();
 
   useEffect(() => {
     let active = true;
@@ -94,18 +113,23 @@ export function AboutSettings() {
 
       <section className="v-set__section">
         <h3 className="v-set__heading">Updates</h3>
-        <p className="v-set__hint">
-          In-app updates aren&apos;t available in this build yet — they turn on with the first
-          public release.
-        </p>
+        <p className="v-set__hint">{updateHint(updater.status)}</p>
         <div>
-          <Button
-            icon="arrow-circle-double"
-            disabled
-            title="Available after the first release"
-          >
-            Check for updates
-          </Button>
+          {updater.status.kind === "ready" ? (
+            <Button icon="arrow-circle-double" accent onClick={() => void updater.applyUpdate()}>
+              Restart to update
+            </Button>
+          ) : (
+            <Button
+              icon="arrow-circle-double"
+              onClick={() => void updater.checkNow()}
+              disabled={
+                updater.status.kind === "checking" || updater.status.kind === "downloading"
+              }
+            >
+              Check for updates
+            </Button>
+          )}
         </div>
       </section>
 

@@ -14,6 +14,7 @@ import { OPEN_FIND_EVENT } from "./editor/find";
 import { SettingsModal } from "./settings/SettingsModal";
 import { FirstRunModal } from "./settings/FirstRunModal";
 import { AppContextMenus } from "./AppContextMenus";
+import { UpdateNotice } from "./UpdateNotice";
 import { useVellum } from "../state/vellum";
 import { useActiveEditor } from "../state/activeEditor";
 import { printCurrentPage } from "../lib/print-page";
@@ -227,6 +228,7 @@ export function VellumShell() {
       <RecycleBinModal open={recycleBinOpen} onClose={() => setRecycleBinOpen(false)} />
       <FirstRunModal />
       <AppContextMenus />
+      <UpdateNotice />
     </div>
   );
 }

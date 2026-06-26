@@ -1,0 +1,92 @@
+# Builds, signs, and drafts a GitHub release when a vX.Y.Z tag is pushed.
+#
+# Requirements (one-time, set by the maintainer):
+#   - tauri.conf.json plugins.updater.pubkey holds the minisign PUBLIC key.
+#   - Repo secrets TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+#     hold the matching PRIVATE key + its password (that is artifact signing for
+#     the updater, not code signing). GITHUB_TOKEN is provided automatically.
+#
+# The release is created as a DRAFT: the updater only sees it once you publish
+# it (github.com/.../releases/latest/download/latest.json resolves to the latest
+# PUBLISHED release), so review the assets, then click Publish to go live.
+#
+# Windows-only for v1. Respects src-tauri/Cargo.lock (the `time` 0.3.47 pin) —
+# never run `cargo update` here.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g. 0.1.0), without the leading v"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        env:
+          MANUAL_VERSION: ${{ github.event.inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $manual = $env:MANUAL_VERSION
+          if ($manual) {
+            $version = $manual
+            $tag = "v$manual"
+          } else {
+            $tag = $env:REF_NAME
+            $version = $tag -replace '^v', ''
+          }
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          "tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Generate release notes
+        id: notes
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          $body = & ./scripts/release-notes.ps1 -Version $env:VERSION
+          $marker = "EOF_$([guid]::NewGuid().ToString('N'))"
+          "body<<$marker" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $body | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          $marker | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Build, sign, and draft the release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ steps.version.outputs.tag }}
+          releaseName: "Vellum ${{ steps.version.outputs.version }}"
+          releaseBody: ${{ steps.notes.outputs.body }}
+          releaseDraft: true
+          prerelease: false

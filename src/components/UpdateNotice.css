@@ -1,0 +1,46 @@
+/* "Update ready" prompt — a small floating bar, bottom-right, above the editor
+   but beneath modals (z 60 < Modal 900). Non-blocking by design. */
+
+.v-update {
+  position: fixed;
+  right: var(--space-4, 16px);
+  bottom: var(--space-4, 16px);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  max-width: min(420px, calc(100vw - 32px));
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background: var(--gradient-panel);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-popup);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+  animation: v-update-in 160ms ease-out;
+}
+
+.v-update__icon {
+  flex: 0 0 auto;
+}
+
+.v-update__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.v-update__later {
+  flex: 0 0 auto;
+}
+
+@keyframes v-update-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

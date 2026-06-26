@@ -25,6 +25,9 @@
     "dialog:default",
     "dialog:allow-ask",
     "dialog:allow-save",
-    "shell:default"
+    "shell:default",
+    "updater:default",
+    "process:default",
+    "process:allow-restart"
   ]
 }
