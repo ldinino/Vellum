@@ -53,7 +53,7 @@ const TOPICS: WelcomeTopic[] = [
       <h2>Nothing is lost by accident</h2>
       <p>Deleting a notebook, section, page, or attachment moves it to the <strong>Recycle Bin</strong> in the lower-left corner, where you can restore it. Items are only gone for good when you empty the bin.</p>
       <hr>
-      <p><em>New here? Read the other three sections of this notebook to learn the editor, the Refine writing assistant, and where your settings and data live.</em></p>
+      <p><em>New here? Read the other three sections of this notebook to learn the editor, the Refine tool, and where your settings and data live.</em></p>
     `,
   },
   {
@@ -97,19 +97,19 @@ const TOPICS: WelcomeTopic[] = [
     sectionName: "Refine",
     pageTitle: "Refine",
     preview:
-      "Refine polishes selected text, privately and offline. How to turn it on and use it.",
+      "Refine reshapes selected text into a structure you choose — privately and offline. How to turn it on and use it.",
     html: `
       <h1>Refine</h1>
-      <p><strong>Refine</strong> is a writing assistant that polishes the text you select — fix spelling and grammar, tighten wording, or adjust the tone. It runs entirely on your own computer.</p>
+      <p><strong>Refine</strong> reshapes the text you select into a structure you choose. Jot down a rough brain dump, then turn it into tidy meeting notes, a list of action items, labelled sections, or a clean set of bullets — without retyping a word. It runs entirely on your own computer.</p>
       <h2>Private by design</h2>
       <p>Nothing you write is sent anywhere. Refine works offline, on your machine, every time.</p>
       <h2>Turning it on</h2>
       <p>Refine is <strong>off by default</strong>. Enable it in <strong>Settings ▸ Refine</strong>. The first time you turn it on, Vellum downloads a local engine and a model sized to your computer; after that it works without a connection.</p>
       <h2>Using Refine</h2>
       <ol>
-        <li>Select the text you want to improve.</li>
-        <li>Right-click and choose <strong>Refine</strong>, then pick a template (for example, "Fix spelling &amp; grammar" or "Make concise").</li>
-        <li>Vellum shows a <strong>preview</strong> of the change — your text is never altered until you accept it.</li>
+        <li>Select the rough notes you want to reshape.</li>
+        <li>Right-click and choose <strong>Refine</strong>, then pick a template (for example, "Meeting notes" or "Action items").</li>
+        <li>Vellum shows a <strong>preview</strong> of the result — your text is never altered until you accept it.</li>
       </ol>
       <h2>Make it yours</h2>
       <ul>

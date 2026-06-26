@@ -58,8 +58,8 @@ export function FirstRunModal() {
       <div className="v-firstrun">
         <p className="v-firstrun__intro">
           Vellum keeps everything on your machine. You can optionally enable{" "}
-          <strong>Refine</strong> — a local editing tool that rewrites selected text using a
-          model that runs entirely offline.
+          <strong>Refine</strong> — a local tool that reshapes selected text into a format you
+          choose, like meeting notes or action items, using a model that runs entirely offline.
         </p>
 
         <div className="v-firstrun__toggle">

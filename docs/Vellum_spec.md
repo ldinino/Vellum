@@ -287,7 +287,7 @@ Refine templates are named system prompts used by the Refine feature. They are i
 - Description (optional, shown in selector)
 - Adherence override (optional — overrides the global Strict ↔ Liberal setting for this template)
 
-> **Design note (Phase 8, as built):** the bare `systemPrompt: string` is migrated to `instructions: string` + `examples: [{input, output}]`; old `app.json` files fold the legacy field into `instructions` on load. A handful of starter templates (Tighten, Friendly tone, Make formal, Bulletize, Structure into sections) are seeded once on first load when the library is empty (gated by `settings.startersSeeded`, never re-seeded). The template editor gains example-pair editing.
+> **Design note (Phase 8, as built):** the bare `systemPrompt: string` is migrated to `instructions: string` + `examples: [{input, output}]`; old `app.json` files fold the legacy field into `instructions` on load. A handful of starter templates (Meeting notes, Action items, Structure into sections, Bulletize, Tighten) are seeded once on first load when the library is empty (gated by `settings.startersSeeded`, never re-seeded). The starter set leads with structure (reshaping a brain dump) rather than tone. The template editor gains example-pair editing.
 
 **Management:** Settings → Refine → Templates. Create, edit, delete, reorder.
 
@@ -299,7 +299,7 @@ Refine templates are named system prompts used by the Refine feature. They are i
 
 ### 9. Refine
 
-**What it is:** A text transformation feature. The user selects text, triggers Refine, a local model processes it according to a Refine template, and returns the result inline with changes underlined for review.
+**What it is:** A text transformation feature. The user selects text, triggers Refine, a local model processes it according to a Refine template, and returns the result inline with changes underlined for review. Its primary purpose is to reshape unstructured text — a rough brain dump — into a structure the user chooses with a template (meeting notes, action items, labelled sections, a bulleted list); tidying wording is a secondary use. The starter templates lead with structure, not tone.
 
 **What it is not:** An AI assistant. The word "AI" does not appear anywhere in the UI. It is presented as an editing tool alongside spell check and grammar check. No assistant framing, no chat interface, no generative suggestions unprompted.
 

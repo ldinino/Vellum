@@ -165,7 +165,8 @@ export function RefineSettings() {
               label="Enable Refine"
             />
             <span className="v-refine__hint">
-              Refine transforms selected text with a local model. Nothing leaves your machine.
+              Refine reshapes selected text into a format you choose — meeting notes, action
+              items, labelled sections. Nothing leaves your machine.
             </span>
           </div>
 
