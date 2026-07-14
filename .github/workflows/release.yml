@@ -10,8 +10,10 @@
 # it (github.com/.../releases/latest/download/latest.json resolves to the latest
 # PUBLISHED release), so review the assets, then click Publish to go live.
 #
-# Windows-only for v1. Respects src-tauri/Cargo.lock (the `time` 0.3.47 pin) —
-# never run `cargo update` here.
+# Windows-only for v1, built for both x64 and ARM64 as a matrix cross-compiled on
+# windows-latest; the matrix runs serially (max-parallel: 1) so the two arches
+# land in one draft release with a single merged latest.json. Respects
+# src-tauri/Cargo.lock (the `time` 0.3.47 pin) — never run `cargo update` here.
 
 name: Release
 
@@ -31,6 +33,16 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      # Serial so the first arch creates the draft release + latest.json and the
+      # second merges its platform entry into that same file (rather than racing
+      # to create/overwrite it).
+      max-parallel: 1
+      matrix:
+        target:
+          - x86_64-pc-windows-msvc
+          - aarch64-pc-windows-msvc
     steps:
       - uses: actions/checkout@v5
 
@@ -40,10 +52,13 @@ jobs:
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          key: ${{ matrix.target }}
 
       - name: Install frontend dependencies
         run: npm ci
@@ -90,3 +105,4 @@ jobs:
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
+          args: --target ${{ matrix.target }}

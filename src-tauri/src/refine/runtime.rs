@@ -1,6 +1,7 @@
 //! Ollama runtime install (spec Section 3, "Runtime components"; Phase 7).
 //!
-//! Downloads the pinned `ollama-windows-amd64.zip` into
+//! Downloads the pinned Ollama zip for the running build's architecture
+//! (windows-amd64 or windows-arm64) into
 //! `%LOCALAPPDATA%\Vellum\runtime\ollama\<version>\`, verifying SHA-256 before
 //! extracting. The flow is:
 //!   - idempotent: skip if the version's `ollama.exe` is already present;
@@ -67,7 +68,7 @@ fn exe_name() -> &'static str {
 /// Is the manifest's pinned Ollama version installed?
 pub fn runtime_status(app: &AppHandle) -> Result<RuntimeStatus, String> {
     let manifest = manifest::load_manifest(app)?;
-    let version = manifest.ollama.version;
+    let version = manifest.current_ollama()?.version.clone();
     let dir = paths::ollama_component_dir(app)?.join(&version);
     let exe = dir.join(exe_name());
     Ok(if exe.is_file() {
@@ -92,7 +93,7 @@ pub fn cancel_install(app: &AppHandle) {
 /// Download + verify + extract the pinned runtime. Idempotent; emits
 /// `refine://runtime-progress`. Guards against concurrent installs.
 pub async fn install_runtime(app: AppHandle) -> Result<RuntimeStatus, String> {
-    // Windows-only: the pinned URL is the windows-amd64 build.
+    // Windows-only in v1 (both x64 and ARM64); the pinned URL is chosen per arch.
     if !cfg!(windows) {
         return Err("The Refine runtime is only available on Windows in v1".into());
     }
@@ -127,7 +128,7 @@ pub async fn install_runtime(app: AppHandle) -> Result<RuntimeStatus, String> {
 
 async fn install_inner(app: &AppHandle, cancel: &AtomicBool) -> Result<RuntimeStatus, String> {
     let manifest = manifest::load_manifest(app)?;
-    let pin = manifest.ollama;
+    let pin = manifest.current_ollama()?.clone();
     let component_dir = paths::ollama_component_dir(app)?;
     let dest = component_dir.join(&pin.version);
     let tmp_root = component_dir.join(".tmp");

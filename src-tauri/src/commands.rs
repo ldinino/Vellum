@@ -404,8 +404,9 @@ pub struct VersionInfo {
 #[tauri::command]
 pub fn get_version_info(app: AppHandle) -> Result<VersionInfo, String> {
     let ollama = crate::refine::manifest::load_manifest(&app)
-        .map(|m| m.ollama.version)
-        .unwrap_or_else(|_| "unknown".to_string());
+        .ok()
+        .and_then(|m| m.current_ollama().ok().map(|p| p.version.clone()))
+        .unwrap_or_else(|| "unknown".to_string());
     Ok(VersionInfo {
         app: env!("CARGO_PKG_VERSION").to_string(),
         harper: HARPER_VERSION.to_string(),
@@ -1806,8 +1807,10 @@ pub fn ollama_status(app: AppHandle) -> Result<ProcessStatus, String> {
 /// hardware thresholds. The renderer reads it to populate the model-tier
 /// selector and to know which model a tier pulls.
 #[tauri::command]
-pub fn refine_get_manifest(app: AppHandle) -> Result<crate::refine::manifest::Manifest, String> {
-    crate::refine::manifest::load_manifest(&app)
+pub fn refine_get_manifest(
+    app: AppHandle,
+) -> Result<crate::refine::manifest::ResolvedManifest, String> {
+    crate::refine::manifest::load_manifest(&app)?.resolve_for_current_platform()
 }
 
 /// Snapshot of Ollama's recent stderr for the debug panel (spec Section 9).

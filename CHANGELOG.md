@@ -25,6 +25,9 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   tokens (`{{PageTitle}}`, `{{SectionName}}`, `{{NotebookName}}`, and the
   current date/time) are filled in when a page is created; live date/time
   fields re-evaluate every time the page is opened.
+- **Windows on ARM** — Vellum now ships a native ARM64 build alongside the
+  Intel/AMD (x64) build, so it runs at full speed on Windows on ARM devices such
+  as Copilot+ PCs. Installs and updates pick the right build automatically.
 
 ### Changed
 

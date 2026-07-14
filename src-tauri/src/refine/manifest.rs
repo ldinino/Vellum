@@ -9,6 +9,7 @@
 //! bundle (mirrors `paths::vendor_bin_dir`).
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
@@ -18,9 +19,51 @@ use crate::paths;
 #[serde(rename_all = "camelCase")]
 pub struct Manifest {
     pub schema_version: u32,
+    /// One pinned Ollama runtime per platform, keyed `"{OS}-{ARCH}"` (e.g.
+    /// "windows-x86_64", "windows-aarch64"). Each Windows arch ships a native
+    /// build, so the download picks the entry matching the running binary.
+    pub ollama: BTreeMap<String, OllamaPin>,
+    pub tiers: Vec<TierEntry>,
+    pub thresholds: Thresholds,
+}
+
+/// The manifest projected for the renderer: `ollama` resolved to the single pin
+/// for the running build's platform, so the frontend needn't know the arch.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResolvedManifest {
+    pub schema_version: u32,
     pub ollama: OllamaPin,
     pub tiers: Vec<TierEntry>,
     pub thresholds: Thresholds,
+}
+
+impl Manifest {
+    /// The Ollama runtime pin for the current build's platform. The key is
+    /// `"{OS}-{ARCH}"`, evaluated for the *target* at compile time, so a
+    /// cross-compiled aarch64 binary correctly resolves "windows-aarch64".
+    pub fn current_ollama(&self) -> Result<&OllamaPin, String> {
+        let key = current_platform_key();
+        self.ollama
+            .get(&key)
+            .ok_or_else(|| format!("models.json has no Ollama runtime pinned for platform '{key}'"))
+    }
+
+    /// Project to the renderer-facing shape (resolve `ollama` for this platform).
+    pub fn resolve_for_current_platform(&self) -> Result<ResolvedManifest, String> {
+        Ok(ResolvedManifest {
+            schema_version: self.schema_version,
+            ollama: self.current_ollama()?.clone(),
+            tiers: self.tiers.clone(),
+            thresholds: self.thresholds.clone(),
+        })
+    }
+}
+
+/// The `ollama` map key for the running build: `"{OS}-{ARCH}"` — e.g.
+/// "windows-x86_64" or "windows-aarch64".
+pub fn current_platform_key() -> String {
+    format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,8 +166,16 @@ mod tests {
     fn parses_bundled_manifest() {
         let m = parse(SAMPLE).expect("bundled manifest parses");
         assert_eq!(m.schema_version, 1);
-        assert!(m.ollama.url.contains(&m.ollama.version));
-        assert_eq!(m.ollama.sha256.len(), 64, "sha256 is 64 hex chars");
+        // Assert over the whole map so this stays host-independent (cargo test
+        // also runs on the macOS/Linux CI runners, whose keys aren't pinned).
+        assert!(!m.ollama.is_empty(), "at least one platform is pinned");
+        for (key, pin) in &m.ollama {
+            assert!(pin.url.contains(&pin.version), "{key}: url embeds its version");
+            assert_eq!(pin.sha256.len(), 64, "{key}: sha256 is 64 hex chars");
+        }
+        // Both shipped Windows arches carry the matching native build.
+        assert!(m.ollama.get("windows-x86_64").expect("x64 pinned").url.contains("amd64"));
+        assert!(m.ollama.get("windows-aarch64").expect("arm64 pinned").url.contains("arm64"));
         let tier = |id: &str| m.tiers.iter().find(|t| t.id == id);
         // Defaults are non-reasoning instruct models (qwen3's hybrid reasoning
         // was unsuppressible on some Ollama builds — see Phase 8 design note).
@@ -144,7 +195,11 @@ mod tests {
         let m = parse(SAMPLE).unwrap();
         let s = serde_json::to_string(&m).unwrap();
         let again = parse(&s).unwrap();
-        assert_eq!(m.ollama.sha256, again.ollama.sha256);
+        assert_eq!(m.ollama.len(), again.ollama.len());
+        assert_eq!(
+            m.ollama["windows-aarch64"].sha256,
+            again.ollama["windows-aarch64"].sha256
+        );
         assert_eq!(m.tiers.len(), again.tiers.len());
     }
 

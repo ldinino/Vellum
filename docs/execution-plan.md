@@ -48,6 +48,30 @@ they're picked back up, but neither is in scope for the current release.
 
 ### 1. Windows ARM64 build
 
+**Done (2026-07-14):** shipped as proposed. [models.json](../src-tauri/resources/models.json)'s
+flat `ollama` object is now a per-platform map keyed `windows-x86_64` /
+`windows-aarch64`; the ARM64 `ollama-windows-arm64.zip` sha256
+(`fe9e0648…`) + size (16000690) were verified by downloading and hashing the
+artifact — the plan's transcribed sha256 was correct, its size was a placeholder.
+[manifest.rs](../src-tauri/src/refine/manifest.rs) deserializes the map and
+resolves the entry for the running build via `current_platform_key()` =
+`"{OS}-{ARCH}"` (evaluated for the *target* at compile time), used by the runtime
+download ([runtime.rs](../src-tauri/src/refine/runtime.rs)) and the version-info
+command. The renderer is untouched — `refine_get_manifest` now returns a
+`ResolvedManifest` DTO whose `ollama` is already collapsed to the current arch's
+pin, so the frontend `Manifest` shape is unchanged.
+[release.yml](../.github/workflows/release.yml) became a serial
+(`max-parallel: 1`) matrix over `x86_64-pc-windows-msvc` /
+`aarch64-pc-windows-msvc`, cross-compiled on `windows-latest` via `--target`;
+serial so the first arch creates the draft release + `latest.json` and the second
+merges its platform entry into that same file (one release, one updater manifest
+with both `windows-x86_64` and `windows-aarch64`). `tauri.conf.json` needed no
+change (the `nsis` target is arch-agnostic; `--target` drives the per-arch
+installer name). Verified: `cargo test` (63 pass) + `npm run build` clean.
+**Residual:** real ARM64 silicon is still needed to confirm
+Ollama/process-spawn/DXGI behavior at runtime — CI cross-compiling only proves it
+builds.
+
 **Current state:** [tauri.conf.json](../src-tauri/tauri.conf.json) bundles only
 `nsis` with no target triple pinned; [release.yml](../.github/workflows/release.yml)
 runs a single `windows-latest` (x64) job. [resources/models.json](../src-tauri/resources/models.json)
