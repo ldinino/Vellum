@@ -28,7 +28,7 @@ import { MergePaste } from "./mergePaste";
 export function buildExtensions(): Extensions {
   return [
     StarterKit.configure({
-      heading: { levels: [1, 2, 3, 4] },
+      heading: { levels: [1, 2, 3, 4, 5, 6] },
       link: {
         openOnClick: false, // we open via Ctrl/Cmd-click and context menu
         autolink: true,

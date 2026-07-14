@@ -45,7 +45,9 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
           2: editor.isActive("heading", { level: 2 }),
           3: editor.isActive("heading", { level: 3 }),
           4: editor.isActive("heading", { level: 4 }),
-        } as Record<1 | 2 | 3 | 4, boolean>,
+          5: editor.isActive("heading", { level: 5 }),
+          6: editor.isActive("heading", { level: 6 }),
+        } as Record<1 | 2 | 3 | 4 | 5 | 6, boolean>,
         fontFamily: (style.fontFamily as string | undefined) ?? "",
         fontSize: ((style.fontSize as string | undefined) ?? "").replace("px", ""),
         color: (style.color as string | undefined) ?? "#000000",
@@ -115,7 +117,7 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
       <ToolbarSeparator />
 
       <ToolbarGroup>
-        {([1, 2, 3, 4] as const).map((level) => (
+        {([1, 2, 3, 4, 5, 6] as const).map((level) => (
           <ToolbarButton
             key={level}
             icon={`edit-heading-${level}`}
