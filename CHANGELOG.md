@@ -9,6 +9,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ### Added
 
+- **Choose where your notebooks are stored** — Settings ▸ General has a new
+  **Change…** button that moves your Vellum data folder anywhere you like,
+  including outside OneDrive, so OneDrive stops making duplicate copies of open
+  notebooks. The app restarts to apply the new location.
 - **Mermaid diagrams** — Insert flowcharts and other diagrams with **Insert ▸
   Mermaid Diagram**, edit the source in place, and see it render live. Diagrams
   export to a Markdown `mermaid` code block and print as images.

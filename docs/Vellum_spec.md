@@ -70,6 +70,8 @@ The Ollama download flow shows progress and handles failure/retry; Refine degrad
 
 OneDrive (and other sync clients) cover this path by default on Windows — no code required for cloud backup.
 
+> **Design note (relocatable data root, as built):** the data root defaults to `Documents\Vellum` but can be moved to any folder via Settings → General ("Change…"). Changing it moves the whole root — `app.json`, `notebooks.json`, `search-index.db`, and every notebook folder — into `<chosen>\Vellum` and records that path machine-locally in `%LOCALAPPDATA%\Vellum\data-location.txt` (never in the movable/synced root, so it always resolves and the choice is per-machine). This lets a user keep the live SQLite databases and search index outside a OneDrive-synced folder, avoiding the sync-conflict duplicate copies OneDrive makes of files that change while the app holds them open. The app restarts after a move so everything reloads from the new location.
+
 **SQLite schema (per notebook):**
 
 - `sections` — id, name, color, sort_order, page_template_id (nullable), created_at, updated_at, deleted_at (nullable — Recycle Bin)

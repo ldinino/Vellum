@@ -106,6 +106,7 @@ pub fn run() {
             commands::reveal_path,
             commands::get_version_info,
             commands::reveal_data_dir,
+            commands::set_data_dir,
             commands::get_app_config,
             commands::save_app_config,
             commands::list_notebooks,

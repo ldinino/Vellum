@@ -168,6 +168,39 @@ fn sanitize_attachment_name(name: &str) -> String {
     }
 }
 
+/// Recursively copy a directory tree (used by `move_dir` when a plain rename
+/// can't cross a volume boundary).
+fn copy_dir_all(src: &std::path::Path, dest: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dest)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let from = entry.path();
+        let to = dest.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_all(&from, &to)?;
+        } else {
+            std::fs::copy(&from, &to)?;
+        }
+    }
+    Ok(())
+}
+
+/// Move a directory `src` -> `dest`: a fast rename when both sides share a
+/// volume, else copy the whole tree and remove the original (a rename fails
+/// across drives on Windows). `dest` must not already exist. On a copy that
+/// partially fails, the original is left intact (the caller only records the new
+/// location after this returns Ok), so the notebook is never lost.
+fn move_dir(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
+    if std::fs::rename(src, dest).is_ok() {
+        return Ok(());
+    }
+    copy_dir_all(src, dest)
+        .map_err(|e| format!("copy {} -> {}: {e}", src.display(), dest.display()))?;
+    std::fs::remove_dir_all(src)
+        .map_err(|e| format!("remove original {}: {e}", src.display()))?;
+    Ok(())
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppPaths {
@@ -388,6 +421,64 @@ pub fn reveal_data_dir(app: AppHandle) -> Result<(), String> {
     app.opener()
         .open_path(dir.to_string_lossy().to_string(), None::<&str>)
         .map_err(|e| format!("open data dir: {e}"))
+}
+
+/// Change where Vellum stores all its data (Settings → General). Moves the
+/// current data root — `app.json`, `notebooks.json`, the master search index,
+/// and every notebook folder — into `<new_parent>\Vellum`, then records that
+/// location so it persists across launches. This lets the user keep their data
+/// out of a OneDrive-synced folder, avoiding the sync-conflict duplicate copies
+/// OneDrive makes of the live SQLite files. Returns the new data-root path; the
+/// caller restarts the app so everything reloads from the new location.
+#[tauri::command]
+pub fn set_data_dir(app: AppHandle, new_parent: String) -> Result<String, String> {
+    let current = paths::data_dir(&app)?;
+    let parent = std::path::PathBuf::from(new_parent.trim());
+    if !parent.is_dir() {
+        return Err(format!("Destination is not a folder: {}", parent.display()));
+    }
+    let new_root = parent.join("Vellum");
+
+    // Already storing data there → nothing to do.
+    let same = match (std::fs::canonicalize(&current), std::fs::canonicalize(&new_root)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => current == new_root,
+    };
+    if same {
+        return Ok(current.to_string_lossy().to_string());
+    }
+
+    // Can't move the data root into a subfolder of itself.
+    if new_root.starts_with(&current) {
+        return Err("Choose a location outside the current Vellum data folder.".into());
+    }
+
+    // Don't overwrite an existing, non-empty "Vellum" folder at the destination.
+    if new_root.exists() {
+        let empty = std::fs::read_dir(&new_root)
+            .map(|mut d| d.next().is_none())
+            .unwrap_or(false);
+        if !empty {
+            return Err(format!(
+                "A \"Vellum\" folder already exists in {} and isn't empty. Choose a different location.",
+                parent.display()
+            ));
+        }
+        // Remove the empty folder so the move can create it fresh.
+        let _ = std::fs::remove_dir(&new_root);
+    }
+
+    if current.is_dir() {
+        move_dir(&current, &new_root)?;
+    } else {
+        std::fs::create_dir_all(&new_root)
+            .map_err(|e| format!("create {}: {e}", new_root.display()))?;
+    }
+
+    paths::set_data_root(&app, &new_root)?;
+    app.state::<AppLog>()
+        .info("data", format!("Data location changed to {}", new_root.display()));
+    Ok(new_root.to_string_lossy().to_string())
 }
 
 // ---------------------------------------------------------------------------

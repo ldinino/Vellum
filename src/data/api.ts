@@ -67,6 +67,12 @@ export const logFrontendEvent = (
 /** Reveal Documents\Vellum in the system file manager (Settings → General). */
 export const revealDataDir = () => invoke<void>("reveal_data_dir");
 
+/** Change where Vellum stores its data: moves the current data root into
+ * `<newParent>\Vellum` and persists the choice. Returns the new data-root path.
+ * The app should be restarted afterwards so everything reloads from it. */
+export const setDataDir = (newParent: string) =>
+  invoke<string>("set_data_dir", { newParent });
+
 /** Write a page's Markdown to `mdPath` and copy its images/attachments into a
  * sibling `<filesDirName>/` folder next to it (spec Section 14). */
 export const exportPage = (
