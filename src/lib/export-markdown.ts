@@ -165,6 +165,16 @@ function makeTurndown(linkBase: string, imageMap: Map<string, string>): Turndown
     },
   });
 
+  // Live date/time fields (execution-plan #7) have no static Markdown form, so
+  // flatten them to their current computed value as plain text. `renderHTML`
+  // already emitted that value as the element's text content.
+  td.addRule("dynamicField", {
+    filter: (node) =>
+      node.nodeName === "SPAN" &&
+      (node as HTMLElement).getAttribute("data-type") === "dynamic-field",
+    replacement: (_content, node) => node.textContent ?? "",
+  });
+
   // Inline images export to Azure DevOps wiki syntax: `![alt](path =WIDTHx)` — the
   // image-size extension (space before `=`, no space around `x`, trailing `x` for a
   // width-only size, which is all ResizableImage stores). External srcs are left as-is.

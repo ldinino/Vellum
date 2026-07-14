@@ -6,6 +6,12 @@ import { useActiveEditor } from "../../state/activeEditor";
 import { useVellum } from "../../state/vellum";
 import { FONTS, SIZES } from "../../data/fonts";
 import { LinkDialog } from "./LinkDialog";
+import { ContextMenu, type MenuItem } from "../ui/ContextMenu";
+import {
+  DYNAMIC_FIELD_PRESETS,
+  formatDynamicField,
+  type DynamicFieldKind,
+} from "../../lib/dynamic-fields";
 import "./EditorToolbar.css";
 
 interface FormattingGroupsProps {
@@ -13,6 +19,8 @@ interface FormattingGroupsProps {
   insertImage: (file: File) => void;
   linkOpen: boolean;
   setLinkOpen: (v: boolean) => void;
+  /** Show the template-only "Insert placeholder" dropdown (page templates). */
+  showPlaceholders?: boolean;
 }
 
 /**
@@ -20,12 +28,55 @@ interface FormattingGroupsProps {
  * bar. Tolerates a null editor (renders everything disabled) so the shell-level
  * TopToolbar stays visible when no page is open.
  */
-function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroupsProps) {
+function FormattingGroups({
+  editor,
+  insertImage,
+  setLinkOpen,
+  showPlaceholders,
+}: FormattingGroupsProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   // The editor's configured default font/size (Settings → Editor) is what
   // unstyled text renders at, so the selects fall back to it instead of a blank
   // placeholder — and stay accurate when the user changes the default.
   const { defaultFont, defaultFontSize } = useVellum();
+  const [phMenu, setPhMenu] = useState<{ x: number; y: number } | null>(null);
+
+  // "Insert placeholder" dropdown (template editor only): one-shot tokens go in
+  // as literal text (the backend substitutes them when a page is created from the
+  // template); live fields go in as a `dynamicField` node that re-evaluates on
+  // every page load.
+  const insertText = (text: string) => editor?.chain().focus().insertContent(text).run();
+  const insertField = (kind: DynamicFieldKind, format: string) =>
+    editor?.chain().focus().insertDynamicField(kind, format).run();
+  const placeholderItems = (): MenuItem[] => {
+    const now = new Date();
+    const liveSub = (kind: DynamicFieldKind): MenuItem[] =>
+      DYNAMIC_FIELD_PRESETS[kind].map((p) => ({
+        label: formatDynamicField(kind, p.key, now),
+        onSelect: () => insertField(kind, p.key),
+      }));
+    return [
+      { label: "Page title", icon: "document", onSelect: () => insertText("{{PageTitle}}") },
+      { label: "Section name", icon: "folder", onSelect: () => insertText("{{SectionName}}") },
+      {
+        label: "Notebook name",
+        icon: "book",
+        onSelect: () => insertText("{{NotebookName}}"),
+        separatorAfter: true,
+      },
+      { label: "Current date", icon: "calendar", onSelect: () => insertText("{{CurrentDate}}") },
+      { label: "Current time", icon: "clock", onSelect: () => insertText("{{CurrentTime}}") },
+      {
+        label: "Current date & time",
+        icon: "calendar",
+        onSelect: () => insertText("{{CurrentDateTime}}"),
+        separatorAfter: true,
+      },
+      { label: "Live date", icon: "calendar", submenu: liveSub("date") },
+      { label: "Live time", icon: "clock", submenu: liveSub("time") },
+      { label: "Live date & time", icon: "calendar", submenu: liveSub("datetime") },
+    ];
+  };
 
   // Tiptap v3's `useEditor` no longer re-renders on every transaction, so the
   // toolbar must subscribe explicitly to keep active states / select values in
@@ -311,6 +362,23 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
         />
       </ToolbarGroup>
 
+      {showPlaceholders && (
+        <>
+          <ToolbarSeparator />
+          <ToolbarGroup>
+            <ToolbarButton
+              icon="tag"
+              label="Insert placeholder"
+              disabled={disabled}
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                setPhMenu({ x: r.left, y: r.bottom });
+              }}
+            />
+          </ToolbarGroup>
+        </>
+      )}
+
       <input
         ref={fileInputRef}
         type="file"
@@ -322,6 +390,14 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
           e.target.value = "";
         }}
       />
+      {phMenu && (
+        <ContextMenu
+          items={placeholderItems()}
+          x={phMenu.x}
+          y={phMenu.y}
+          onClose={() => setPhMenu(null)}
+        />
+      )}
     </>
   );
 }
@@ -333,9 +409,11 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
 export function EditorToolbar({
   editor,
   onInsertImage,
+  showPlaceholders,
 }: {
   editor: Editor | null;
   onInsertImage: (file: File) => void;
+  showPlaceholders?: boolean;
 }) {
   const [linkOpen, setLinkOpen] = useState(false);
   return (
@@ -346,6 +424,7 @@ export function EditorToolbar({
           insertImage={onInsertImage}
           linkOpen={linkOpen}
           setLinkOpen={setLinkOpen}
+          showPlaceholders={showPlaceholders}
         />
       </Toolbar>
       {linkOpen && editor && <ToolbarLinkDialog editor={editor} onClose={() => setLinkOpen(false)} />}

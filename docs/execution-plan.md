@@ -10,13 +10,20 @@ decisions back into it once each item ships. Sizes are relative complexity
 see the [Decisions log](#decisions-log) at the bottom for a quick-reference
 table, and each item's section below for the reasoning.
 
+**Update (2026-07-14):** platform scope narrowed to **Windows-only for v1** —
+[ARM64](#1-windows-arm64-build) (Windows ARM64) is committed, while
+[macOS](#2-macos-build-planning) and [Linux](#3-linux-build-planning) are
+**deferred** post-v1. Vellum is Windows-first (per [CLAUDE.md](../CLAUDE.md)); the
+planning and resolved decisions for both deferred tracks are kept intact below for
+when they're picked back up.
+
 ## At a glance
 
 | ID | Item | Track | Size | Depends on |
 |---|---|---|---|---|
 | [ARM64](#1-windows-arm64-build) | Windows ARM64 build | Platform | M | — |
-| [LINUX](#3-linux-build-planning) | Linux build | Platform | L | — |
-| [MACOS](#2-macos-build-planning) | macOS build | Platform | XL | Apple Developer secrets in CI |
+| [LINUX](#3-linux-build-planning) | Linux build _(deferred)_ | Platform | L | — |
+| [MACOS](#2-macos-build-planning) | macOS build _(deferred)_ | Platform | XL | Apple Developer secrets in CI |
 | [MDPROFILE](#4-define-the-vellum-markdown-profile) | Scope Markdown to Azure DevOps flavor | Markdown | S | — |
 | [MERMAID](#5-mermaid-diagram-support) | Mermaid diagram support | Markdown | L | MDPROFILE |
 | [EXPORTWIZ](#6-export-to-markdown-wizard) | "Export to Markdown…" wizard | Markdown | L | MDPROFILE |
@@ -31,6 +38,13 @@ table, and each item's section below for the reasoning.
 ---
 
 ## Track: Platform builds
+
+**Scope (2026-07-14) — Windows-only for v1.** [ARM64](#1-windows-arm64-build)
+(Windows ARM64) is committed; [macOS](#2-macos-build-planning) and
+[Linux](#3-linux-build-planning) are **deferred** post-v1. Vellum is
+Windows-first (per [CLAUDE.md](../CLAUDE.md)), so both net-new-platform tracks are
+parked — their planning and resolved decisions below are preserved intact for when
+they're picked back up, but neither is in scope for the current release.
 
 ### 1. Windows ARM64 build
 
@@ -99,6 +113,10 @@ detection behave correctly on real ARM64 silicon.
 ---
 
 ### 2. macOS build (planning)
+
+**Deferred (2026-07-14):** parked post-v1 — Vellum ships Windows-first. The
+product decisions below still stand for whenever this is picked up; nothing here
+is reversed, just not scheduled.
 
 **Current state:** `ci.yml` already runs `cargo check` + `npm run build` on
 `macos-latest` for every push (compile-only, no bundling). `tauri.conf.json`'s
@@ -173,6 +191,9 @@ once).
 ---
 
 ### 3. Linux build (planning)
+
+**Deferred (2026-07-14):** parked post-v1 — Vellum ships Windows-first. The
+AppImage/updater decision below still stands for whenever this is picked up.
 
 **Current state:** `ci.yml` already installs `libwebkit2gtk-4.1-dev`,
 `libappindicator3-dev`, `librsvg2-dev`, `patchelf` and runs `cargo check` +
@@ -425,6 +446,38 @@ syntax that's inert noise in a plain Markdown viewer.
 ## Track: Content features
 
 ### 7. Template dynamic inserts
+
+**Done (2026-07-14):** implemented as proposed (both placeholder kinds). One-shot
+tokens are substituted in the backend `create_page`
+([commands.rs](../src-tauri/src/commands.rs)): `template_content` became
+`template_value` (returns the `serde_json::Value`) and a new
+`substitute_template_tokens` walk rewrites `{{PageTitle}}` / `{{SectionName}}` /
+`{{NotebookName}}` / `{{CurrentDate}}` / `{{CurrentTime}}` / `{{CurrentDateTime}}`
+inside text-node `text` strings only (recursing `content`, never touching
+`type`/`attrs`/`marks`, so live-field nodes pass through untouched);
+`TemplateTokens` formats dates via `chrono::Local` and a new
+`notebook::section_name` resolves `{{SectionName}}`. Live fields are a new inline
+atom node `dynamicField`
+([DynamicField.tsx](../src/components/editor/DynamicField.tsx), attrs
+`{kind, format}`) whose React NodeView recomputes its value on mount; the pure
+formatter ([dynamic-fields.ts](../src/lib/dynamic-fields.ts)) is shared with the
+Markdown exporter, and its default presets match the backend one-shot formats so
+`{{CurrentDate}}` and a default live date read identically. Registered in
+[extensions.ts](../src/components/editor/extensions.ts) and inserted from a new
+**Insert placeholder** dropdown in
+[PageTemplatesManager.tsx](../src/components/settings/PageTemplatesManager.tsx)
+(one-shot → literal text; live → a format submenu → `insertDynamicField`, reusing
+[ContextMenu](../src/components/ui/ContextMenu.tsx)). Export flattens a live field
+to its current value via a turndown rule
+([export-markdown.ts](../src/lib/export-markdown.ts)); print inherits it for free
+(`renderHTML` emits the value as the element's text). **Decided at
+implementation:** the live "ticking clock" stays a non-goal (re-evaluates on page
+load only); the format vocabulary is a small preset list per kind rather than
+hand-typed strings (date: `MMMM D, YYYY` / `MMM D, YYYY` / `MM/DD/YYYY` /
+`YYYY-MM-DD`; time: `h:mm A` / `HH:mm`; plus datetime combos). Verified:
+`npm run build` + `cargo check` clean; new `commands::tests` assert the token walk
+skips attrs/dynamic-field nodes and that `new()`'s formats match the live-field
+defaults. [Vellum_spec.md §7](Vellum_spec.md) + CHANGELOG updated.
 
 **Current state:** per [Vellum_spec.md §7](Vellum_spec.md), page templates
 store `content_json` in `app.json` (app-level) and the backend `create_page`
@@ -753,13 +806,14 @@ Not a hard dependency chain except where noted — reorder freely by priority.
 4. **Template dynamic inserts** ([TEMPLATES](#7-template-dynamic-inserts)) —
    independent, slot in anytime; the live-field half pairs naturally with
    Mermaid (same "new Tiptap node + NodeView" shape of work).
-5. **Platform builds:** [ARM64](#1-windows-arm64-build) first (smallest, same
-   OS/toolchain, decisions already locked in), then
-   [LINUX](#3-linux-build-planning) (AppImage, no signing friction), then
-   [MACOS](#2-macos-build-planning) last — product decisions are resolved now,
-   but it's still the largest net-new engineering surface (vibrancy, hardware
-   detection, a new CI job, and the notarization pipeline all at once) plus a
-   logistics dependency (Apple Developer secrets in CI).
+5. **Platform builds:** [ARM64](#1-windows-arm64-build) (Windows ARM64) is the
+   only platform track in scope for v1 — smallest, same OS/toolchain, decisions
+   already locked in. [LINUX](#3-linux-build-planning) and
+   [MACOS](#2-macos-build-planning) are **deferred** post-v1 (see the Platform
+   builds track note); when revisited, do Linux first (AppImage, no signing
+   friction), then macOS last (largest net-new surface — vibrancy, hardware
+   detection, a new CI job, the notarization pipeline — plus the Apple Developer
+   secrets logistics dependency).
 6. **Move sections between notebooks** ([MOVESECTION](#8-move-sections-between-notebooks)) —
    the largest, riskiest item (cross-database migration). Schedule it
    deliberately with dedicated testing, independent of everything else above.
@@ -784,8 +838,9 @@ relevant item's section above for the full reasoning behind each.
 | 11 | Move-section confirmation | Required, via the existing `ask()` dialog pattern |
 
 **Residual open items** (small, non-blocking):
-- Whether ARM64 Linux is in scope at all (defaulting to x86_64-only unless
-  you say otherwise).
-- Exact live-field format-token vocabulary (`MM/DD/YYYY` style vs. something
-  else) — proposed a small preset list in the template editor rather than
-  requiring hand-typed format strings; refine at implementation time.
+- Whether ARM64 Linux is in scope at all — moot for now, since
+  [LINUX](#3-linux-build-planning) is **deferred**; revisit alongside the Linux
+  track (defaulting to x86_64-only when it returns unless you say otherwise).
+- Exact live-field format-token vocabulary — **resolved** (2026-07-14, see
+  [TEMPLATES](#7-template-dynamic-inserts)): a small per-kind preset list in the
+  Insert-placeholder dropdown (no hand-typed format strings).

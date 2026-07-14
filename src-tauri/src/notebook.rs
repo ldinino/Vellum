@@ -205,6 +205,19 @@ pub async fn section_template_id(
     .map_err(|e| format!("section template id: {e}"))
 }
 
+/// The display name of a section, if it exists. Used to resolve the
+/// `{{SectionName}}` one-shot template token (execution-plan #7).
+pub async fn section_name(
+    pool: &Pool<Sqlite>,
+    section_id: &str,
+) -> Result<Option<String>, String> {
+    sqlx::query_scalar::<_, String>("SELECT name FROM sections WHERE id = ?1")
+        .bind(section_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| format!("section name: {e}"))
+}
+
 /// Persist a section's page sort preference (spec Section 5 / Phase 9). Values
 /// are whitelisted so only known modes/directions reach the DB.
 pub async fn set_section_sort(

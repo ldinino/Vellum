@@ -22,6 +22,7 @@ import { TaskList, TaskItem } from "@tiptap/extension-list";
 import type { Extensions } from "@tiptap/react";
 import { ResizableImage } from "./ResizableImage";
 import { MermaidDiagram } from "./MermaidDiagram";
+import { DynamicField } from "./DynamicField";
 import { SearchHighlight } from "./SearchHighlight";
 import { Find } from "./find";
 import { GrammarError } from "./GrammarError";
@@ -50,6 +51,7 @@ export function buildExtensions(): Extensions {
     TaskItem.configure({ nested: true }),
     ResizableImage,
     MermaidDiagram,
+    DynamicField,
     Table.configure({ resizable: true }),
     TableRow,
     TableHeader,

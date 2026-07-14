@@ -851,17 +851,97 @@ pub async fn list_pages(
     r
 }
 
-/// Page-template content (serialized doc JSON + a preview) for a template id, or
-/// None if it's missing or not a usable document (spec Section 7).
-fn template_content(app: &AppHandle, template_id: &str) -> Option<(String, String)> {
+/// A page template's document JSON (spec Section 7), or None if it's missing or
+/// not a usable document object.
+fn template_value(app: &AppHandle, template_id: &str) -> Option<serde_json::Value> {
     let cfg = config::load_app_config(app).ok()?;
     let tmpl = cfg.page_templates.iter().find(|t| t.id == template_id)?;
     if !tmpl.content_json.is_object() {
         return None;
     }
-    let json = serde_json::to_string(&tmpl.content_json).ok()?;
-    let preview: String = crate::search::flatten_text(&json).chars().take(120).collect();
-    Some((json, preview))
+    Some(tmpl.content_json.clone())
+}
+
+/// Values substituted into a page template's one-shot `{{Token}}` placeholders
+/// at page-creation time (execution-plan #7). Live date/time fields are a
+/// separate Tiptap node (`dynamicField`) and are deliberately left untouched
+/// here — they re-evaluate on every page load instead.
+struct TemplateTokens {
+    page_title: String,
+    section_name: String,
+    notebook_name: String,
+    current_date: String,
+    current_time: String,
+    current_datetime: String,
+}
+
+impl TemplateTokens {
+    fn new(page_title: &str, section_name: &str, notebook_name: &str) -> Self {
+        let now = chrono::Local::now();
+        // These formats match the frontend live-field defaults
+        // (src/lib/dynamic-fields.ts) so a one-shot {{CurrentDate}} and a live
+        // date field with the default format read identically. chrono's `%-d` /
+        // `%-I` (no zero padding) are its own strftime, so they work on Windows.
+        let current_date = now.format("%B %-d, %Y").to_string();
+        let current_time = now.format("%-I:%M %p").to_string();
+        Self {
+            current_datetime: format!("{current_date} {current_time}"),
+            page_title: page_title.to_string(),
+            section_name: section_name.to_string(),
+            notebook_name: notebook_name.to_string(),
+            current_date,
+            current_time,
+        }
+    }
+
+    /// Replace every known whole token in a string. Unknown `{{…}}` is left as-is.
+    fn apply(&self, s: &str) -> String {
+        s.replace("{{PageTitle}}", &self.page_title)
+            .replace("{{SectionName}}", &self.section_name)
+            .replace("{{NotebookName}}", &self.notebook_name)
+            .replace("{{CurrentDateTime}}", &self.current_datetime)
+            .replace("{{CurrentDate}}", &self.current_date)
+            .replace("{{CurrentTime}}", &self.current_time)
+    }
+}
+
+/// Substitute one-shot `{{Token}}` placeholders inside the text nodes of a Tiptap
+/// document (execution-plan #7). Only text-node `text` strings are rewritten, and
+/// recursion follows `content` arrays only, so node `type` / `attrs` / `marks`
+/// are never touched — live-field nodes (whose data lives in `attrs`, not text)
+/// therefore pass through unchanged.
+fn substitute_template_tokens(value: &mut serde_json::Value, tokens: &TemplateTokens) {
+    match value {
+        serde_json::Value::Object(map) => {
+            if let Some(serde_json::Value::String(text)) = map.get_mut("text") {
+                *text = tokens.apply(text);
+            }
+            if let Some(content) = map.get_mut("content") {
+                substitute_template_tokens(content, tokens);
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items.iter_mut() {
+                substitute_template_tokens(item, tokens);
+            }
+            // ProseMirror/Tiptap forbid empty text nodes. A one-shot token that
+            // expands to "" and was a node's entire text (e.g. {{PageTitle}} on an
+            // untitled new page) would leave `{ "type": "text", "text": "" }`,
+            // which makes Tiptap reject the whole document on load — the page then
+            // opens blank. Drop any text node emptied by substitution; the
+            // surrounding (now possibly childless) paragraph stays valid.
+            items.retain(|item| !is_empty_text_node(item));
+        }
+        _ => {}
+    }
+}
+
+/// True for a Tiptap text node whose text is the empty string — invalid in
+/// ProseMirror, so `substitute_template_tokens` strips these after expanding
+/// tokens.
+fn is_empty_text_node(value: &serde_json::Value) -> bool {
+    value.get("type").and_then(serde_json::Value::as_str) == Some("text")
+        && value.get("text").and_then(serde_json::Value::as_str) == Some("")
 }
 
 #[tauri::command]
@@ -880,14 +960,25 @@ pub async fn create_page(
         }
     };
 
-    // If the section has a page template, seed the new page with its content.
-    // The template itself is never modified (we copy its JSON).
+    // If the section has a page template, seed the new page with its content,
+    // substituting one-shot {{Token}} placeholders (execution-plan #7). The
+    // template itself is never modified — we clone and edit its JSON.
     let template = notebook::section_template_id(&pool, &section_id)
         .await
         .ok()
         .flatten()
-        .and_then(|tid| template_content(&app, &tid));
-    let applied = if let Some((json, preview)) = template {
+        .and_then(|tid| template_value(&app, &tid));
+    let applied = if let Some(mut value) = template {
+        let section = notebook::section_name(&pool, &section_id)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        let nb = notebook_name(&app, &notebook_id).unwrap_or_default();
+        let tokens = TemplateTokens::new(&title, &section, &nb);
+        substitute_template_tokens(&mut value, &tokens);
+        let json = serde_json::to_string(&value).unwrap_or_else(|_| "{}".to_string());
+        let preview: String = crate::search::flatten_text(&json).chars().take(120).collect();
         notebook::save_page_snapshot(&pool, &page.id, &json, &preview)
             .await
             .is_ok()
@@ -1888,3 +1979,150 @@ pub async fn refine_detect_hardware(
         .await
         .map_err(|e| format!("hardware detect task join error: {e}"))?
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A throwaway unique temp directory for filesystem tests, removed on drop.
+    struct TmpDir(std::path::PathBuf);
+    impl TmpDir {
+        fn new() -> Self {
+            let p = std::env::temp_dir().join(format!("vellum-test-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&p).unwrap();
+            TmpDir(p)
+        }
+    }
+    impl Drop for TmpDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn move_dir_relocates_tree_and_removes_source() {
+        let tmp = TmpDir::new();
+        let src = tmp.0.join("nb");
+        std::fs::create_dir_all(src.join("attachments").join("p1")).unwrap();
+        std::fs::write(src.join("notebook.db"), b"db").unwrap();
+        std::fs::write(src.join("attachments").join("p1").join("a.png"), b"img").unwrap();
+
+        let dest = tmp.0.join("moved");
+        move_dir(&src, &dest).unwrap();
+
+        assert!(!src.exists(), "source folder is removed after the move");
+        assert_eq!(std::fs::read(dest.join("notebook.db")).unwrap(), b"db");
+        assert_eq!(
+            std::fs::read(dest.join("attachments").join("p1").join("a.png")).unwrap(),
+            b"img"
+        );
+    }
+
+    fn tokens() -> TemplateTokens {
+        TemplateTokens {
+            page_title: "My Page".to_string(),
+            section_name: "Meeting Notes".to_string(),
+            notebook_name: "Work".to_string(),
+            current_date: "July 14, 2026".to_string(),
+            current_time: "2:30 PM".to_string(),
+            current_datetime: "July 14, 2026 2:30 PM".to_string(),
+        }
+    }
+
+    #[test]
+    fn apply_replaces_whole_tokens_only() {
+        let t = tokens();
+        assert_eq!(t.apply("{{PageTitle}}"), "My Page");
+        assert_eq!(t.apply("Hi {{SectionName}} / {{NotebookName}}"), "Hi Meeting Notes / Work");
+        // {{CurrentDateTime}} must resolve to the datetime value, not to
+        // {{CurrentDate}} + the literal "Time}}" (replace order guards this).
+        assert_eq!(t.apply("{{CurrentDateTime}}"), "July 14, 2026 2:30 PM");
+        assert_eq!(
+            t.apply("{{CurrentDate}} at {{CurrentTime}}"),
+            "July 14, 2026 at 2:30 PM"
+        );
+        // Unknown tokens are left untouched.
+        assert_eq!(t.apply("{{Unknown}} kept"), "{{Unknown}} kept");
+    }
+
+    #[test]
+    fn substitute_walks_text_nodes_and_skips_attrs() {
+        let mut doc = serde_json::json!({
+            "type": "doc",
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [
+                        { "type": "text", "text": "Title: {{PageTitle}} in {{SectionName}}" },
+                        // A live field carries its data in attrs — even an attr that
+                        // looks like a token must NOT be substituted.
+                        { "type": "dynamicField", "attrs": { "kind": "date", "format": "{{PageTitle}}" } }
+                    ]
+                },
+                {
+                    "type": "heading",
+                    "attrs": { "level": 1 },
+                    "content": [ { "type": "text", "text": "{{NotebookName}}" } ]
+                }
+            ]
+        });
+
+        substitute_template_tokens(&mut doc, &tokens());
+
+        let para = &doc["content"][0]["content"];
+        assert_eq!(para[0]["text"], "Title: My Page in Meeting Notes");
+        // The dynamicField node passes through unchanged (attrs untouched, no text).
+        assert_eq!(para[1]["type"], "dynamicField");
+        assert_eq!(para[1]["attrs"]["format"], "{{PageTitle}}");
+        // Nested content is reached.
+        assert_eq!(doc["content"][1]["content"][0]["text"], "Work");
+    }
+
+    #[test]
+    fn substitute_drops_text_nodes_emptied_by_a_token() {
+        // {{PageTitle}} on an untitled new page expands to "" — the resulting
+        // empty text node must be removed, or Tiptap rejects the whole doc on
+        // load ("Empty text nodes are not allowed") and the page opens blank.
+        let empty_title = TemplateTokens {
+            page_title: String::new(),
+            section_name: "Sec".to_string(),
+            notebook_name: "NB".to_string(),
+            current_date: "D".to_string(),
+            current_time: "T".to_string(),
+            current_datetime: "DT".to_string(),
+        };
+        let mut doc = serde_json::json!({
+            "type": "doc",
+            "content": [
+                { "type": "paragraph", "content": [ { "type": "text", "text": "{{PageTitle}}" } ] },
+                { "type": "paragraph", "content": [
+                    { "type": "text", "text": "By {{PageTitle}}" },
+                    { "type": "text", "text": "{{PageTitle}}" }
+                ]}
+            ]
+        });
+
+        substitute_template_tokens(&mut doc, &empty_title);
+
+        // The lone {{PageTitle}} paragraph keeps no children (a valid empty para).
+        assert_eq!(doc["content"][0]["content"].as_array().unwrap().len(), 0);
+        // "By {{PageTitle}}" -> "By " (kept); the trailing emptied node is dropped.
+        let p2 = doc["content"][1]["content"].as_array().unwrap();
+        assert_eq!(p2.len(), 1);
+        assert_eq!(p2[0]["text"], "By ");
+    }
+
+    #[test]
+    fn new_formats_match_live_field_defaults() {
+        // The real clock values vary, but the shape must match the frontend
+        // live-field default presets (src/lib/dynamic-fields.ts).
+        let t = TemplateTokens::new("P", "S", "N");
+        assert!(t.current_date.contains(", "), "date like \"July 14, 2026\"");
+        assert!(
+            t.current_time.ends_with("AM") || t.current_time.ends_with("PM"),
+            "12-hour time with AM/PM"
+        );
+        assert_eq!(t.current_datetime, format!("{} {}", t.current_date, t.current_time));
+    }
+}
+

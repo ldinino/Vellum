@@ -260,21 +260,26 @@ readable from JS, so they can't feed our themed right-click menu. See the Sectio
 
 Page templates are pre-formatted Tiptap documents that are automatically inserted when a new page is created in a section configured to use one. They are independent of Refine templates.
 
-**What they are:** Named documents containing any combination of headings, body text, tables, placeholder text (e.g., `[Client Name]`, `[Date]`), and formatting. Placeholder text is plain text — the user replaces it manually.
+**What they are:** Named documents containing any combination of headings, body text, tables, placeholders, and formatting.
 
 **Storage:** Page template library stored in `app.json` (app-level, not per-notebook). Each template: id, name, content_json, created_at, updated_at.
 
-**Template editor:** A full editor instance inside Settings → Templates → Page Templates. Supports all editor formatting. Save / Discard / Delete controls.
+**Template editor:** A full editor instance inside Settings → Templates → Page Templates. Supports all editor formatting. Save / Discard / Delete controls. An **Insert placeholder** dropdown inserts dynamic placeholders (see below).
 
 **Template library:** List view in Settings → Templates → Page Templates showing template name and a brief preview. Create, edit, delete, duplicate.
 
 **Assignment:** Section Properties (right-click section → Properties) has a "New Page Template" dropdown. Options: None, or any named template from the library. Setting is stored in the `sections.page_template_id` column.
 
+**Dynamic inserts (placeholders):** Templates support two kinds of placeholder, both inserted from the template editor's **Insert placeholder** dropdown:
+
+- **One-shot tokens** — plain-text `{{Token}}` markers that are substituted **once, when a page is created** from the template, then become ordinary text: `{{PageTitle}}`, `{{SectionName}}`, `{{NotebookName}}`, `{{CurrentDate}}`, `{{CurrentTime}}`, `{{CurrentDateTime}}`. Unknown tokens are left as-is.
+- **Live fields** — an inline element (date, time, or date & time, each with a small choice of formats) that **re-evaluates every time the page is opened**, like a Word date field rather than a frozen value. Live fields survive as real content in every page created from the template and keep updating. On Markdown export they flatten to their current value as plain text.
+
 **Behavior on new page creation:**
 - If the section has no template: new page opens blank.
-- If the section has a template: the template's content_json is copied into the new page's content. The template itself is not modified.
+- If the section has a template: the template's content_json is copied into the new page's content, one-shot tokens are substituted, and live fields are carried over intact. The template itself is not modified.
 
-> **Design note (as built):** apply-on-create happens in the backend `create_page` command — it reads the section's `page_template_id`, loads that template from app.json, and writes its content_json as the new page's first snapshot (so the editor loads it on open). A blank section writes no snapshot, so the page opens empty. The library + editor live in a **Settings** dialog (reached via the gear in the top bar); Phase 6 implements its Templates section (left-nav shell ready for Phase 8 to add General/Editor/Grammar/Refine/About). The template editor reuses the page editor's toolbar (minus the global grammar toggle); edits are committed with Save / thrown away with Discard.
+> **Design note (as built):** apply-on-create happens in the backend `create_page` command — it reads the section's `page_template_id`, loads that template from app.json, substitutes one-shot `{{Token}}` placeholders inside text nodes only (never attributes, so live fields are untouched), and writes the result as the new page's first snapshot (so the editor loads it on open). A blank section writes no snapshot, so the page opens empty. Live fields are a Tiptap inline atom node (`dynamicField`) whose NodeView recomputes its value on mount; the shared formatter (`src/lib/dynamic-fields.ts`) and the backend one-shot date formats are kept in sync so `{{CurrentDate}}` and a default live date read identically. The library + editor live in a **Settings** dialog (reached via the gear in the top bar); Phase 6 implements its Templates section (left-nav shell ready for Phase 8 to add General/Editor/Grammar/Refine/About). The template editor reuses the page editor's toolbar (minus the global grammar toggle); edits are committed with Save / thrown away with Discard.
 
 ---
 

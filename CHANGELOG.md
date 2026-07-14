@@ -20,6 +20,11 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   current page, a chosen set of pages, an entire section, or a whole notebook.
   Multi-page exports are organized into Notebook / Section folders with one
   shared attachments folder.
+- **Template placeholders** — Page templates can now include dynamic inserts
+  from a new **Insert placeholder** dropdown in the template editor. One-shot
+  tokens (`{{PageTitle}}`, `{{SectionName}}`, `{{NotebookName}}`, and the
+  current date/time) are filled in when a page is created; live date/time
+  fields re-evaluate every time the page is opened.
 
 ### Changed
 

@@ -397,4 +397,24 @@
   background: var(--accent-bright);
 }
 
+/* Live template field (execution-plan #7): a small non-editable chip showing a
+   date/time value recomputed on every page load. Styled like a mention pill so
+   it reads as a distinct, dynamic element rather than plain typed text. */
+.v-dynfield {
+  display: inline;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(40, 96, 179, 0.1);
+  color: var(--accent-deep);
+  box-shadow: inset 0 0 0 1px rgba(40, 96, 179, 0.25);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+
+.v-dynfield--selected {
+  background: rgba(40, 96, 179, 0.2);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
 /* Tiptap placeholder for an empty doc could go here later. */
