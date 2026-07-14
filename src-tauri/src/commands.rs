@@ -189,7 +189,7 @@ pub fn get_paths(app: AppHandle) -> Result<AppPaths, String> {
 
 /// One file to copy alongside an exported page: a notebook-relative source (an
 /// inline image or an attachment) and the basename it gets in the export's
-/// sibling `<Title> files/` folder. Dest names are deduped by the renderer.
+/// sibling `.attachments/` folder. Dest names are deduped by the renderer.
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ExportCopy {
@@ -220,7 +220,17 @@ pub fn export_page(
 
     if !copies.is_empty() {
         let nb_dir = notebook_folder(&app, &notebook_id)?;
-        let files_dir = parent.join(sanitize_attachment_name(&files_dir_name));
+        // The renderer sends a known folder name (the ADO `.attachments` convention).
+        // The shared sanitizer strips leading dots (correct for file names), so
+        // preserve a single leading dot for the directory name only.
+        let sanitized = sanitize_attachment_name(&files_dir_name);
+        let dir_name =
+            if files_dir_name.trim_start().starts_with('.') && !sanitized.starts_with('.') {
+                format!(".{sanitized}")
+            } else {
+                sanitized
+            };
+        let files_dir = parent.join(&dir_name);
         std::fs::create_dir_all(&files_dir)
             .map_err(|e| format!("create {}: {e}", files_dir.display()))?;
         for c in &copies {

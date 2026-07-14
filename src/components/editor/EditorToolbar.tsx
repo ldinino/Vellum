@@ -60,6 +60,7 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
         subscript: editor.isActive("subscript"),
         bulletList: editor.isActive("bulletList"),
         orderedList: editor.isActive("orderedList"),
+        taskList: editor.isActive("taskList"),
         blockquote: editor.isActive("blockquote"),
         codeBlock: editor.isActive("codeBlock"),
         link: editor.isActive("link"),
@@ -262,6 +263,13 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
           active={s?.orderedList}
           disabled={disabled}
           onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+        />
+        <ToolbarButton
+          icon="ui-check-boxes-list"
+          label="Task list"
+          active={s?.taskList}
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().toggleTaskList().run()}
         />
         <ToolbarButton
           icon="edit-quotation"

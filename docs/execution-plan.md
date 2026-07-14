@@ -242,13 +242,13 @@ scoped to a particular dialect:
 | Paragraphs/line breaks | turndown emits blank-line paragraphs + two-trailing-space hard breaks | Same rule exactly (Enter twice = paragraph; two trailing spaces = soft break) | Verify with a round-trip test; likely already correct |
 | Headings | H1–H4 only ([extensions.ts](../src/components/editor/extensions.ts) `heading: { levels: [1,2,3,4] }`) | H1–H6 | **Done — widened to H1–H6** (2026-07-14) |
 | Tables | `turndown-plugin-gfm` pipe tables | Pipe tables + alignment colons | Already compatible |
-| Checklists / task lists | **No task-list extension at all** | `- [ ]` / `- [x]` | Gap — add `@tiptap/extension-task-list` + `-item`; turndown-plugin-gfm already emits the syntax once the nodes exist |
+| Checklists / task lists | **Done (2026-07-14)** — `TaskList`/`TaskItem` (nested) from `@tiptap/extension-list`, toolbar button + CSS | `- [ ]` / `- [x]` | **Done** — custom turndown `taskListItem` rule emits the syntax (Tiptap wraps the checkbox in `<label>`/`<div>`, so gfm's built-in rule doesn't fire; harness-verified) |
 | Mermaid diagrams | **None** | Fenced ```` ```mermaid ```` block or `::: mermaid` container | See [MERMAID](#5-mermaid-diagram-support) |
-| Image sizing | Falls back to raw `<img width height>` HTML ([export-markdown.ts](../src/lib/export-markdown.ts)) | Native `![alt](path =WxH)` syntax | Gap — emit ADO's native syntax instead of HTML |
+| Image sizing | **Done (2026-07-14)** — emits `![alt](path =Wx)` ([export-markdown.ts](../src/lib/export-markdown.ts)) | Native `![alt](path =WxH)` syntax | **Done** — ResizableImage stores only width → `=Wx` (space before `=`, trailing `x`); path percent-encoded for spaces/parens |
 | Inline HTML (`<u>`, `<span style>`, `<sup>/<sub>`, `<font>`) | Already preserved as inline HTML (WYSIWYG export) | Explicitly supported in wiki pages | Already compatible — no change |
 | Code blocks | Plain fenced blocks, no language tag (spec: "no syntax highlighting in v1") | Fenced blocks + optional language id | Already compatible (renders unhighlighted, which is valid) |
 | Emoji shortcodes | Not handled | `:smile:` etc. | Non-goal unless requested |
-| Attachments folder | `<Page name> files/` sibling folder | Repo-wide `.attachments/` folder | **Decided: adopt `.attachments`.** Changes existing single-page export output naming too, not just the new wizard (see [EXPORTWIZ](#6-export-to-markdown-wizard)) |
+| Attachments folder | **Done (2026-07-14, single-page)** — export now writes `.attachments/` | Repo-wide `.attachments/` folder | **Done (single-page)** — backend preserves the leading dot; multi-page shared-root layout + cross-batch dedup still deferred to [EXPORTWIZ](#6-export-to-markdown-wizard) |
 | `[[_TOC_]]` / `[[_TOSP_]]` / `<details>` collapsible / `::: video :::` / Boards query embeds / `@mentions` / page-visit counts | Not applicable | Wiki-server-rendered features | Non-goals — meaningless outside a live ADO wiki, **except** optionally auto-inserting `[[_TOC_]]` at the top of a multi-page export bundle (harmless plain text elsewhere) |
 | Math (KaTeX) | Not handled | `$...$` / fenced ` ```KaTeX ` | Non-goal — not requested |
 
@@ -265,11 +265,44 @@ the `headings` active-state selector and the button-rendering
 [EditorToolbar.tsx](../src/components/editor/EditorToolbar.tsx) both widened to
 `1|2|3|4|5|6`. `npm run build` (tsc + vite) verified clean.
 
-**Deliverable for this item specifically:** dialect decisions are now locked
-in (this update); fold them into [Vellum_spec.md](Vellum_spec.md) once
-[MERMAID](#5-mermaid-diagram-support) and [EXPORTWIZ](#6-export-to-markdown-wizard)
-actually ship, per [CLAUDE.md](../CLAUDE.md)'s "update the spec when a decision
-changes it."
+**Implementation note — task lists, image sizing, `.attachments` (2026-07-14).**
+- Task lists: `TaskList` + `TaskItem` (nested) from `@tiptap/extension-list`
+  (Tiptap v3's home for them — there is no standalone `@tiptap/extension-task-list`
+  package in v3; added as an explicit dep, already present transitively via
+  starter-kit) wired into [extensions.ts](../src/components/editor/extensions.ts);
+  a "Task list" toolbar button (`ui-check-boxes-list` icon, copied from the Fugue
+  pack) in [EditorToolbar.tsx](../src/components/editor/EditorToolbar.tsx);
+  checkbox-row CSS in [editor.css](../src/components/editor/editor.css). Export:
+  Tiptap wraps the checkbox in `<label>`/`<div>` inside `<li data-type="taskItem">`,
+  so turndown-plugin-gfm's built-in checkbox rule (which expects the checkbox
+  directly in the `<li>`) never fires — a custom `taskListItem` rule in
+  [export-markdown.ts](../src/lib/export-markdown.ts) reads `data-checked` and
+  emits `- [ ]`/`- [x]` (turndown's `addRule` prepends, so it wins over the
+  built-in `listItem` rule). Refine's markdown-it path is left as-is (a `- [ ]`
+  renders as plain text — out of scope, degrades gracefully).
+- Image sizing: `exportImage` now emits `![alt](path =Wx)` (ResizableImage
+  stores only width; ADO wants a space before `=`, no space around `x`, and a
+  trailing `x` for width-only). Paths are percent-encoded for spaces/parens
+  (`%20`/`%28`/`%29`) instead of angle-bracketed, matching ADO's plain form so
+  the size suffix parses.
+- `.attachments`: single-page export writes to `.attachments/` (was
+  `<md-stem> files/`). The backend `export_page`
+  ([commands.rs](../src-tauri/src/commands.rs)) preserves the leading dot (the
+  shared `sanitize_attachment_name` strips it, which is correct for file names).
+  Multi-page shared-root layout + cross-batch dedup remain with
+  [EXPORTWIZ](#6-export-to-markdown-wizard).
+- Verified: `npm run build` + `cargo check` clean; a throwaway turndown harness
+  (real turndown + gfm via domino) asserted the task-list/image/paragraph output,
+  then was deleted.
+
+**Deliverable for this item specifically:** the self-contained dialect gaps
+shipped (2026-07-14) — task lists, ADO image-size syntax, and the `.attachments`
+folder for single-page export (see the implementation note above);
+[Vellum_spec.md](Vellum_spec.md) Section 6 was updated for the editor-feature
+changes (H1–H6, task lists). The remaining dialect specifics (export folder
+layout, mermaid) fold into the spec once [MERMAID](#5-mermaid-diagram-support)
+and [EXPORTWIZ](#6-export-to-markdown-wizard) ship, per
+[CLAUDE.md](../CLAUDE.md)'s "update the spec when a decision changes it."
 
 ---
 

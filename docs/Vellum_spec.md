@@ -216,7 +216,7 @@ Built on Tiptap with the following extensions enabled:
 
 **Formatting**
 - Bold, Italic, Underline, Strikethrough
-- Headings H1–H4
+- Headings H1–H6
 - Font family (system fonts)
 - Font size
 - Text color, highlight color
@@ -226,6 +226,7 @@ Built on Tiptap with the following extensions enabled:
 
 **Structure**
 - Bullet list, Ordered list
+- Task list (checklist) — exports to `- [ ]` / `- [x]`
 - Blockquote
 - Horizontal rule
 - Code block (monospace, no syntax highlighting in v1)

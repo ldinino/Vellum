@@ -34,6 +34,32 @@
   padding-left: 1.6em;
 }
 
+/* Task lists (checklists) render as a checkbox + content row, no bullet. */
+.v-prose ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0.2em;
+  margin-left: 0;
+}
+.v-prose ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45em;
+}
+.v-prose ul[data-type="taskList"] li > label {
+  margin-top: 0.2em;
+  flex: 0 0 auto;
+  user-select: none;
+}
+.v-prose ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
+}
+.v-prose ul[data-type="taskList"] li > div > p {
+  margin: 0;
+}
+.v-prose ul[data-type="taskList"] ul[data-type="taskList"] {
+  margin-top: 0.35em;
+}
+
 .v-prose blockquote {
   border-left: 3px solid var(--border-default);
   margin-left: 0;

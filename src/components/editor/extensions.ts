@@ -18,6 +18,7 @@ import TextAlign from "@tiptap/extension-text-align";
 import Superscript from "@tiptap/extension-superscript";
 import Subscript from "@tiptap/extension-subscript";
 import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table";
+import { TaskList, TaskItem } from "@tiptap/extension-list";
 import type { Extensions } from "@tiptap/react";
 import { ResizableImage } from "./ResizableImage";
 import { SearchHighlight } from "./SearchHighlight";
@@ -44,6 +45,8 @@ export function buildExtensions(): Extensions {
     TextAlign.configure({ types: ["heading", "paragraph"] }),
     Superscript,
     Subscript,
+    TaskList,
+    TaskItem.configure({ nested: true }),
     ResizableImage,
     Table.configure({ resizable: true }),
     TableRow,

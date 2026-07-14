@@ -2,8 +2,9 @@
  * Page → Markdown export (spec Section 14, Phase 10).
  *
  * Converts the open page's editor HTML to Markdown and copies its inline images
- * and attachments into a sibling `<name> files/` folder next to the chosen `.md`
- * (the backend `export_page` command owns the filesystem writes). The result is
+ * and attachments into a sibling `.attachments/` folder next to the chosen `.md`
+ * (the Azure DevOps wiki convention; the backend `export_page` command owns the
+ * filesystem writes). The result is
  * WYSIWYG: formatting Markdown can't express (highlight, super/subscript,
  * underline, text colour, font family/size, block alignment) is preserved as
  * inline HTML, which is still valid Markdown and renders in most viewers.
@@ -31,16 +32,19 @@ function baseName(p: string): string {
   return p.split(/[\\/]/).pop() ?? p;
 }
 
-/** Filename of a save-dialog path, without its `.md` extension. */
-function mdBaseName(p: string): string {
-  return baseName(p).replace(/\.md$/i, "");
-}
-
 /** True for srcs that are real files under the notebook dir (so they're copied);
  * false for external/self-contained URLs left untouched. Mirrors the editor's
  * image src resolver (ResizableImage). */
 function isCopyable(src: string): boolean {
   return !/^(https?:|data:|asset:|blob:|file:|http:\/\/asset)/i.test(src);
+}
+
+/** Percent-encode the characters in an export path that would otherwise break
+ * Markdown image/link syntax — spaces and parentheses (the latter close the
+ * `(...)` target, and both interfere with the ADO image-size suffix). Path
+ * separators and other characters are left intact so the path stays readable. */
+function encodePath(p: string): string {
+  return p.replace(/ /g, "%20").replace(/\(/g, "%28").replace(/\)/g, "%29");
 }
 
 /** Reserve a collision-free destination filename within the files folder. */
@@ -121,8 +125,36 @@ function makeTurndown(filesDirName: string, imageMap: Map<string, string>): Turn
     },
   });
 
-  // Rewrite inline-image links to the export's files folder (keep external as-is).
-  // An explicit width is preserved via an HTML <img> (Markdown can't size images).
+  // Task lists → ADO/GFM checklist syntax (`- [ ]` / `- [x]`). Tiptap renders a task
+  // item as `<li data-type="taskItem" data-checked>` wrapping a <label><input> and a
+  // <div>, which turndown-plugin-gfm's checkbox rule doesn't recognise (it expects the
+  // checkbox directly inside the <li>), so handle the item explicitly.
+  td.addRule("taskListItem", {
+    filter: (node) =>
+      node.nodeName === "LI" && (node as HTMLElement).getAttribute("data-type") === "taskItem",
+    replacement: (content, node) => {
+      const el = node as HTMLElement;
+      const checked = el.getAttribute("data-checked") === "true";
+      const body = content
+        .replace(/^\n+/, "")
+        .replace(/\n+$/, "")
+        .replace(/\n{2,}/g, "\n")
+        .replace(/\n/g, "\n  "); // indent any nested checklist under the item
+      return `- [${checked ? "x" : " "}] ${body}${el.nextSibling ? "\n" : ""}`;
+    },
+  });
+  // The checkbox <input> carries no text; its state is read from the item above.
+  td.addRule("taskCheckbox", {
+    filter: (node) =>
+      node.nodeName === "INPUT" && (node as HTMLInputElement).type === "checkbox",
+    replacement: () => "",
+  });
+
+  // Inline images export to Azure DevOps wiki syntax: `![alt](path =WIDTHx)` — the
+  // image-size extension (space before `=`, no space around `x`, trailing `x` for a
+  // width-only size, which is all ResizableImage stores). External srcs are left as-is.
+  // Spaces/parentheses in the path are percent-encoded (not angle-bracketed) so the
+  // size suffix parses, matching ADO's documented plain form.
   td.addRule("exportImage", {
     filter: "img",
     replacement: (_content, node) => {
@@ -131,10 +163,9 @@ function makeTurndown(filesDirName: string, imageMap: Map<string, string>): Turn
       const alt = el.getAttribute("alt") ?? "";
       const dest = imageMap.get(src);
       const target = dest ? `./${filesDirName}/${dest}` : src;
-      const width = el.getAttribute("width");
-      if (width) return `<img src="${target}" alt="${alt}" width="${width}">`;
-      // Angle-bracket the target so spaces in the folder name stay valid.
-      return `![${alt}](<${target}>)`;
+      const w = parseInt(el.getAttribute("width") ?? "", 10);
+      const size = Number.isFinite(w) ? ` =${w}x` : "";
+      return `![${alt}](${encodePath(target)}${size})`;
     },
   });
 
@@ -169,7 +200,7 @@ function buildExport(opts: {
   for (const a of attachments) {
     const dest = uniqueName(a.filename, used);
     copies.push({ srcRel: a.path, destName: dest });
-    attachLinks.push(`- [${a.filename}](<./${filesDirName}/${dest}>)`);
+    attachLinks.push(`- [${a.filename}](${encodePath(`./${filesDirName}/${dest}`)})`);
   }
 
   let markdown = `# ${title.trim() || "Untitled"}\n\n${body}\n`;
@@ -203,10 +234,9 @@ export async function exportCurrentPage(opts: {
     });
     if (!mdPath) return; // cancelled
 
-    // Sanitize the same way the backend does, so the links baked into the
-    // Markdown match the folder it actually creates next to the .md.
-    const stem = sanitizeFilename(mdBaseName(mdPath)) || "export";
-    const filesDirName = `${stem} files`;
+    // Azure DevOps wiki convention: one shared `.attachments/` folder next to the
+    // .md. The backend re-creates this exact name (preserving the leading dot).
+    const filesDirName = ".attachments";
     const { markdown, copies } = buildExport({ html, doc, title, attachments, filesDirName });
     await api.exportPage(notebookId, mdPath, markdown, filesDirName, copies);
   } catch (e) {
