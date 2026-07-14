@@ -28,6 +28,11 @@ tauri-plugin-dialog = "2.7.1"
 tauri-plugin-shell = "2.3.5"
 tauri-plugin-updater = "2.10.1"
 tauri-plugin-process = "2.3.1"
+# Remember window size/position/maximized across launches (execution-plan
+# WINDOWSTATE). Saves to app_config_dir()\.window-state.json (machine-local
+# AppData, NOT the OneDrive-synced Documents\Vellum). Additive — must NOT move
+# `time` off 0.3.47.
+tauri-plugin-window-state = "2"
 # Same sqlx/libsqlite3-sys as tauri-plugin-sql — used by the backend for
 # notebook DB creation and migrations; the frontend queries via plugin-sql.
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }

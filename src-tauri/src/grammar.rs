@@ -217,4 +217,32 @@ mod tests {
         let units: Vec<u16> = s.encode_utf16().collect();
         String::from_utf16_lossy(&units[start..end])
     }
+
+    #[test]
+    fn blank_line_breaks_a_colon_terminated_paragraph() {
+        // Regression (execution-plan GRAMMARBUG): a paragraph ending in a colon
+        // followed by another paragraph must not be merged into one sentence.
+        // The frontend (grammar.ts extractText) joins blocks with a blank line
+        // (two newlines) so Harper's tokenizer sees a paragraph boundary. Each
+        // part below is under Harper's ~40-word readability threshold; only
+        // their 49-word merge trips it.
+        let a = "When you are planning the upcoming release you should carefully review each of the following important considerations before you make any final decision";
+        let b = "The team has already agreed that shipping early is better than waiting for every single feature to be completely polished and thoroughly tested by everyone involved";
+
+        // A single newline is too weak a break after a colon: the two paragraphs
+        // merge and Harper flags the combined 49-word "sentence".
+        let single = check(&format!("{a}:\n{b}."));
+        assert!(
+            single.iter().any(|s| s.kind == "Readability"),
+            "single-newline colon join should merge into one over-long sentence"
+        );
+
+        // A blank line (what extractText actually emits) is a hard paragraph
+        // break: the two sentences are checked independently and neither is long.
+        let double = check(&format!("{a}:\n\n{b}."));
+        assert!(
+            double.is_empty(),
+            "blank-line paragraph break should not be flagged as a run-on: {double:?}"
+        );
+    }
 }

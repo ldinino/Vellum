@@ -12,6 +12,7 @@ mod search;
 
 use process::ollama::{self, OllamaState};
 use tauri::Manager;
+use tauri_plugin_window_state::StateFlags;
 
 // Auto-updater (Phase 11): tauri-plugin-updater verifies and installs signed
 // releases against the GitHub Releases endpoint; tauri-plugin-process provides
@@ -28,6 +29,18 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        // Remember window size/position/maximized across launches (execution-plan
+        // WINDOWSTATE). Only geometry — not visibility/decorations/fullscreen — so
+        // it never fights the custom transparent, decoration-less titlebar. Saved
+        // to app_config_dir()\.window-state.json (machine-local AppData, not the
+        // OneDrive-synced Documents\Vellum).
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED,
+                )
+                .build(),
+        )
         .manage(OllamaState::default())
         .manage(applog::AppLog::default())
         .manage(refine::logbuf::LogBuffer::default())

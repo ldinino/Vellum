@@ -257,6 +257,39 @@ function writeLastPage(sectionId: string, pageId: string) {
   }
 }
 
+/** Per-notebook "last open section" memory (notebookId → sectionId) so
+ * switching to a notebook returns you to the section you were last viewing
+ * there instead of always its first one. Section IDs are unique per notebook,
+ * so a global "current section" pointer never matches across a real notebook
+ * switch — this map is keyed by notebook to make the restore work. Same
+ * per-machine/localStorage rationale as the keys above; stale entries for
+ * deleted sections are validated against the live section list on read. */
+const LAST_SECTION_KEY = "vellum.lastSectionPerNotebook";
+
+function readLastSectionMap(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(LAST_SECTION_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function readLastSection(notebookId: string): string | null {
+  return readLastSectionMap()[notebookId] ?? null;
+}
+
+function writeLastSection(notebookId: string, sectionId: string) {
+  try {
+    const map = readLastSectionMap();
+    if (map[notebookId] === sectionId) return;
+    map[notebookId] = sectionId;
+    localStorage.setItem(LAST_SECTION_KEY, JSON.stringify(map));
+  } catch {
+    // localStorage unavailable — non-fatal.
+  }
+}
+
 /** Apply the configured editor default font + size as CSS custom properties on
  * the document root (consumed by `.v-prose`; see editor.css). Called on config
  * load and whenever the setting changes so unstyled page text updates live. */
@@ -572,6 +605,11 @@ export function VellumProvider({ children }: { children: ReactNode }) {
       if (state.selectedSectionId && state.selectedPageId) {
         writeLastPage(state.selectedSectionId, state.selectedPageId);
       }
+      // Remember the current section per notebook so switching notebooks and
+      // coming back returns to the section you were on (not always the first).
+      if (state.selectedNotebookId && state.selectedSectionId) {
+        writeLastSection(state.selectedNotebookId, state.selectedSectionId);
+      }
     } catch {
       // localStorage unavailable (e.g. some embedded contexts) — non-fatal.
     }
@@ -635,9 +673,17 @@ export function VellumProvider({ children }: { children: ReactNode }) {
           ),
         }));
       }
+      // Prefer the currently-selected section only if it belongs to this
+      // notebook (a same-notebook re-select). Otherwise restore the section
+      // last viewed in THIS notebook; section IDs are unique per notebook, so
+      // on a real switch `cur` never matches and we'd otherwise always land on
+      // the first section.
       const cur = ref.current.selectedSectionId;
       const keep = cur && sections.some((sec) => sec.id === cur) ? cur : null;
-      const target = keep ?? sections[0]?.id ?? null;
+      const saved = readLastSection(notebookId);
+      const restored =
+        saved && sections.some((sec) => sec.id === saved) ? saved : null;
+      const target = keep ?? restored ?? sections[0]?.id ?? null;
       if (target) {
         await selectSection(notebookId, target);
       } else {

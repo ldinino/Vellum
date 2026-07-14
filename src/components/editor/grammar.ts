@@ -40,8 +40,13 @@ export interface MappedLint {
 
 /**
  * Walk the doc, building the plain text Harper sees and the offset→position map.
- * A newline is inserted between blocks (mirroring `doc.textBetween(_, _, "\n")`)
- * so sentence/paragraph boundaries are preserved.
+ * A blank line (two newlines) is inserted between blocks so Harper's sentence
+ * tokenizer treats paragraph boundaries as sentence boundaries. A single
+ * newline is not a strong enough break: a paragraph ending in a non-terminating
+ * character (e.g. a colon, "Overview:") would otherwise be merged with the
+ * following paragraph into one sentence and mis-flagged as an over-long
+ * run-on. A blank line reads as a hard paragraph break in every sentence
+ * tokenizer.
  */
 export function extractText(doc: PMNode): ExtractedText {
   const segments: Segment[] = [];
@@ -50,14 +55,14 @@ export function extractText(doc: PMNode): ExtractedText {
 
   doc.descendants((node, pos) => {
     if (node.isText && node.text) {
-      if (pendingBreak && text.length > 0) text += "\n";
+      if (pendingBreak && text.length > 0) text += "\n\n";
       pendingBreak = false;
       segments.push({ from: pos, textStart: text.length, length: node.text.length });
       text += node.text;
       return false; // text nodes have no children to visit
     }
     if (node.isBlock) {
-      // Entering a block: the next text should start on a new line.
+      // Entering a block: the next text should start after a blank line.
       pendingBreak = true;
     }
     return true;
@@ -75,7 +80,7 @@ export function extractText(doc: PMNode): ExtractedText {
  * large page (thousands of text nodes) was O(spans × segments) and could stall
  * the UI thread. Find the last segment starting at or before `offset`, then
  * confirm `offset` lands within that node's text rather than in a following gap
- * (the newline inserted between blocks).
+ * (the blank line inserted between blocks).
  */
 function mapOffset(segments: Segment[], offset: number): number | null {
   let lo = 0;
