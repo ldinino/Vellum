@@ -7,6 +7,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-14
+
 ### Added
 
 - **Choose where your notebooks are stored** — Settings ▸ General has a new
@@ -73,5 +75,6 @@ Initial release.
 - **In-app updates** — Automatic background update checks delivered from GitHub
   Releases, with a one-click restart to apply.
 
-[Unreleased]: https://github.com/ldinino/Vellum/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ldinino/Vellum/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ldinino/Vellum/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ldinino/Vellum/releases/tag/v0.1.0
