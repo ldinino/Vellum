@@ -26,6 +26,7 @@ table, and each item's section below for the reasoning.
 | [LASTSECTION](#10-notebook-switch-should-keep-the-last-section-viewed) | Notebook switch keeps last section | UX | S | — |
 | [COLORRANDOM](#11-weighted-color-randomness) | Weighted color randomness | UX | S | — |
 | [WINDOWSTATE](#12-remember-window-size-and-position) | Remember window size/position | UX | S | — |
+| [CODESCROLL](#13-code-blocks-should-scroll-not-wrap) | Code blocks scroll instead of wrapping | UX | S | — |
 
 ---
 
@@ -631,12 +632,81 @@ today.
 
 ---
 
+### 13. Code blocks should scroll, not wrap
+
+**Done (2026-07-14):** implemented as proposed.
+[editor.css](../src/components/editor/editor.css) `.v-prose pre` now declares
+`white-space: pre; overflow-wrap: normal; word-break: normal;` alongside the
+existing `overflow-x: auto`, and a higher-specificity `.ProseMirror.v-prose pre`
+rule re-asserts those three to beat prosemirror-view's base
+`.ProseMirror pre { white-space: pre-wrap }` (equal specificity to `.v-prose
+pre`, so it could otherwise win on stylesheet load order). Verified the
+contenteditable carries **both** classes — prosemirror-view merges ours onto its
+own (`class="ProseMirror v-prose"`) in `computeDocDeco`
+([index.js](../node_modules/prosemirror-view/dist/index.js) `attrs.class += " "
++ value`), so the qualified selector reliably wins. Inline `code` and the print
+path ([print-page.ts](../src/lib/print-page.ts), which wraps on purpose) are
+untouched; the Refine preview reuses `.v-prose` and picks up the base rule for
+consistency. `npm run build` (tsc + vite) clean.
+
+**Current state:** fenced code blocks (`<pre>`, from StarterKit's `codeBlock`
+node — kept monospace with no syntax highlighting per
+[Vellum_spec.md](Vellum_spec.md) v1) already *intend* to scroll:
+[editor.css](../src/components/editor/editor.css) `.v-prose pre` sets
+`overflow-x: auto`. But that rule is dead in practice — long lines wrap instead
+of overflowing, so the horizontal scrollbar never appears.
+
+**Root cause (found):** prosemirror-view ships a base stylesheet
+([prosemirror.css](../node_modules/prosemirror-view/style/prosemirror.css)) that
+sets `.ProseMirror { white-space: break-spaces; word-wrap: break-word; }` and,
+more specifically, `.ProseMirror pre { white-space: pre-wrap; }`. The
+contenteditable root carries **both** the `ProseMirror` class (added by Tiptap)
+and our `v-prose` class ([PageEditor.tsx](../src/components/editor/PageEditor.tsx)
+`attributes: { class: "v-prose", ... }`), so every code block is matched by both
+`.ProseMirror pre` and `.v-prose pre`. Since `.v-prose pre` never declares
+`white-space`, the base rule's `pre-wrap` wins and lines wrap — which is exactly
+why `overflow-x: auto` has nothing to overflow.
+
+**Proposed approach:**
+- In [editor.css](../src/components/editor/editor.css), give `.v-prose pre`
+  (and `.v-prose pre code`) an explicit `white-space: pre;` plus
+  `overflow-wrap: normal; word-break: normal;` to defeat the inherited
+  `word-wrap: break-word`, keeping the existing `overflow-x: auto`. The block
+  then becomes a horizontally scrollable window for long lines.
+- **Watch specificity/source order:** `.v-prose pre` and `.ProseMirror pre`
+  have equal specificity (one class + one element), so the override only wins
+  if editor.css loads *after* prosemirror-view's base CSS. If that ordering
+  isn't guaranteed, bump specificity slightly (e.g. `.ProseMirror.v-prose pre`,
+  since the root element carries both classes) rather than reaching for
+  `!important`.
+- **This is code *blocks* only.** Inline `code` (`.v-prose code`) should keep
+  flowing with the surrounding text — don't give it `white-space: pre` or a
+  scrollbar. The "inline… word wrap" phrasing refers to the block's content
+  wrapping within the page width, not to inline spans.
+
+**Explicit non-goals / leave-alone:**
+- **Print keeps wrapping.** [print-page.ts](../src/lib/print-page.ts) sets
+  `.v-print-content pre { white-space: pre-wrap; word-wrap: break-word; }` on
+  purpose — paper has no horizontal scrollbar, so wrapping is correct there.
+  This change is on-screen only; don't touch the print path.
+- **Refine preview inherits the fix for free.**
+  [RefinePreviewModal.tsx](../src/components/editor/RefinePreviewModal.tsx)
+  reuses the `v-prose` class, so its code blocks scroll too — desirable for
+  consistency, no extra work.
+
+**Verification:** paste a code block with a line wider than the editor and
+confirm a horizontal scrollbar appears (no wrapping); confirm short lines and
+inline code are visually unchanged; confirm print still wraps.
+
+---
+
 ## Suggested sequencing
 
 Not a hard dependency chain except where noted — reorder freely by priority.
 
 1. **Quick independent wins:** [LASTSECTION](#10-notebook-switch-should-keep-the-last-section-viewed),
    [COLORRANDOM](#11-weighted-color-randomness), [WINDOWSTATE](#12-remember-window-size-and-position),
+   [CODESCROLL](#13-code-blocks-should-scroll-not-wrap),
    [GRAMMARBUG](#9-grammar-run-on-sentence-after-a-colon) (needs a bit of
    experimentation to confirm the Harper fix).
 2. **Markdown profile decision** ([MDPROFILE](#4-define-the-vellum-markdown-profile)) —

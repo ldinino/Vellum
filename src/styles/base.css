@@ -55,6 +55,15 @@ img {
   border-radius: 2px;
 }
 
+/* On a horizontal scrollbar, run the gloss top->bottom (across the thumb's
+   height) rather than along its length, so it reads as a top-lit reflection
+   like everything else in the app (buttons, panels, and this thumb's own
+   hover/active states are all `to bottom`). Kept before :hover/:active — equal
+   specificity, so those later rules still win while pointing/pressing. */
+::-webkit-scrollbar-thumb:horizontal {
+  background: linear-gradient(to bottom, #fdfdfe, #d8dde3);
+}
+
 ::-webkit-scrollbar-thumb:hover {
   background: var(--gradient-hover);
   border-color: var(--hover-border);

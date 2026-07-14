@@ -7,6 +7,16 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Changed
+
+- **Code blocks** — Long lines now scroll horizontally within the block
+  instead of wrapping, so code keeps its original formatting.
+
+### Fixed
+
+- The horizontal scrollbar's highlight now runs top-to-bottom, matching the
+  app's other surfaces, instead of left-to-right.
+
 ## [0.1.0] - 2026-06-25
 
 Initial release.

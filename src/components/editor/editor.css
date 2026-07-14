@@ -74,7 +74,27 @@
   padding: var(--space-3) var(--space-4);
   font-family: var(--font-mono);
   font-size: 13px;
+  /* Long lines scroll horizontally rather than wrapping. The
+     `.ProseMirror.v-prose pre` override below enforces this inside the live
+     editor, where prosemirror-view's base stylesheet otherwise forces a wrap. */
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
   overflow-x: auto;
+}
+
+/* prosemirror-view's base stylesheet sets `.ProseMirror pre { white-space:
+   pre-wrap }` (plus `word-wrap: break-word` on the editor root) at equal
+   specificity to `.v-prose pre`, so on source order alone it can win in the
+   live editor and re-wrap code. prosemirror-view merges our class onto its own
+   (the contenteditable ends up `class="ProseMirror v-prose"` on one element),
+   so qualifying with both classes reliably keeps long lines scrolling instead
+   of wrapping. Inline `code` and the print stylesheet (.v-print-content, which
+   wraps on purpose) are left untouched. */
+.ProseMirror.v-prose pre {
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
 }
 
 .v-prose code {
