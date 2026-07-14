@@ -231,6 +231,7 @@ Built on Tiptap with the following extensions enabled:
 - Horizontal rule
 - Code block (monospace, no syntax highlighting in v1)
 - Tables (add/remove rows and columns)
+- Mermaid diagrams — inserted from **Insert ▸ Mermaid Diagram**, rendered to inline SVG (double-click / **Edit** to change the source, with an explicit invalid-syntax state); exports to a `mermaid` fenced code block
 
 **Media**
 - Images: paste from clipboard, drag/drop onto page, resize via handles
@@ -492,11 +493,11 @@ No manual save. No save indicator. No "unsaved changes" state.
 
 ### 14. Export / Print
 
-**v1 scope:** Print the current page, and export the current page to Markdown.
+**v1 scope:** Print the current page, and export pages to Markdown.
 
-**Print (as built):** **File ▸ Print** / **Ctrl+P** renders just the open page — its title, content, and attachment filenames — into an isolated hidden iframe and prints that document (`src/lib/print-page.ts`), so the app chrome never reaches the printer. Inline image paths are resolved to loadable asset URLs first, and images are awaited before printing. This replaced a `@media print` stylesheet over the live window, which printed the whole UI in the transparent WebView2 window. (Our Print / Ctrl+P also stand in for WebView2's native print, which is disabled in release builds.)
+**Print (as built):** **File ▸ Print** / **Ctrl+P** renders just the open page — its title, content, and attachment filenames — into an isolated hidden iframe and prints that document (`src/lib/print-page.ts`), so the app chrome never reaches the printer. Inline image paths are resolved to loadable asset URLs first, Mermaid diagrams are rendered to SVG, and images are awaited before printing. This replaced a `@media print` stylesheet over the live window, which printed the whole UI in the transparent WebView2 window. (Our Print / Ctrl+P also stand in for WebView2's native print, which is disabled in release builds.)
 
-**Markdown export (as built):** **File ▸ Export Page as Markdown…** converts the open page's editor HTML to Markdown, prompts for a `<name>.md` location, and copies the page's inline images and attachments into a sibling `<name> files/` folder that the Markdown links into. The conversion (turndown + GFM, `src/lib/export-markdown.ts`) is WYSIWYG: structure (headings, lists, tables, code, blockquotes, links, images) maps to Markdown, while formatting Markdown can't express (highlight, super/subscript, underline, text colour, font family/size, block alignment) is preserved as inline HTML — still valid Markdown that renders in most viewers. The backend `export_page` command owns the filesystem writes (source paths validated against the notebook dir, dest names sanitized). Export is current-page-only.
+**Markdown export (as built):** **File ▸ Export to Markdown…** opens a small wizard (`src/components/ExportWizard.tsx`) to pick a scope — the current page, a chosen set of pages, an entire section, or an entire notebook. A single page is written to a chosen `<name>.md` with a sibling `.attachments/` folder (the Azure DevOps wiki convention); several pages are laid out as `<Notebook>/<Section>/<Page>.md` under a chosen folder with one shared `.attachments/` folder at its root, and attachment filenames are deduped across the whole batch. Pages that aren't open are read from the store and converted headlessly via `generateHTML(contentJson, buildExtensions())`, so no editor has to be mounted. The conversion (turndown + GFM, `src/lib/export-markdown.ts`) is WYSIWYG: structure (headings, lists, task lists, tables, code, blockquotes, links, images, and Mermaid diagrams → a `mermaid` fenced block) maps to Markdown, while formatting Markdown can't express (highlight, super/subscript, underline, text colour, font family/size, block alignment) is preserved as inline HTML — still valid Markdown that renders in most viewers. Inline images use the Azure DevOps size suffix `![alt](path =Wx)`; an optional per-page `[[_TOC_]]` token (off by default) can be added to multi-page exports. The backend `export_page` (single file) and `export_batch` (folder) commands own the filesystem writes (source + destination paths validated against traversal, dest names sanitized, missing sources skipped).
 
 No PDF or HTML export in v1.
 

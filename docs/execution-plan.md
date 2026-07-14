@@ -309,6 +309,23 @@ and [EXPORTWIZ](#6-export-to-markdown-wizard) ship, per
 
 ### 5. Mermaid diagram support
 
+**Done (2026-07-14):** implemented as proposed. `mermaid` ^11.16.0 added; new
+[MermaidDiagram.tsx](../src/components/editor/MermaidDiagram.tsx) is an atom
+block node (modeled on [ResizableImage.tsx](../src/components/editor/ResizableImage.tsx))
+whose React NodeView renders the source to inline SVG with view / source-edit
+(textarea) / invalid-syntax states; registered in
+[extensions.ts](../src/components/editor/extensions.ts), inserted via **Insert ▸
+Mermaid Diagram** ([MenuBar.tsx](../src/components/MenuBar.tsx), `sitemap` icon).
+Export emits a `mermaid` fenced block and print re-renders to SVG (shared
+`renderMermaid`). **Gotcha found:** the source is stored in a `data-source`
+attribute (not element text) because turndown collapses whitespace in non-`<pre>`
+elements, which would flatten a multi-line diagram; the source is *also* emitted
+as text content so turndown doesn't drop the otherwise-blank `<div>` before the
+export rule runs (turndown checks `isBlank` before custom rules). Refine-generated
+mermaid live-rendering stays a non-goal (renders as an inert code block). Verified:
+`npm run build` + `cargo check` clean; a throwaway turndown harness confirmed the
+data-source newlines survive (literal + entity forms).
+
 **Current state:** no Mermaid support anywhere (`mermaid` does not appear in
 the codebase). No `mermaid` npm package installed.
 
@@ -343,6 +360,24 @@ at first.
 ---
 
 ### 6. "Export to Markdown…" wizard
+
+**Done (2026-07-14):** implemented as proposed. **File ▸ Export to Markdown…**
+now opens [ExportWizard.tsx](../src/components/ExportWizard.tsx) — scope (current
+page / choose pages / entire section / entire notebook), an optional per-page
+`[[_TOC_]]` (default off), and a configure→running→done flow with an "Open
+folder" button. One page → a `.md` save dialog + sibling `.attachments/` (existing
+`export_page`); several pages → a folder picker + `<Notebook>/<Section>/<Page>.md`
+under one shared root `.attachments/` (new backend `export_batch`), with
+attachment names deduped across the whole batch. Pages that aren't open are read
+via `loadPageContent` and converted headlessly with `generateHTML(json,
+buildExtensions())` — one Markdown code path. [export-markdown.ts](../src/lib/export-markdown.ts)
+was refactored into a shared `renderPageToMarkdown` (parameterized `linkBase` +
+shared dedup set) plus `exportSinglePageToFile` / `exportPagesToFolder`; the open
+page is flushed before export. New backend commands `export_batch` + `reveal_path`
+([commands.rs](../src-tauri/src/commands.rs), registered in
+[lib.rs](../src-tauri/src/lib.rs)); `dialog:allow-open` added for the folder
+picker. Verified: `npm run build` + `cargo check` clean; a throwaway harness
+confirmed batch `.md` path dedup + `[[_TOC_]]` placement.
 
 **Current state:** [MenuBar.tsx](../src/components/MenuBar.tsx) has a single
 "Export Page as Markdown…" item, current-page-only, wired to

@@ -10,6 +10,7 @@ import type {
   DebugGenerateResult,
   DetectedHardware,
   ExportCopy,
+  ExportPageEntry,
   GrammarSpan,
   InstalledModel,
   LogEntry,
@@ -75,6 +76,19 @@ export const exportPage = (
   filesDirName: string,
   copies: ExportCopy[],
 ) => invoke<void>("export_page", { notebookId, mdPath, markdown, filesDirName, copies });
+
+/** Write a batch of pages under `destDir` (each at `<destDir>/<relPath>`) and copy
+ * their files into one shared `<destDir>/<attachmentsDirName>/` folder
+ * (execution-plan #6). Returns the number of pages written. */
+export const exportBatch = (
+  notebookId: string,
+  destDir: string,
+  attachmentsDirName: string,
+  pages: ExportPageEntry[],
+) => invoke<number>("export_batch", { notebookId, destDir, attachmentsDirName, pages });
+
+/** Open a folder (or a file's location) in the system file manager. */
+export const revealPath = (path: string) => invoke<void>("reveal_path", { path });
 
 // --- Grammar (Harper, spec Section 10) --------------------------------------
 

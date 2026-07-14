@@ -146,6 +146,16 @@ export interface ExportCopy {
   destName: string;
 }
 
+/** One page in a multi-page Markdown export (execution-plan #6). */
+export interface ExportPageEntry {
+  /** Path relative to the export root, e.g. `Notebook/Section/Page.md`. */
+  relPath: string;
+  /** Rendered Markdown body. */
+  markdown: string;
+  /** Files to copy into the single shared attachments folder. */
+  copies: ExportCopy[];
+}
+
 /** One few-shot example pair rendered into the harness (spec Section 8). */
 export interface ExamplePair {
   input: string;

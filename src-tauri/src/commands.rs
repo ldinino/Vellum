@@ -255,6 +255,101 @@ pub fn export_page(
     Ok(())
 }
 
+/// One page in a multi-page Markdown export: its path relative to the export
+/// root (e.g. `Notebook/Section/Page.md`), the rendered Markdown, and the files
+/// it references (copied into the single shared attachments folder).
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportPageEntry {
+    rel_path: String,
+    markdown: String,
+    copies: Vec<ExportCopy>,
+}
+
+/// Write a batch of pages under `dest_dir` (each at `<dest_dir>/<rel_path>`) and
+/// copy every referenced file into one shared `<dest_dir>/<attachments_dir_name>/`
+/// folder — the Azure DevOps wiki layout (spec Section 14 / execution-plan #6).
+/// All sources come from a single notebook. Relative paths are validated against
+/// traversal; missing sources are skipped. Returns the number of pages written.
+#[tauri::command]
+pub fn export_batch(
+    app: AppHandle,
+    notebook_id: String,
+    dest_dir: String,
+    attachments_dir_name: String,
+    pages: Vec<ExportPageEntry>,
+) -> Result<u32, String> {
+    let dest_dir = std::path::PathBuf::from(&dest_dir);
+    if !dest_dir.is_dir() {
+        return Err(format!("Destination is not a folder: {}", dest_dir.display()));
+    }
+    let nb_dir = notebook_folder(&app, &notebook_id)?;
+
+    // Shared attachments folder, created lazily on the first copy. Preserve a
+    // single leading dot (the ADO `.attachments` convention) that the shared
+    // filename sanitizer would otherwise strip.
+    let sanitized = sanitize_attachment_name(&attachments_dir_name);
+    let attach_name =
+        if attachments_dir_name.trim_start().starts_with('.') && !sanitized.starts_with('.') {
+            format!(".{sanitized}")
+        } else {
+            sanitized
+        };
+    let attach_dir = dest_dir.join(&attach_name);
+    let mut attach_created = false;
+
+    let mut written = 0u32;
+    for page in &pages {
+        // The relative path is built from sanitized names, but validate defensively:
+        // no absolute paths, no empty or `..` segments (no escaping dest_dir).
+        let rel = page.rel_path.replace('\\', "/");
+        if rel.is_empty() || rel.starts_with('/') || rel.split('/').any(|p| p.is_empty() || p == "..")
+        {
+            return Err(format!("Invalid export path: {}", page.rel_path));
+        }
+        let md_path = dest_dir.join(&rel);
+        if let Some(parent) = md_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("create {}: {e}", parent.display()))?;
+        }
+        std::fs::write(&md_path, page.markdown.as_bytes())
+            .map_err(|e| format!("write {}: {e}", md_path.display()))?;
+        written += 1;
+
+        for c in &page.copies {
+            if c.src_rel.split(['/', '\\']).any(|p| p == "..") {
+                return Err(format!("Invalid source path: {}", c.src_rel));
+            }
+            let src = nb_dir.join(&c.src_rel);
+            if !src.is_file() {
+                continue;
+            }
+            if !attach_created {
+                std::fs::create_dir_all(&attach_dir)
+                    .map_err(|e| format!("create {}: {e}", attach_dir.display()))?;
+                attach_created = true;
+            }
+            let dest = attach_dir.join(sanitize_attachment_name(&c.dest_name));
+            std::fs::copy(&src, &dest).map_err(|e| format!("copy {}: {e}", src.display()))?;
+        }
+    }
+    Ok(written)
+}
+
+/// Open a folder (the export destination) in the system file manager. Used by the
+/// export wizard's "Open folder" button. The path comes from a folder-picker
+/// dialog / a `.md` save dialog, so it's user-chosen; validated to exist first.
+#[tauri::command]
+pub fn reveal_path(app: AppHandle, path: String) -> Result<(), String> {
+    let p = std::path::PathBuf::from(&path);
+    if !p.exists() {
+        return Err(format!("Path does not exist: {path}"));
+    }
+    app.opener()
+        .open_path(p.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|e| format!("open path: {e}"))
+}
+
 /// Harper (`harper-core`) version. harper-core exposes no runtime version
 /// constant, so it's maintained here — keep in sync with Cargo.toml when the
 /// dependency is bumped (shown in Settings → About).

@@ -285,6 +285,12 @@ function FormattingGroups({ editor, insertImage, setLinkOpen }: FormattingGroups
           disabled={disabled}
           onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
         />
+        <ToolbarButton
+          icon="sitemap"
+          label="Mermaid diagram"
+          disabled={disabled}
+          onClick={() => editor?.chain().focus().insertMermaidDiagram().run()}
+        />
       </ToolbarGroup>
 
       <ToolbarSeparator />

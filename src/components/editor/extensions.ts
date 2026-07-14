@@ -21,6 +21,7 @@ import { Table, TableRow, TableHeader, TableCell } from "@tiptap/extension-table
 import { TaskList, TaskItem } from "@tiptap/extension-list";
 import type { Extensions } from "@tiptap/react";
 import { ResizableImage } from "./ResizableImage";
+import { MermaidDiagram } from "./MermaidDiagram";
 import { SearchHighlight } from "./SearchHighlight";
 import { Find } from "./find";
 import { GrammarError } from "./GrammarError";
@@ -48,6 +49,7 @@ export function buildExtensions(): Extensions {
     TaskList,
     TaskItem.configure({ nested: true }),
     ResizableImage,
+    MermaidDiagram,
     Table.configure({ resizable: true }),
     TableRow,
     TableHeader,

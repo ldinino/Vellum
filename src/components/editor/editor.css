@@ -240,4 +240,161 @@
   cursor: nwse-resize;
 }
 
+/* Mermaid diagram node (execution-plan #5): rendered SVG with a click-to-edit
+   source box and an explicit invalid-syntax state. */
+.v-mermaid {
+  margin: 0.6em 0;
+}
+
+.v-mermaid__view {
+  position: relative;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  padding: var(--space-3) var(--space-4);
+  text-align: center;
+}
+
+.v-mermaid__view:hover {
+  border-color: var(--border-faint);
+  background: #fafafb;
+}
+
+.v-mermaid--selected .v-mermaid__view {
+  border-color: var(--accent-bright);
+  background: #fafafb;
+}
+
+.v-mermaid__svg {
+  display: flex;
+  justify-content: center;
+}
+
+.v-mermaid__svg svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.v-mermaid__empty {
+  color: var(--text-secondary);
+  font-style: italic;
+  padding: var(--space-4);
+}
+
+.v-mermaid__edit {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  padding: 2px 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: #fff;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.v-mermaid__view:hover .v-mermaid__edit,
+.v-mermaid--selected .v-mermaid__edit {
+  opacity: 1;
+}
+
+.v-mermaid__edit:hover {
+  background: #f0f0f3;
+}
+
+.v-mermaid__error {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: var(--space-3) var(--space-4);
+  background: #fdf2f2;
+  border: 1px solid #e6b3b3;
+  border-radius: var(--radius-control);
+}
+
+.v-mermaid__error-title {
+  font-weight: 600;
+  color: #a12a2a;
+}
+
+.v-mermaid__error-msg {
+  color: #7a2020;
+  font-size: 0.9em;
+}
+
+.v-mermaid__error-src {
+  margin: 4px 0 0;
+  padding: var(--space-3);
+  background: #fff;
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-control);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.v-mermaid__editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  padding: var(--space-3) var(--space-4);
+  background: #fafafb;
+}
+
+.v-mermaid__source {
+  width: 100%;
+  resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: #fff;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  padding: var(--space-3);
+}
+
+.v-mermaid__source:focus {
+  outline: none;
+  border-color: var(--accent-bright);
+}
+
+.v-mermaid__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.v-mermaid__btn {
+  padding: 3px 14px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-primary);
+  background: #fff;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.v-mermaid__btn:hover {
+  background: #f0f0f3;
+}
+
+.v-mermaid__btn--primary {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.v-mermaid__btn--primary:hover {
+  background: var(--accent-bright);
+}
+
 /* Tiptap placeholder for an empty doc could go here later. */

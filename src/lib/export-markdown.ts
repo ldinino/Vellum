@@ -1,10 +1,12 @@
 /**
- * Page → Markdown export (spec Section 14, Phase 10).
+ * Page → Markdown export (spec Section 14; execution-plan #6 wizard).
  *
- * Converts the open page's editor HTML to Markdown and copies its inline images
- * and attachments into a sibling `.attachments/` folder next to the chosen `.md`
- * (the Azure DevOps wiki convention; the backend `export_page` command owns the
- * filesystem writes). The result is
+ * Converts a page's editor HTML to Markdown and copies its inline images and
+ * attachments into an `.attachments/` folder (the Azure DevOps wiki convention;
+ * the backend `export_page` / `export_batch` commands own the filesystem writes).
+ * A single-file export drops `.attachments/` next to the chosen `.md`; a
+ * multi-page export lays pages out as `<Notebook>/<Section>/<Page>.md` under a
+ * chosen folder with one shared `.attachments/` at its root. The result is
  * WYSIWYG: formatting Markdown can't express (highlight, super/subscript,
  * underline, text colour, font family/size, block alignment) is preserved as
  * inline HTML, which is still valid Markdown and renders in most viewers.
@@ -12,10 +14,10 @@
 
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
-import { save } from "@tauri-apps/plugin-dialog";
-import type { Editor, JSONContent } from "@tiptap/react";
+import { generateHTML, type Extensions, type JSONContent } from "@tiptap/react";
 import * as api from "../data/api";
-import type { Attachment, ExportCopy } from "../data/types";
+import { buildExtensions } from "../components/editor/extensions";
+import type { Attachment, ExportCopy, ExportPageEntry } from "../data/types";
 
 /** Strip characters that are invalid in Windows file/folder names. */
 function sanitizeFilename(name: string): string {
@@ -89,7 +91,7 @@ function reTag(el: HTMLElement, content: string): string {
   return attrs ? `<${tag} ${attrs}>${content}</${tag}>` : `<${tag}>${content}</${tag}>`;
 }
 
-function makeTurndown(filesDirName: string, imageMap: Map<string, string>): TurndownService {
+function makeTurndown(linkBase: string, imageMap: Map<string, string>): TurndownService {
   const td = new TurndownService({
     headingStyle: "atx",
     bulletListMarker: "-",
@@ -150,6 +152,19 @@ function makeTurndown(filesDirName: string, imageMap: Map<string, string>): Turn
     replacement: () => "",
   });
 
+  // Mermaid diagrams export to a ```mermaid fenced block (portable — renders on
+  // Azure DevOps wikis and GitHub). The source lives in a data attribute (kept
+  // whole; turndown would collapse whitespace in element text).
+  td.addRule("mermaidDiagram", {
+    filter: (node) =>
+      node.nodeName === "DIV" && (node as HTMLElement).getAttribute("data-type") === "mermaid",
+    replacement: (_content, node) => {
+      const el = node as HTMLElement;
+      const src = (el.getAttribute("data-source") ?? el.textContent ?? "").trim();
+      return `\n\n\`\`\`mermaid\n${src}\n\`\`\`\n\n`;
+    },
+  });
+
   // Inline images export to Azure DevOps wiki syntax: `![alt](path =WIDTHx)` — the
   // image-size extension (space before `=`, no space around `x`, trailing `x` for a
   // width-only size, which is all ResizableImage stores). External srcs are left as-is.
@@ -162,7 +177,7 @@ function makeTurndown(filesDirName: string, imageMap: Map<string, string>): Turn
       const src = el.getAttribute("src") ?? "";
       const alt = el.getAttribute("alt") ?? "";
       const dest = imageMap.get(src);
-      const target = dest ? `./${filesDirName}/${dest}` : src;
+      const target = dest ? `${linkBase}/${dest}` : src;
       const w = parseInt(el.getAttribute("width") ?? "", 10);
       const size = Number.isFinite(w) ? ` =${w}x` : "";
       return `![${alt}](${encodePath(target)}${size})`;
@@ -172,16 +187,23 @@ function makeTurndown(filesDirName: string, imageMap: Map<string, string>): Turn
   return td;
 }
 
-/** Build the Markdown document + the list of files to copy alongside it. */
-function buildExport(opts: {
+/**
+ * Convert one page's editor HTML + document to Markdown, collecting the files it
+ * references (inline images + attachments). `linkBase` is the relative path from
+ * the `.md` to the shared attachments folder (`./.attachments` for a single-file
+ * export, `../../.attachments` inside a `Notebook/Section/Page.md` bundle). Pass
+ * a shared `used` set to dedupe destination filenames across a whole batch.
+ */
+export function renderPageToMarkdown(opts: {
   html: string;
   doc: JSONContent;
   title: string;
   attachments: Attachment[];
-  filesDirName: string;
+  linkBase: string;
+  used?: Set<string>;
 }): { markdown: string; copies: ExportCopy[] } {
-  const { html, doc, title, attachments, filesDirName } = opts;
-  const used = new Set<string>();
+  const { html, doc, title, attachments, linkBase } = opts;
+  const used = opts.used ?? new Set<string>();
   const copies: ExportCopy[] = [];
 
   // One copy per distinct inline-image source; both refs share the dest name.
@@ -193,14 +215,14 @@ function buildExport(opts: {
     copies.push({ srcRel: src, destName: dest });
   }
 
-  const body = makeTurndown(filesDirName, imageMap).turndown(html).trim();
+  const body = makeTurndown(linkBase, imageMap).turndown(html).trim();
 
   // Attachment-bar files: copied into the same folder and listed at the end.
   const attachLinks: string[] = [];
   for (const a of attachments) {
     const dest = uniqueName(a.filename, used);
     copies.push({ srcRel: a.path, destName: dest });
-    attachLinks.push(`- [${a.filename}](${encodePath(`./${filesDirName}/${dest}`)})`);
+    attachLinks.push(`- [${a.filename}](${encodePath(`${linkBase}/${dest}`)})`);
   }
 
   let markdown = `# ${title.trim() || "Untitled"}\n\n${body}\n`;
@@ -210,36 +232,113 @@ function buildExport(opts: {
   return { markdown, copies };
 }
 
+/** The empty ProseMirror document (a page with no saved content). */
+const EMPTY_DOC: JSONContent = { type: "doc", content: [] };
+
+/** Load a (possibly not-open) page's saved content and derive the inputs the
+ * Markdown renderer needs. Content is read from the store, so flush the open
+ * page's pending edits before exporting it. */
+async function loadPageMarkdownInputs(
+  notebookId: string,
+  pageId: string,
+  extensions: Extensions,
+): Promise<{ html: string; doc: JSONContent; attachments: Attachment[] }> {
+  const json = await api.loadPageContent(notebookId, pageId);
+  const doc: JSONContent = json ? (JSON.parse(json) as JSONContent) : EMPTY_DOC;
+  const html = generateHTML(doc, extensions);
+  const attachments = await api.listAttachments(notebookId, pageId).catch(() => []);
+  return { html, doc, attachments };
+}
+
+/** Insert Azure DevOps's `[[_TOC_]]` table-of-contents token just below a page's
+ * H1 (inert plain text in other Markdown viewers). */
+function insertToc(markdown: string): string {
+  const nl = markdown.indexOf("\n");
+  return nl < 0
+    ? `${markdown}\n\n[[_TOC_]]\n`
+    : `${markdown.slice(0, nl)}\n\n[[_TOC_]]${markdown.slice(nl)}`;
+}
+
+/** Reserve a collision-free `<dir>/<title>.md` path within a batch. */
+function uniqueMdPath(dir: string, title: string, used: Set<string>): string {
+  const stem = sanitizeFilename(title) || "Untitled";
+  const key = (s: string) => `${dir}/${s}`.toLowerCase();
+  let name = stem;
+  let i = 1;
+  while (used.has(key(name))) {
+    i += 1;
+    name = `${stem} (${i})`;
+  }
+  used.add(key(name));
+  return `${dir}/${name}.md`;
+}
+
 /**
- * Export the open page: prompt for a `.md` location, then write the Markdown and
- * copy its images/attachments into a sibling `<name> files/` folder. No-ops if
- * the user cancels the save dialog; surfaces failures via `onError`.
+ * Export a single page to a chosen `.md` path, copying its images/attachments
+ * into a sibling `.attachments/` folder (the caller obtains `mdPath` from a save
+ * dialog). Content is read from the store — flush the page first if it's open.
  */
-export async function exportCurrentPage(opts: {
-  editor: Editor;
+export async function exportSinglePageToFile(opts: {
   notebookId: string;
   pageId: string;
   title: string;
-  onError?: (message: string) => void;
+  mdPath: string;
 }): Promise<void> {
-  const { editor, notebookId, pageId, title, onError } = opts;
-  try {
-    const html = editor.getHTML();
-    const doc = editor.getJSON();
-    const attachments = await api.listAttachments(notebookId, pageId);
+  const { notebookId, pageId, title, mdPath } = opts;
+  const { html, doc, attachments } = await loadPageMarkdownInputs(
+    notebookId,
+    pageId,
+    buildExtensions(),
+  );
+  const { markdown, copies } = renderPageToMarkdown({
+    html,
+    doc,
+    title,
+    attachments,
+    linkBase: "./.attachments",
+  });
+  await api.exportPage(notebookId, mdPath, markdown, ".attachments", copies);
+}
 
-    const mdPath = await save({
-      defaultPath: `${sanitizeFilename(title) || "Untitled"}.md`,
-      filters: [{ name: "Markdown", extensions: ["md"] }],
+/**
+ * Export many pages under `destDir` as `<Notebook>/<Section>/<Page>.md`, with one
+ * shared `.attachments/` folder at the root (the ADO wiki layout). Attachment
+ * filenames are deduped across the whole batch. Returns the number of pages
+ * written. Content is read from the store — flush the open page first.
+ */
+export async function exportPagesToFolder(opts: {
+  notebookId: string;
+  notebookName: string;
+  destDir: string;
+  pages: { pageId: string; title: string; sectionName: string }[];
+  includeToc: boolean;
+  onProgress?: (done: number, total: number) => void;
+}): Promise<number> {
+  const { notebookId, notebookName, destDir, pages, includeToc, onProgress } = opts;
+  const extensions = buildExtensions();
+  const usedFiles = new Set<string>(); // shared attachment-filename dedupe
+  const usedMd = new Set<string>(); // dedupe .md paths (same title within a section)
+  const nbFolder = sanitizeFilename(notebookName) || "Notebook";
+  const entries: ExportPageEntry[] = [];
+
+  let done = 0;
+  for (const p of pages) {
+    const { html, doc, attachments } = await loadPageMarkdownInputs(notebookId, p.pageId, extensions);
+    const { markdown, copies } = renderPageToMarkdown({
+      html,
+      doc,
+      title: p.title,
+      attachments,
+      linkBase: "../../.attachments",
+      used: usedFiles,
     });
-    if (!mdPath) return; // cancelled
-
-    // Azure DevOps wiki convention: one shared `.attachments/` folder next to the
-    // .md. The backend re-creates this exact name (preserving the leading dot).
-    const filesDirName = ".attachments";
-    const { markdown, copies } = buildExport({ html, doc, title, attachments, filesDirName });
-    await api.exportPage(notebookId, mdPath, markdown, filesDirName, copies);
-  } catch (e) {
-    onError?.(typeof e === "string" ? e : `Export failed: ${String(e)}`);
+    const secFolder = sanitizeFilename(p.sectionName) || "Section";
+    entries.push({
+      relPath: uniqueMdPath(`${nbFolder}/${secFolder}`, p.title, usedMd),
+      markdown: includeToc ? insertToc(markdown) : markdown,
+      copies,
+    });
+    onProgress?.((done += 1), pages.length);
   }
+  return api.exportBatch(notebookId, destDir, ".attachments", entries);
 }

@@ -9,6 +9,7 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { Editor } from "@tiptap/react";
 import * as api from "../data/api";
+import { renderMermaid } from "../components/editor/MermaidDiagram";
 
 function escapeHtml(s: string): string {
   return s.replace(
@@ -46,6 +47,8 @@ const PRINT_CSS = `
   }
   .v-print-content code { font-family: Consolas, "Courier New", monospace; font-size: 0.9em; }
   .v-print-content img { max-width: 100%; height: auto; }
+  .v-print-content div[data-type="mermaid"] { margin: 0.6em 0; text-align: center; }
+  .v-print-content div[data-type="mermaid"] svg { max-width: 100%; height: auto; }
   .v-print-content table { border-collapse: collapse; }
   .v-print-content th, .v-print-content td {
     border: 1px solid #999; padding: 4px 8px; text-align: left; vertical-align: top;
@@ -170,6 +173,17 @@ export async function printCurrentPage(opts: {
         img.setAttribute("src", convertFileSrc(`${base}/${src.replace(/^\/+/, "")}`));
       }
     });
+    // getHTML() emits each Mermaid diagram as its raw source; render it to SVG so
+    // the printed page shows the diagram, not the source text.
+    for (const el of Array.from(parsed.querySelectorAll('div[data-type="mermaid"]'))) {
+      const src = (el.getAttribute("data-source") ?? el.textContent ?? "").trim();
+      if (!src) continue;
+      try {
+        el.innerHTML = await renderMermaid(src);
+      } catch {
+        /* leave the source text as a fallback */
+      }
+    }
     const contentHtml = parsed.body.innerHTML;
 
     const attachments = await api.listAttachments(notebookId, pageId).catch(() => []);

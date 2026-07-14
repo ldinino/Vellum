@@ -11,14 +11,19 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ContextMenu, MenuItem } from "./ui/ContextMenu";
 import { useActiveEditor } from "../state/activeEditor";
 import { requestOpenFind } from "./editor/find";
-import { exportCurrentPage } from "../lib/export-markdown";
 import { printCurrentPage } from "../lib/print-page";
 import { useVellum } from "../state/vellum";
 import "./MenuBar.css";
 
 const inTauri = "__TAURI_INTERNALS__" in window;
 
-export function MenuBar({ onOpenSettings }: { onOpenSettings: (tab?: string) => void }) {
+export function MenuBar({
+  onOpenSettings,
+  onOpenExport,
+}: {
+  onOpenSettings: (tab?: string) => void;
+  onOpenExport: () => void;
+}) {
   const { active } = useActiveEditor();
   const editor = active?.editor ?? null;
   const {
@@ -71,20 +76,10 @@ export function MenuBar({ onOpenSettings }: { onOpenSettings: (tab?: string) => 
       separatorAfter: true,
     },
     {
-      label: "Export Page as Markdown…",
+      label: "Export to Markdown…",
       icon: "document-export",
-      disabled: !canExport,
-      onSelect: () => {
-        if (editor && currentPage && selectedNotebookId) {
-          void exportCurrentPage({
-            editor,
-            notebookId: selectedNotebookId,
-            pageId: currentPage.id,
-            title: currentPage.title,
-            onError: actions.setError,
-          });
-        }
-      },
+      disabled: !selectedNotebookId,
+      onSelect: () => onOpenExport(),
     },
     {
       label: "Print…",
@@ -251,6 +246,12 @@ export function MenuBar({ onOpenSettings }: { onOpenSettings: (tab?: string) => 
       icon: "edit-rule",
       disabled: !editor,
       onSelect: () => editor?.chain().focus().setHorizontalRule().run(),
+    },
+    {
+      label: "Mermaid Diagram",
+      icon: "sitemap",
+      disabled: !editor,
+      onSelect: () => editor?.chain().focus().insertMermaidDiagram().run(),
     },
   ];
 

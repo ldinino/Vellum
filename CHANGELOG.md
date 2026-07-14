@@ -7,6 +7,16 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Added
+
+- **Mermaid diagrams** — Insert flowcharts and other diagrams with **Insert ▸
+  Mermaid Diagram**, edit the source in place, and see it render live. Diagrams
+  export to a Markdown `mermaid` code block and print as images.
+- **Export to Markdown** — The export command is now a wizard: export the
+  current page, a chosen set of pages, an entire section, or a whole notebook.
+  Multi-page exports are organized into Notebook / Section folders with one
+  shared attachments folder.
+
 ### Changed
 
 - **Code blocks** — Long lines now scroll horizontally within the block

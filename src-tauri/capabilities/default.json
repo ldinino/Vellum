@@ -25,6 +25,7 @@
     "dialog:default",
     "dialog:allow-ask",
     "dialog:allow-save",
+    "dialog:allow-open",
     "shell:default",
     "updater:default",
     "process:default",
