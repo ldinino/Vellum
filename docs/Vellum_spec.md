@@ -498,15 +498,17 @@ No manual save. No save indicator. No "unsaved changes" state.
 
 ---
 
-### 14. Export / Print
+### 14. Export / Import / Print
 
-**v1 scope:** Print the current page, and export pages to Markdown.
+**v1 scope:** Print the current page, export pages to Markdown, and import documents (Markdown, HTML, text, Word) as pages.
 
 **Print (as built):** **File ▸ Print** / **Ctrl+P** renders just the open page — its title, content, and attachment filenames — into an isolated hidden iframe and prints that document (`src/lib/print-page.ts`), so the app chrome never reaches the printer. Inline image paths are resolved to loadable asset URLs first, Mermaid diagrams are rendered to SVG, and images are awaited before printing. This replaced a `@media print` stylesheet over the live window, which printed the whole UI in the transparent WebView2 window. (Our Print / Ctrl+P also stand in for WebView2's native print, which is disabled in release builds.)
 
 **Markdown export (as built):** **File ▸ Export to Markdown…** opens a small wizard (`src/components/ExportWizard.tsx`) to pick a scope — the current page, a chosen set of pages, an entire section, or an entire notebook. A single page is written to a chosen `<name>.md` with a sibling `.attachments/` folder (the Azure DevOps wiki convention); several pages are laid out as `<Notebook>/<Section>/<Page>.md` under a chosen folder with one shared `.attachments/` folder at its root, and attachment filenames are deduped across the whole batch. Pages that aren't open are read from the store and converted headlessly via `generateHTML(contentJson, buildExtensions())`, so no editor has to be mounted. The conversion (turndown + GFM, `src/lib/export-markdown.ts`) is WYSIWYG: structure (headings, lists, task lists, tables, code, blockquotes, links, images, and Mermaid diagrams → a `mermaid` fenced block) maps to Markdown, while formatting Markdown can't express (highlight, super/subscript, underline, text colour, font family/size, block alignment) is preserved as inline HTML — still valid Markdown that renders in most viewers. Inline images use the Azure DevOps size suffix `![alt](path =Wx)`; an optional per-page `[[_TOC_]]` token (off by default) can be added to multi-page exports. The backend `export_page` (single file) and `export_batch` (folder) commands own the filesystem writes (source + destination paths validated against traversal, dest names sanitized, missing sources skipped).
 
-No PDF or HTML export in v1.
+**Import (as built):** **File ▸ Import documents…** opens a wizard (`src/components/ImportWizard.tsx`) — the mirror of export — to bring outside documents in as pages. Pick one or more files (Markdown `.md`/`.markdown`, HTML `.html`/`.htm`, plain text `.txt`, or Word `.docx`) or a whole folder; a folder is imported round-trip, so its top-level subfolders become sections (files at the folder root land in a chosen section), which also makes Vellum an importer for an exported Azure DevOps wiki. Each document's leading `# H1` becomes the page title (removed from the body so it isn't duplicated), else the filename. Conversion (`src/lib/import-document.ts`) is export run backwards: `markdown-it` (task lists, the ADO `=Wx` image size, `mermaid` fences, and the inline HTML export preserves) → HTML → Tiptap `generateJSON(html, buildExtensions())`, with `.docx` routed through a lazily-loaded `mammoth`. Everything is parsed through the editor schema, which allow-lists nodes/marks and drops anything else, and link/image targets carrying `javascript:` / `vbscript:` or a non-image `data:` scheme are stripped (untrusted-input hardening). Referenced images are re-homed into the page: embedded data URIs become page files, on-disk paths are copied from the source (confined to the import root — no `..` traversal), and external URLs are left as-is. The backend `import_scan_folder`, `import_read_file`, and `import_copy_external_image` commands own the filesystem reads. Import only ever *creates* pages, so it's non-destructive and needs no confirmation — just a progress + summary.
+
+No PDF or HTML *export* in v1; PDF, RTF, and OneNote (`.one`) *import* are likewise out of scope (Section 16).
 
 ---
 
@@ -528,8 +530,8 @@ No PDF or HTML export in v1.
 ### 16. Out of Scope (v1)
 
 - Version / page history
-- OneNote import
-- Markdown / HTML / PDF export
+- OneNote (`.one`) import; PDF / RTF import
+- HTML / PDF export
 - Cloud sync (OneDrive covers this passively via Documents folder)
 - Real-time collaboration
 - OCR on image attachments

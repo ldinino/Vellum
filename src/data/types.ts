@@ -156,6 +156,16 @@ export interface ExportPageEntry {
   copies: ExportCopy[];
 }
 
+/** One importable document found while scanning a folder (execution-plan #4). */
+export interface ImportEntry {
+  /** Path relative to the scanned root, forward-slash separated. */
+  relPath: string;
+  /** Absolute path on disk (passed back to `importReadFile`). */
+  absPath: string;
+  /** Lowercase extension without the dot (md, markdown, html, htm, txt, docx). */
+  ext: string;
+}
+
 /** One few-shot example pair rendered into the harness (spec Section 8). */
 export interface ExamplePair {
   input: string;

@@ -8,6 +8,7 @@ import { SectionPropertiesModal } from "./panels/SectionPropertiesModal";
 import { RecycleBinModal } from "./panels/RecycleBinModal";
 import { MenuBar } from "./MenuBar";
 import { ExportWizard } from "./ExportWizard";
+import { ImportWizard } from "./ImportWizard";
 import { TopToolbar } from "./editor/EditorToolbar";
 import { SearchBox } from "./search/SearchBar";
 import { FindBar } from "./editor/FindBar";
@@ -84,6 +85,7 @@ export function VellumShell() {
   const [settingsTab, setSettingsTab] = useState("general");
   const [recycleBinOpen, setRecycleBinOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem(NAV_COLLAPSED_KEY) === "1";
@@ -176,6 +178,7 @@ export function VellumShell() {
           setSettingsOpen(true);
         }}
         onOpenExport={() => setExportOpen(true)}
+        onOpenImport={() => setImportOpen(true)}
       />
       <TopToolbar />
 
@@ -230,6 +233,7 @@ export function VellumShell() {
       />
       <RecycleBinModal open={recycleBinOpen} onClose={() => setRecycleBinOpen(false)} />
       <ExportWizard open={exportOpen} onClose={() => setExportOpen(false)} />
+      <ImportWizard open={importOpen} onClose={() => setImportOpen(false)} />
       <FirstRunModal />
       <AppContextMenus />
       <UpdateNotice />

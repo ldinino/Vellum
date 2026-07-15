@@ -1,0 +1,104 @@
+/* Import documents wizard (execution-plan #4). Mirrors ExportWizard.css. */
+
+.v-imp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.v-imp__pick {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.v-imp__dest {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-control);
+}
+
+.v-imp__field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.v-imp__field > span {
+  flex: 0 0 70px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.v-imp__field select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.v-imp__tree {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-faint);
+  border-radius: var(--radius-control);
+  background: #fafafb;
+}
+
+.v-imp__group + .v-imp__group {
+  margin-top: var(--space-3);
+}
+
+.v-imp__section {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 600;
+}
+
+.v-imp__badge {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  background: #f0f0f3;
+  border: 1px solid var(--border-faint);
+  border-radius: 999px;
+  padding: 0 var(--space-2);
+}
+
+.v-imp__page {
+  margin-left: var(--space-5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.v-imp__summary,
+.v-imp__hint {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.v-imp__hint {
+  word-break: break-all;
+}
+
+.v-imp__status {
+  min-height: 60px;
+  justify-content: center;
+}
+
+.v-imp__ok,
+.v-imp__err {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.v-imp__err {
+  color: #a12a2a;
+}

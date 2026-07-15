@@ -7,6 +7,15 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Added
+
+- **Import documents** — A new **File ▸ Import documents…** wizard brings outside
+  documents in as pages. Import one or more Markdown, HTML, plain-text, or Word
+  (`.docx`) files, or a whole folder at once — a folder's subfolders become
+  sections, so you can pull in an exported Azure DevOps wiki in one step. Each
+  document's first heading becomes the page title, and referenced or embedded
+  images come along with it. Choose which notebook and section the pages land in.
+
 ## [0.2.0] - 2026-07-14
 
 ### Added

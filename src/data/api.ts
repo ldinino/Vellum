@@ -12,6 +12,7 @@ import type {
   ExportCopy,
   ExportPageEntry,
   GrammarSpan,
+  ImportEntry,
   InstalledModel,
   LogEntry,
   Manifest,
@@ -95,6 +96,38 @@ export const exportBatch = (
 
 /** Open a folder (or a file's location) in the system file manager. */
 export const revealPath = (path: string) => invoke<void>("reveal_path", { path });
+
+// --- Import (execution-plan #4) ---------------------------------------------
+
+/** Recursively scan a picked folder for importable documents (md/html/txt/docx),
+ * skipping dot-directories. Entries are sorted by relative path. */
+export const importScanFolder = (root: string) =>
+  invoke<ImportEntry[]>("import_scan_folder", { root });
+
+/** Read an importable document's raw bytes (size-capped). Returned as an
+ * `ArrayBuffer` (via `tauri::ipc::Response`) so binary files like `.docx`
+ * transfer intact rather than through a lossy/slow JSON number array. */
+export const importReadFile = (path: string) =>
+  invoke<ArrayBuffer>("import_read_file", { path });
+
+/** Resolve an image reference from an imported document and copy it into the
+ * page's attachments folder, returning the new notebook-relative path (or null
+ * when it's a URL/data URI, missing, or resolves outside the import root). A
+ * leading `/` in `srcRef` resolves against `rootDir`, else against `baseDir`. */
+export const importCopyExternalImage = (
+  notebookId: string,
+  pageId: string,
+  baseDir: string,
+  rootDir: string,
+  srcRef: string,
+) =>
+  invoke<string | null>("import_copy_external_image", {
+    notebookId,
+    pageId,
+    baseDir,
+    rootDir,
+    srcRef,
+  });
 
 // --- Grammar (Harper, spec Section 10) --------------------------------------
 

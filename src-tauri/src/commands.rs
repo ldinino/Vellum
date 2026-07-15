@@ -383,6 +383,268 @@ pub fn reveal_path(app: AppHandle, path: String) -> Result<(), String> {
         .map_err(|e| format!("open path: {e}"))
 }
 
+// ---------------------------------------------------------------------------
+// Import documents into notebooks (execution-plan #4, spec Section 14)
+// ---------------------------------------------------------------------------
+//
+// The mirror of export: the frontend converts each document to editor JSON
+// (Markdown / HTML / text / DOCX) and writes pages via the normal create + save
+// commands; the backend just owns the filesystem reads a picked source needs
+// (its bytes, a folder scan, and copying referenced images into a page). All of
+// these read paths that live *outside* Documents\Vellum, so they use plain
+// `std::fs` — our own commands need no capability, avoiding a plugin-fs scope.
+
+/// One importable document found while scanning a folder. The frontend groups
+/// these into sections (by the top-level subfolder) and reads each via
+/// `import_read_file`.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportEntry {
+    /// Path relative to the scanned root, forward-slash separated (drives the
+    /// section grouping and a filename-derived page title).
+    rel_path: String,
+    /// Absolute path on disk (passed straight back to `import_read_file`).
+    abs_path: String,
+    /// Lowercase extension without the dot (md, markdown, html, htm, txt, docx).
+    ext: String,
+}
+
+/// File extensions Vellum can import — kept in sync with the frontend's
+/// `formatForExt`. Lowercase, no leading dot.
+const IMPORT_EXTS: &[&str] = &["md", "markdown", "html", "htm", "txt", "docx"];
+
+/// Largest single document Vellum will read on import (guards against loading an
+/// unintended huge file into memory). A DOCX with embedded images is the biggest
+/// realistic case, so the ceiling is generous.
+const IMPORT_MAX_BYTES: u64 = 100 * 1024 * 1024;
+
+/// Cap on how many documents one folder import will enumerate.
+const IMPORT_MAX_ENTRIES: usize = 5000;
+
+/// Recursively scan `root` for importable documents, skipping dot-directories
+/// (e.g. the `.attachments` / `.git` folders an exported wiki carries). Returns
+/// entries sorted by relative path so the wizard's section/page order is stable.
+/// The picked folder comes from an OS directory dialog.
+#[tauri::command]
+pub fn import_scan_folder(root: String) -> Result<Vec<ImportEntry>, String> {
+    let root = std::path::PathBuf::from(&root);
+    if !root.is_dir() {
+        return Err(format!("Not a folder: {}", root.display()));
+    }
+    let mut out: Vec<ImportEntry> = Vec::new();
+    scan_import_dir(&root, &root, &mut out)?;
+    out.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+    Ok(out)
+}
+
+/// Recursive worker for `import_scan_folder`. `root` stays fixed (for computing
+/// relative paths); `dir` is the folder currently being read.
+fn scan_import_dir(
+    root: &std::path::Path,
+    dir: &std::path::Path,
+    out: &mut Vec<ImportEntry>,
+) -> Result<(), String> {
+    if out.len() >= IMPORT_MAX_ENTRIES {
+        return Ok(());
+    }
+    let entries =
+        std::fs::read_dir(dir).map_err(|e| format!("read_dir {}: {e}", dir.display()))?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        // Skip dot-entries: `.attachments` (image assets, not pages), `.git`, etc.
+        if name.starts_with('.') {
+            continue;
+        }
+        let Ok(ft) = entry.file_type() else { continue };
+        if ft.is_dir() {
+            scan_import_dir(root, &path, out)?;
+            if out.len() >= IMPORT_MAX_ENTRIES {
+                return Ok(());
+            }
+        } else if ft.is_file() {
+            let ext = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_lowercase())
+                .unwrap_or_default();
+            if !IMPORT_EXTS.contains(&ext.as_str()) {
+                continue;
+            }
+            let rel = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            out.push(ImportEntry {
+                rel_path: rel,
+                abs_path: path.to_string_lossy().to_string(),
+                ext,
+            });
+            if out.len() >= IMPORT_MAX_ENTRIES {
+                return Ok(());
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Read an importable document's raw bytes. `path` is a user-picked file (single
+/// import) or one returned by `import_scan_folder` (folder import); size-capped.
+/// Returned via `tauri::ipc::Response` (raw bytes → an `ArrayBuffer` on the
+/// frontend) rather than a serde `Vec<u8>`: a `Vec<u8>` is JSON-serialized to a
+/// number array, which is slow for large files and mangles binary payloads (a
+/// `.docx` failed to unzip on the frontend). See Tauri's "Returning Array Buffers".
+#[tauri::command]
+pub fn import_read_file(path: String) -> Result<tauri::ipc::Response, String> {
+    let path = std::path::PathBuf::from(&path);
+    let meta = std::fs::metadata(&path).map_err(|e| format!("stat {}: {e}", path.display()))?;
+    if !meta.is_file() {
+        return Err(format!("Not a file: {}", path.display()));
+    }
+    if meta.len() > IMPORT_MAX_BYTES {
+        return Err(format!(
+            "File too large to import ({} MB; limit {} MB): {}",
+            meta.len() / (1024 * 1024),
+            IMPORT_MAX_BYTES / (1024 * 1024),
+            path.display()
+        ));
+    }
+    let bytes = std::fs::read(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// True for references the frontend resolves itself (URLs it keeps as-is, data
+/// URIs it decodes) — never a local file to copy.
+fn import_ref_is_url(s: &str) -> bool {
+    let s = s.trim();
+    s.starts_with("//")
+        || s.starts_with("http://")
+        || s.starts_with("https://")
+        || s.starts_with("mailto:")
+        || s.starts_with("data:")
+}
+
+/// Hex digit → value, for `percent_decode`.
+fn hex_val(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+/// Decode `%XX` escapes in a document's image reference (export percent-encodes
+/// spaces/parens; other tools encode more). Left intact if a `%` isn't a valid
+/// escape. std has no percent-decoder and pulling one in isn't worth a dep here.
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let (Some(hi), Some(lo)) = (hex_val(bytes[i + 1]), hex_val(bytes[i + 2])) {
+                out.push(hi * 16 + lo);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Resolve and confine an imported image reference to an on-disk file inside the
+/// import root, returning its canonical path — or `None` to skip it: a URL / data
+/// URI (handled on the frontend), a missing file, or a path that escapes the
+/// root (the traversal guard against a malicious document reading arbitrary
+/// files). A leading `/` resolves against `root_dir` (the ADO wiki convention);
+/// anything else against `base_dir` (the document's own folder). Split out from
+/// the command so the confinement logic is unit-testable without an app handle.
+fn resolve_import_image_path(
+    base_dir: &str,
+    root_dir: &str,
+    src_ref: &str,
+) -> Option<std::path::PathBuf> {
+    let trimmed = src_ref.trim();
+    if trimmed.is_empty() || import_ref_is_url(trimmed) {
+        return None;
+    }
+    // Decode escapes and drop any query/fragment, then pick the base to resolve
+    // against (root for an absolute-from-root `/…` ref, else the document's dir).
+    let decoded = percent_decode(trimmed).replace('\\', "/");
+    let decoded = decoded
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(&decoded)
+        .to_string();
+    let candidate = if let Some(stripped) = decoded.strip_prefix('/') {
+        std::path::PathBuf::from(root_dir).join(stripped)
+    } else {
+        std::path::PathBuf::from(base_dir).join(&decoded)
+    };
+
+    // Canonicalize both sides and require containment. `canonicalize` also fails
+    // for a missing file, which we treat as "not found" (skip).
+    let (Ok(root_canon), Ok(file_canon)) = (
+        std::fs::canonicalize(root_dir),
+        std::fs::canonicalize(&candidate),
+    ) else {
+        return None;
+    };
+    if !file_canon.starts_with(&root_canon) || !file_canon.is_file() {
+        return None;
+    }
+    Some(file_canon)
+}
+
+/// Resolve an image reference from an imported document and copy the file into
+/// `page_id`'s attachments folder, returning the new notebook-relative path.
+/// Returns `None` when the reference is a URL / data URI (handled on the
+/// frontend), is missing, or resolves outside the import root (see
+/// `resolve_import_image_path`).
+#[tauri::command]
+pub fn import_copy_external_image(
+    app: AppHandle,
+    notebook_id: String,
+    page_id: String,
+    base_dir: String,
+    root_dir: String,
+    src_ref: String,
+) -> Result<Option<String>, String> {
+    if page_id.is_empty() || page_id.contains('/') || page_id.contains('\\') || page_id.contains("..")
+    {
+        return Err("Invalid page id".into());
+    }
+    let Some(file_canon) = resolve_import_image_path(&base_dir, &root_dir, &src_ref) else {
+        return Ok(None);
+    };
+
+    // Keep only a safe, short extension; default to png (mirrors save_page_image).
+    let ext: String = file_canon
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("png")
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(5)
+        .collect::<String>()
+        .to_lowercase();
+    let ext = if ext.is_empty() { "png".to_string() } else { ext };
+
+    let nb_dir = notebook_folder(&app, &notebook_id)?;
+    let rel_out = format!("attachments/{page_id}/{}.{ext}", uuid::Uuid::new_v4());
+    let abs_out = nb_dir.join(&rel_out);
+    if let Some(parent) = abs_out.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("create {}: {e}", parent.display()))?;
+    }
+    std::fs::copy(&file_canon, &abs_out).map_err(|e| format!("copy image: {e}"))?;
+    Ok(Some(rel_out))
+}
+
 /// Harper (`harper-core`) version. harper-core exposes no runtime version
 /// constant, so it's maintained here — keep in sync with Cargo.toml when the
 /// dependency is bumped (shown in Settings → About).
@@ -2126,6 +2388,84 @@ mod tests {
             "12-hour time with AM/PM"
         );
         assert_eq!(t.current_datetime, format!("{} {}", t.current_date, t.current_time));
+    }
+
+    // --- Import (execution-plan #4) ----------------------------------------
+
+    #[test]
+    fn percent_decode_reverses_escapes_and_passes_through_literals() {
+        assert_eq!(percent_decode("a%20b"), "a b");
+        assert_eq!(percent_decode(".attachments/my%20image%281%29.png"), ".attachments/my image(1).png");
+        // A stray or malformed `%` is left as-is (not a valid escape).
+        assert_eq!(percent_decode("100%"), "100%");
+        assert_eq!(percent_decode("%zz"), "%zz");
+    }
+
+    #[test]
+    fn import_ref_is_url_flags_only_remote_or_inline() {
+        assert!(import_ref_is_url("https://example.com/a.png"));
+        assert!(import_ref_is_url("http://example.com/a.png"));
+        assert!(import_ref_is_url("//cdn/a.png"));
+        assert!(import_ref_is_url("data:image/png;base64,AAAA"));
+        assert!(import_ref_is_url("mailto:x@y.z"));
+        // Local references (relative, root-absolute, Windows-absolute) are NOT urls.
+        assert!(!import_ref_is_url(".attachments/a.png"));
+        assert!(!import_ref_is_url("/.attachments/a.png"));
+        assert!(!import_ref_is_url("images/a.png"));
+        assert!(!import_ref_is_url(r"C:\images\a.png"));
+    }
+
+    #[test]
+    fn import_scan_folder_filters_ext_and_skips_dot_dirs() {
+        let tmp = TmpDir::new();
+        let root = &tmp.0;
+        std::fs::write(root.join("page.md"), b"# Page").unwrap();
+        std::fs::write(root.join("notes.txt"), b"text").unwrap();
+        std::fs::write(root.join("ignore.pdf"), b"no").unwrap();
+        std::fs::create_dir_all(root.join("Section A")).unwrap();
+        std::fs::write(root.join("Section A").join("child.markdown"), b"# Child").unwrap();
+        // A dot-directory (an exported wiki's image store) must be skipped.
+        std::fs::create_dir_all(root.join(".attachments")).unwrap();
+        std::fs::write(root.join(".attachments").join("hidden.md"), b"# nope").unwrap();
+
+        let mut entries = import_scan_folder(root.to_string_lossy().to_string()).unwrap();
+        entries.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+        let rels: Vec<&str> = entries.iter().map(|e| e.rel_path.as_str()).collect();
+        assert_eq!(rels, vec!["Section A/child.markdown", "notes.txt", "page.md"]);
+        // Extensions are lowercased, no dot; the `.pdf` and dot-dir file are gone.
+        assert!(entries.iter().all(|e| e.ext != "pdf"));
+        assert!(entries.iter().any(|e| e.ext == "markdown"));
+    }
+
+    #[test]
+    fn resolve_import_image_confines_to_root() {
+        let tmp = TmpDir::new();
+        let root = tmp.0.join("wiki");
+        let sub = root.join("Section");
+        std::fs::create_dir_all(root.join(".attachments")).unwrap();
+        std::fs::create_dir_all(sub.join(".attachments")).unwrap();
+        std::fs::write(root.join(".attachments").join("logo.png"), b"png").unwrap();
+        std::fs::write(sub.join(".attachments").join("pic.png"), b"png").unwrap();
+        // A secret OUTSIDE the import root that a malicious doc might target.
+        std::fs::write(tmp.0.join("secret.txt"), b"secret").unwrap();
+
+        let root_s = root.to_string_lossy().to_string();
+        let sub_s = sub.to_string_lossy().to_string();
+
+        // Relative ref resolves against the document's own folder.
+        assert!(resolve_import_image_path(&sub_s, &root_s, ".attachments/pic.png").is_some());
+        // A leading `/` resolves against the import root (ADO wiki convention).
+        assert!(resolve_import_image_path(&sub_s, &root_s, "/.attachments/logo.png").is_some());
+        // Percent-encoded names decode before resolving.
+        std::fs::write(sub.join(".attachments").join("a b.png"), b"png").unwrap();
+        assert!(resolve_import_image_path(&sub_s, &root_s, ".attachments/a%20b.png").is_some());
+
+        // Traversal escaping the root is refused, even though the file exists.
+        assert!(resolve_import_image_path(&sub_s, &root_s, "../../secret.txt").is_none());
+        // URLs / data URIs / missing files are skipped.
+        assert!(resolve_import_image_path(&sub_s, &root_s, "https://x/y.png").is_none());
+        assert!(resolve_import_image_path(&sub_s, &root_s, "data:image/png;base64,AA").is_none());
+        assert!(resolve_import_image_path(&sub_s, &root_s, ".attachments/missing.png").is_none());
     }
 }
 

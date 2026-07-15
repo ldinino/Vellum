@@ -20,9 +20,11 @@ const inTauri = "__TAURI_INTERNALS__" in window;
 export function MenuBar({
   onOpenSettings,
   onOpenExport,
+  onOpenImport,
 }: {
   onOpenSettings: (tab?: string) => void;
   onOpenExport: () => void;
+  onOpenImport: () => void;
 }) {
   const { active } = useActiveEditor();
   const editor = active?.editor ?? null;
@@ -74,6 +76,12 @@ export function MenuBar({
         }
       },
       separatorAfter: true,
+    },
+    {
+      label: "Import documents…",
+      icon: "document-import",
+      disabled: !selectedNotebookId,
+      onSelect: () => onOpenImport(),
     },
     {
       label: "Export to Markdown…",

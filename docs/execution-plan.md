@@ -12,7 +12,9 @@ cleared from this board — Windows ARM64, the Azure DevOps Markdown profile
 Export-to-Markdown wizard, template dynamic inserts, code-block scrolling, and
 the last-section / window-state / shuffle-color / colon-run-on fixes. What
 remains below is the leftover backlog: the **deferred** macOS and Linux tracks,
-and **move sections between notebooks** (the one still-open feature).
+plus three open features — **move sections between notebooks**, **importing
+documents into notebooks**, and **scoped proofreading** (per-notebook, section,
+and page).
 
 ## At a glance
 
@@ -21,6 +23,8 @@ and **move sections between notebooks** (the one still-open feature).
 | [MACOS](#1-macos-build-planning) | macOS build _(deferred)_ | Platform | XL | Apple Developer secrets in CI |
 | [LINUX](#2-linux-build-planning) | Linux build _(deferred)_ | Platform | L | — |
 | [MOVESECTION](#3-move-sections-between-notebooks) | Move sections between notebooks | Feature | XL | — |
+| [IMPORT](#4-import-documents-into-notebooks) | Import documents (Markdown + more) into notebooks _(shipped)_ | Feature | L | — |
+| [PROOFSCOPE](#5-scoped-proofreading-per-notebook-section-page) | Scoped proofreading (per-notebook, section, page) | Editing | M | — |
 
 ---
 
@@ -233,12 +237,313 @@ entry is needed.
 
 ---
 
+### 4. Import documents into notebooks
+
+**Shipped ([Unreleased], 2026-07-14).** Built end to end: **File ▸ Import
+documents…** → `src/components/ImportWizard.tsx` + the conversion library
+`src/lib/import-document.ts`, backed by three new commands (`import_scan_folder`,
+`import_read_file`, `import_copy_external_image` in
+[commands.rs](../src-tauri/src/commands.rs), registered in
+[lib.rs](../src-tauri/src/lib.rs)). New deps: `mammoth` (lazy) +
+`markdown-it-task-lists`. Folded into spec §14 (renamed **Export / Import /
+Print**) and §16 corrected, per [CLAUDE.md](../CLAUDE.md).
+
+**Decisions taken (maintainer, 2026-07-14):** (a) formats = Tier 1 (Markdown /
+HTML / text) **+ DOCX** via `mammoth`; PDF / RTF deferred, OneNote out. (b) **Both**
+single-file **and** folder / round-trip (ADO wiki) import in v1. (c) Destination =
+wizard-chosen notebook + section (folder import creates sections, never
+notebooks). (d) Page title = first `# H1`, stripped from the body, else the
+filename. (e) **No** confirmation dialog — the wizard + a progress / summary, since
+import only creates pages.
+
+**Verified:** `cargo check` + `cargo test` (4 new backend tests, incl. the
+traversal-confinement guard) + `npm run build` all green; a throwaway harness
+asserted the conversion pipeline (ADO `=Wx` rewrite, `[[_TOC_]]` strip, task-list
+classes, mermaid fence → node, H1 title extraction, `javascript:`/non-image-`data:`
+sanitising, data-URI decode, image re-homing) then was deleted. **Residual:** the
+wizard UI + a real DOCX/folder import weren't eyeballed at runtime (env can't
+launch the native window).
+
+**New (2026-07-14) — the mirror of the Export-to-Markdown wizard: bring outside
+documents *in* as pages.** Markdown is the primary target; the ask is to ingest
+other document types too. This is currently *out of scope* per
+[Vellum_spec.md](Vellum_spec.md) §16, which lists "OneNote import" and a now-stale
+"Markdown / HTML / PDF export" (Markdown export actually shipped in Phase 10 /
+§14). This item supersedes the import line the same way export did; when it
+ships, fold the decision back into §14 (rename to "Export / Import / Print") and
+correct §16, per [CLAUDE.md](../CLAUDE.md).
+
+**The good news — most of the machinery already exists.** Import is export run
+backwards, and the reverse-direction tools are already in the tree:
+- **`markdown-it` ^14.2.0 is already a dependency** (Refine renders model
+  Markdown → HTML via `renderMarkdown` in
+  [refine-markdown.ts](../src/lib/refine-markdown.ts)). Markdown → HTML is exactly
+  the front half of import.
+- **Tiptap already goes HTML → document JSON** via
+  `generateJSON(html, buildExtensions())` (the same call that seeds the welcome
+  notebook; verified working against the shared schema). So the core path is
+  `markdown-it → HTML → generateJSON → save_page_snapshot`, reusing
+  [extensions.ts](../src/components/editor/extensions.ts) `buildExtensions()` —
+  the very schema export / print / headless-convert already lean on.
+- The write commands import needs to *call* already exist in
+  [commands.rs](../src-tauri/src/commands.rs): `create_section`, `create_page`
+  (+ `save_page_snapshot`), `save_page_image` (writes
+  `attachments/<page>/<uuid>.<ext>`, returns the notebook-relative src),
+  `add_attachment`, and `index_page` (search reindex).
+
+So a **Markdown-only import is genuinely a Medium**; the "more document types"
+ambition is what grows it to L.
+
+**Proposed format tiers** (ship Tier 1 first; Tier 2 is the headline "more types"):
+
+| Tier | Formats | How | New dep? |
+|---|---|---|---|
+| 1a | Markdown (`.md`, `.markdown`) | `markdown-it` → HTML → `generateJSON` | none |
+| 1b | HTML (`.html`, `.htm`), plain text (`.txt`) | HTML straight to `generateJSON`; text wrapped in paragraphs | none |
+| 2 | Word (`.docx`) | `mammoth` (DOCX → HTML) → `generateJSON` | `mammoth` |
+| — _(defer)_ | PDF, RTF, OneNote (`.one`) | see below | — |
+
+- **DOCX via `mammoth`** is the natural "more types" win. Confirmed on npm:
+  **BSD-2-Clause**, ~4.4M weekly downloads, actively maintained (v1.12.0), ships
+  a browser build (`mammoth.browser.js`) that takes an `{ arrayBuffer }` and
+  returns a clean semantic HTML fragment (headings, lists, tables,
+  bold/italic/underline/strike/sup/sub, links, images), with a `convertImage`
+  hook we can point at `save_page_image` to re-home embedded images instead of
+  inlining huge `data:` URIs. Excellent match for the Tiptap schema.
+- **Defer PDF** — extraction is lossy (PDF has no reliable block structure;
+  `pdf.js` recovers text but not headings/lists/tables), and it clashes with §16
+  already excluding PDF *export*. **Defer RTF** (niche). **Keep OneNote out** —
+  `.one` is an undocumented proprietary binary format reachable only via
+  Microsoft's Graph / OneNote APIs; a project of its own (§16 already excludes it).
+
+**Round-trip / folder import (recommended, symmetric with the export wizard).**
+Because export lays a notebook out as `<Notebook>/<Section>/<Page>.md` with a
+shared `.attachments/` (the Azure DevOps wiki convention), importing a *folder*
+of Markdown should reconstruct that structure: subfolders → sections, `.md`
+files → pages, image/link references resolved against the folder (incl.
+`.attachments/`). This also makes Vellum a clean importer for existing **ADO
+wiki** repos. Single-file import (the common case) just lands as one new page.
+
+**Proposed architecture (mirror of export's frontend-converts / backend-writes
+split):**
+- **Frontend** owns the dialog + parse/convert (as export owns turndown): a new
+  `ImportWizard.tsx` mirroring [ExportWizard.tsx](../src/components/ExportWizard.tsx)
+  — pick file(s) or a folder via `open()` (`multiple` / `directory`;
+  `dialog:allow-open` is **already granted** from the export folder picker),
+  pick the destination (target notebook + section, defaulting to the current
+  selection), then convert each source to document JSON. New `src/lib/import-*.ts`
+  modules parallel to [export-markdown.ts](../src/lib/export-markdown.ts).
+- **Backend** owns filesystem reads + writes (as `export_page` / `export_batch`
+  own writes). A picked source lives *outside* `Documents\Vellum` and its
+  referenced images are relative to it, so the backend must read arbitrary picked
+  paths — plain `std::fs`, which needs no capability for our own commands and
+  avoids wiring `plugin-fs` scopes on the frontend. Proposed commands:
+  `import_read_source(path)` and `import_copy_external_image(notebookId, pageId,
+  srcAbsPath) -> notebookRelSrc` (a `save_page_image` sibling that copies from an
+  arbitrary on-disk path). Registered in [lib.rs](../src-tauri/src/lib.rs),
+  wrapped in [api.ts](../src/data/api.ts) per the repo's 3-place command convention.
+- **Order per page:** `create_page` → for each referenced/embedded image, copy
+  bytes into `attachments/<newPage>/…` and rewrite the node `src` →
+  `save_page_snapshot(json, preview)` → `index_page`. (Same
+  create-then-image-then-save ordering paste already uses.) Sections are created
+  first when a folder import needs them.
+
+**Markdown-dialect fidelity (so an exported page round-trips).** Export emits the
+ADO/GFM dialect; import should read the same one:
+- **Tables + strikethrough** — on by default in `markdown-it`. ✅
+- **Task lists** (`- [ ]` / `- [x]`) — *not* built into `markdown-it`; add
+  `markdown-it-task-lists` (MIT) or a small custom rule. (Note: Refine
+  deliberately skips task lists — see repo gotchas — but import wants them.)
+- **ADO image size** `![alt](path =Wx)` — `markdown-it` won't parse the `=Wx`
+  suffix; needs a small rule / post-process to strip it and set the
+  `ResizableImage` width.
+- **`mermaid` fenced blocks** — map a ```` ```mermaid ```` fence to a
+  `MermaidDiagram` node, not a plain code block.
+- **Preserved inline HTML** (highlight / sup / sub / underline / colour /
+  alignment that export keeps as raw HTML) — needs `markdown-it({ html: true })`,
+  unlike Refine's `html: false`. Safe *only* because it is parsed through the
+  Tiptap schema (below), which drops anything not in `buildExtensions()`.
+
+**Security (OWASP — untrusted document input).**
+- Never inject imported HTML into the live DOM. Convert via `generateJSON` /
+  schema parse only, which allow-lists to known nodes/marks and won't execute
+  scripts or keep unknown attributes.
+- Sanitize link/image targets: strip `javascript:` / `vbscript:` and non-image
+  `data:` URIs from hrefs. `mammoth`'s own docs warn it does **no** sanitization
+  and can emit `javascript:` links; `markdown-it` with `html:true` can carry them
+  too.
+- Keep `mammoth`'s `externalFileAccess` at its default (off). Validate that
+  folder-import paths stay within the chosen root (no `..` traversal — mirror the
+  guards in `export_batch` / `open_attachment`).
+
+**Open decisions (need maintainer input — nothing built yet):**
+1. **Format scope for v1** — Tier 1 (MD / HTML / txt) only, or include DOCX
+   (Tier 2)? _Recommend Tier 1 + DOCX._
+2. **Folder / round-trip import** in v1, or single-file only first? _Recommend
+   single-file first, folder import as a fast follow (high value, low extra risk)._
+3. **Where imports land** — always the current section, or a wizard-chosen
+   notebook + section (and does a multi-file / folder import ever create a new
+   notebook)? _Recommend a wizard-chosen destination; folder import may create
+   sections but not notebooks._
+4. **Page-title source** — first `# H1` in the doc, else the filename? _Recommend
+   first H1 else filename, stripping the consumed H1 to avoid a duplicate
+   title-in-body._
+5. **Confirmation** — import is additive (new pages; no data-loss risk unlike
+   MOVESECTION), so likely no `ask()` confirm, just the wizard + a progress /
+   summary phase. _Confirm this is acceptable._
+
+**Open risks / notes:**
+- Import is **non-destructive** (only creates), so crash-safety is far simpler
+  than MOVESECTION — worst case is a partially-created page recoverable via a
+  normal delete. Still, drive a large multi-file / folder import with progress
+  (reuse the export wizard's `running` / `done` / `error` phases).
+- Lossy by nature for rich formats (DOCX especially — `mammoth` intentionally
+  drops non-semantic styling; complex tables / footnotes degrade). Set
+  expectations in the wizard and surface `mammoth`'s `messages` warnings.
+- New deps to add: `mammoth` (TypeScript types are built in) and
+  `markdown-it-task-lists` (+ `@types/markdown-it-task-lists` if needed). Respect
+  the ERESOLVE / hand-add-to-`package.json` lock quirk noted for the Tiptap deps
+  in the repo gotchas.
+- Bundle size: `mammoth.browser` is sizeable — import it **lazily** (dynamic
+  `import()` inside the DOCX path) so it never loads unless someone imports a
+  `.docx`, in the spirit of Mermaid's lazy chunks.
+
+---
+
+## Track: Editing UX
+
+### 5. Scoped proofreading (per-notebook, section, page)
+
+**Current state.** Spelling and grammar are a **single global pair of toggles** —
+`grammar_enabled` + `spellcheck_enabled` in [config.rs](../src-tauri/src/config.rs)
+`AppSettings` (persisted in `app.json`). They are set from **two** places today:
+the **Tools menu** ("Check Spelling" / "Check Grammar" in
+[MenuBar.tsx](../src/components/MenuBar.tsx)) and **Settings ▸ Proofing**
+([ProofingSettings.tsx](../src/components/settings/ProofingSettings.tsx)). Those
+Tools-menu entries are the redundant pair worth repurposing — Settings ▸ Proofing
+already owns the global master toggles (plus the custom dictionary and
+ignored-rules lists).
+
+**The enabling insight — this is a frontend + persistence job, not an engine
+change.** Harper is **context-free**: [PageEditor.tsx](../src/components/editor/PageEditor.tsx)
+`runGrammar` sends the open page's plain text to `api.grammarCheck(text)` and gets
+back offset spans; the backend ([grammar.rs](../src-tauri/src/grammar.rs)) has no
+notion of which notebook/section/page the text came from. The on/off decision is
+already a pure frontend gate — `runGrammar` early-returns and calls
+`clearGrammarLints` when both toggles are off, and `mapLints` filters per toggle.
+So scoping means only (a) **persisting** a per-scope flag and (b) computing an
+**effective** toggle for the open page and feeding it into that existing gate.
+**No `grammar.rs` change is required.**
+
+**Data model — where each scope's flag lives.**
+- **Page + section:** new columns on the `pages` and `sections` tables via a
+  **new appended migration** in [db.rs](../src-tauri/src/db.rs) (never edit a
+  shipped entry; index + 1 == `user_version`). Direct precedent: the
+  `page_sort_mode`/`page_sort_dir` columns added to `sections` in migration 4.
+  Update the [notebook.rs](../src-tauri/src/notebook.rs) `Section`/`Page` structs,
+  their `list_sections`/`list_pages` `SELECT` lists, and add a setter command for
+  each.
+- **Notebook:** notebooks have **no metadata row in the DB** (identity is the DB
+  file). The flag belongs in the `notebooks.json` registry —
+  [config.rs](../src-tauri/src/config.rs) `NotebookMeta`, alongside
+  `color`/`sort_order`/`deleted_at`.
+
+**Proposed semantics (needs sign-off).** A **suppress-only cascade**: a narrower
+scope can only turn proofreading **off**, never force it on over a broader "off".
+Effective for the open page =
+`globalEnabled AND NOT notebookSuppressed AND NOT sectionSuppressed AND NOT pageSuppressed`.
+This keeps the mental model simple (Settings ▸ Proofing stays the master switch;
+each scope is an opt-out) and avoids a three-state inherit/on/off matrix.
+Recommend **one combined "proofreading" suppression per scope** rather than
+separate spelling-vs-grammar flags at every level (3 flags, not 6) — the global
+pair already lets you choose which check runs; per-scope you almost always want
+"quiet this page/section/notebook entirely" (a code-snippet section, a notebook of
+foreign-language quotes). Flag it if you'd rather have independent per-scope
+spelling/grammar.
+
+**Repurposing the Tools menu + the "smart" indicator (the creative part).**
+- Replace the two redundant Tools toggles with a single **"Proofread ▸" submenu**
+  whose entries are the three scopes — **This Page / This Section / This
+  Notebook** — each an independent checkbox reflecting *that scope's own*
+  suppression. The **check state is the indicator**: no clumsy "(this page)"
+  suffix needed, because every level is shown at once and labelled. When a
+  broader scope already suppresses the page, the narrower rows render disabled
+  with a muted trailing reason ("off for this notebook"), using the existing
+  `MenuItem` `checked`/`disabled` support.
+- Pair it with an **ambient proofing badge in the editor toolbar** that reflects
+  the page's *effective* state. When proofreading is suppressed for the open
+  page, the badge shows a visibly "paused" proofing icon and its tooltip **names
+  the responsible scope** — "Proofreading paused for this section". Clicking the
+  badge opens the same three scope toggles in a small popover, so the indicator
+  and the control are one element. This directly answers the real UX hazard: with
+  silent suppression, a page with no underlines looks like grammar check is
+  *broken* — the badge makes the absence explained and one click from reversible.
+- (Optional flourish) the section tab / page-list row for a suppressed scope
+  could carry a tiny muted proofing glyph, so the state is legible from the nav
+  too.
+- **Settings ▸ Proofing keeps the global master toggles unchanged** — only the
+  Tools menu is repurposed. Per-scope flags could *also* surface as a checkbox in
+  [SectionPropertiesModal.tsx](../src/components/panels/SectionPropertiesModal.tsx)
+  (section) and a Notebook Properties surface — note there is **no notebook
+  properties dialog yet** (rename/color live inline in the
+  [NavPanel.tsx](../src/components/panels/NavPanel.tsx) notebook context menu), so
+  the notebook toggle is either a new small dialog or another context-menu entry.
+
+**New surface area.**
+- **Backend:** one appended `db.rs` migration (columns on `pages` + `sections`);
+  `notebook.rs` struct fields + `list_*` `SELECT`s + `set_page_proofing` /
+  `set_section_proofing` commands; a `NotebookMeta` field + a
+  `set_notebook_proofing` path that re-saves the registry; register the new
+  commands in [lib.rs](../src-tauri/src/lib.rs).
+- **Frontend:** [types.ts](../src/data/types.ts) additions on
+  `Section`/`Page`/notebook + `api.ts` wrappers; [vellum.tsx](../src/state/vellum.tsx)
+  state + setter actions + a small `effectiveProofing(pageId)` selector over the
+  open page's scope chain, wired into `PageEditor` `runGrammar`'s `toggles`; the
+  Tools submenu rework in `MenuBar.tsx`; the ambient badge component; optional
+  Section/Notebook properties checkboxes.
+- **Docs:** fold the scoping model into **spec Section 10** (which currently says
+  "Runs on the current page only") + a CHANGELOG entry.
+
+**Proposed decisions (need your call).**
+1. Suppress-only cascade (narrower scope can only turn off) vs a full three-state
+   inherit/on/off per scope. _Recommend suppress-only._
+2. One combined proofreading flag per scope vs separate spelling/grammar per
+   scope. _Recommend combined._
+3. Indicator treatment: ambient toolbar badge that names the suppressing scope +
+   doubles as the control, with the Tools submenu exposing all three scopes.
+   _Recommend as described._
+4. Per-notebook flag home: `NotebookMeta` registry (matches `color`/`deleted_at`).
+   _Recommend registry._
+5. Surface the per-scope toggles in the Properties dialogs too, or Tools
+   menu + badge only? (Notebook has no properties dialog yet.)
+
+**Open risks / notes:**
+- **Append-only migration** — add a new `db.rs` entry, never touch a shipped one;
+  existing notebooks migrate on open (default = not suppressed, so today's
+  behavior is preserved).
+- **No regression to the global switch** — Settings ▸ Proofing stays
+  authoritative; existing installs with grammar/spell on keep underlines
+  everywhere until a scope is explicitly quieted.
+- **Discoverability is the point** — scoped suppression must never look like a
+  bug; don't ship the persistence without a visible effective-state cue (the
+  badge).
+- Size **M**: broad (migration + 3 persistence homes + effective-state plumbing +
+  UI), but no cross-database migration and no engine work, so materially smaller
+  than [MOVESECTION](#3-move-sections-between-notebooks).
+
+---
+
 ## Suggested sequencing
 
-Only [MOVESECTION](#3-move-sections-between-notebooks) is active work — schedule
-it as its own mini-project with dedicated testing (it's a cross-database
-migration; see its section for the risks). [macOS](#1-macos-build-planning) and
-[Linux](#2-linux-build-planning) are deferred post-v1 and unblocked whenever
+[IMPORT](#4-import-documents-into-notebooks) **shipped** ([Unreleased],
+2026-07-14) — the full slice (Markdown / HTML / text **+ DOCX**, single-file
+**and** folder round-trip). That leaves two active features.
+[PROOFSCOPE](#5-scoped-proofreading-per-notebook-section-page) is the smaller and
+most self-contained (M — persistence + a frontend gate, no engine change) and a
+clean near-term win. [MOVESECTION](#3-move-sections-between-notebooks) is the
+heaviest — a cross-database migration; schedule it as its own mini-project with
+dedicated testing (see its section for the risks). [macOS](#1-macos-build-planning)
+and [Linux](#2-linux-build-planning) stay deferred post-v1 and unblocked whenever
 they're picked up (Linux first — AppImage, no signing friction — then macOS).
 
 ## Decisions log
@@ -253,7 +558,16 @@ shipped in v0.2.0).
 | 3 | macOS titlebar | Keep the Windows-style layout (themes planned later) |
 | 4 | Linux packaging | AppImage for v1 (keeps the updater consistent); Flatpak flagged as a later, separate-update-mechanism channel |
 | 5 | Move-section confirmation | Required, via the existing `ask()` dialog pattern |
+| 6 | Proofreading scope model | **Proposed** (awaiting sign-off): suppress-only cascade — a narrower scope can only turn off |
+| 7 | Per-scope granularity | **Proposed** (awaiting sign-off): one combined proofreading flag per scope, not separate spelling/grammar |
+| 8 | Scoped-proofreading indicator | **Proposed** (awaiting sign-off): ambient editor-toolbar badge that names the suppressing scope + doubles as the control; Tools menu repurposed to a This Page / Section / Notebook submenu |
 
 **Residual open item:** whether ARM64 Linux is in scope — moot for now, since
 [Linux](#2-linux-build-planning) is **deferred**; revisit alongside the Linux
 track (defaulting to x86_64-only when it returns unless you say otherwise).
+
+**Pending decisions ([IMPORT](#4-import-documents-into-notebooks)):** all
+resolved and **shipped** — see the decisions taken at the top of the
+[IMPORT](#4-import-documents-into-notebooks) section (Tier 1 + DOCX; single-file
+and folder import; wizard-chosen destination; H1-else-filename title; no
+confirmation).
