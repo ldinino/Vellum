@@ -9,6 +9,7 @@
 import { useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ContextMenu, MenuItem } from "./ui/ContextMenu";
+import { buildProofreadMenu } from "./proofreadMenu";
 import { useActiveEditor } from "../state/activeEditor";
 import { requestOpenFind } from "./editor/find";
 import { printCurrentPage } from "../lib/print-page";
@@ -30,8 +31,7 @@ export function MenuBar({
   const editor = active?.editor ?? null;
   const {
     actions,
-    grammarEnabled,
-    spellcheckEnabled,
+    proofing,
     selectedNotebookId,
     selectedSectionId,
     selectedPageId,
@@ -265,18 +265,18 @@ export function MenuBar({
 
   const toolsItems = (): MenuItem[] => [
     {
-      // Toggle: the icon is always shown; when on, ContextMenu highlights its
-      // icon box (and the label) to indicate the active state.
-      label: "Check Spelling",
+      // Scoped proofreading (execution-plan #5): each row is a checkbox for one
+      // scope (checked = proofreading active for that scope's own flag). The
+      // global master toggles live in Settings ▸ Proofing.
+      label: "Proofread",
       icon: "spell-check",
-      checked: spellcheckEnabled,
-      onSelect: () => actions.setSpellcheckEnabled(!spellcheckEnabled),
-    },
-    {
-      label: "Check Grammar",
-      icon: "blog--pencil",
-      checked: grammarEnabled,
-      onSelect: () => actions.setGrammarEnabled(!grammarEnabled),
+      submenu: buildProofreadMenu({
+        proofing,
+        notebookId: selectedNotebookId,
+        sectionId: selectedSectionId,
+        pageId: selectedPageId,
+        actions,
+      }),
       separatorAfter: true,
     },
     { label: "Settings…", icon: "gear", onSelect: () => onOpenSettings() },

@@ -162,7 +162,7 @@ export function PageEditor({
   page: Page;
   highlightQuery?: string;
 }) {
-  const { actions, grammarEnabled, spellcheckEnabled, refineEnabled, refineTemplates, refineAdherence, attachmentsRefreshTick } =
+  const { actions, refineEnabled, refineTemplates, refineAdherence, attachmentsRefreshTick, proofing } =
     useVellum();
   const { setActiveEditor } = useActiveEditor();
   const [title, setTitle] = useState(page.title);
@@ -177,12 +177,18 @@ export function PageEditor({
   // Grammar checks fire ~2s after the user stops typing (spec Section 10).
   const grammarSaver = useMemo(() => createDebouncer(2000, 8000), []);
   const grammarReq = useRef(0);
-  // Harper runs if either category is on; mapLints filters per toggle. Refs keep
-  // the stable callbacks (runGrammar, onUpdate) reading the latest values.
-  const grammarEnabledRef = useRef(grammarEnabled);
-  grammarEnabledRef.current = grammarEnabled;
-  const spellcheckEnabledRef = useRef(spellcheckEnabled);
-  spellcheckEnabledRef.current = spellcheckEnabled;
+  // Effective proofreading for the open page (execution-plan #5): grammar and
+  // spelling are each resolved through the notebook → section → page chain under
+  // the global master toggles, so quieted notebooks/sections and per-page
+  // overrides all fold into two booleans here. `proofing` reflects the current
+  // selection, which is exactly the open page. Refs keep the stable callbacks
+  // (runGrammar, onUpdate) reading the latest values.
+  const grammarEffective = proofing.grammarEffective;
+  const spellEffective = proofing.spellEffective;
+  const grammarEffectiveRef = useRef(grammarEffective);
+  grammarEffectiveRef.current = grammarEffective;
+  const spellEffectiveRef = useRef(spellEffective);
+  spellEffectiveRef.current = spellEffective;
   const ids = useRef({ notebookId, pageId: page.id });
   ids.current = { notebookId, pageId: page.id };
   const editorRef = useRef<Editor | null>(null);
@@ -225,8 +231,8 @@ export function PageEditor({
     const ed = editorRef.current;
     if (!ed) return;
     const toggles = {
-      grammar: grammarEnabledRef.current,
-      spell: spellcheckEnabledRef.current,
+      grammar: grammarEffectiveRef.current,
+      spell: spellEffectiveRef.current,
     };
     if (!toggles.grammar && !toggles.spell) {
       clearGrammarLints(ed);
@@ -574,7 +580,7 @@ export function PageEditor({
           .then(() => actions.refreshPages())
           .catch((e) => console.error("snapshot save failed", e));
       });
-      if (grammarEnabledRef.current || spellcheckEnabledRef.current) {
+      if (grammarEffectiveRef.current || spellEffectiveRef.current) {
         // On very large pages the lint pass is heavier, so settle longer and
         // defer further during continuous typing — never force a mid-burst check
         // the next keystroke would discard. Harper itself already runs off the UI
@@ -657,11 +663,13 @@ export function PageEditor({
   }, [editor, contentLoaded, highlightQuery]);
 
   // Re-lint on open and whenever either toggle flips; clear underlines when both
-  // are off (runGrammar itself clears in that case, so just call it).
+  // are off (runGrammar itself clears in that case, so just call it). Also
+  // re-runs when a scope's grammar/spell prefs change the open page's effective
+  // state (execution-plan #5).
   useEffect(() => {
     if (!editor || !contentLoaded) return;
     void runGrammar();
-  }, [editor, contentLoaded, grammarEnabled, spellcheckEnabled, runGrammar]);
+  }, [editor, contentLoaded, grammarEffective, spellEffective, runGrammar]);
 
   // Focus the title of a freshly created (untitled) page.
   useEffect(() => {

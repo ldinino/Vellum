@@ -35,11 +35,17 @@ pub struct Section {
     pub page_sort_mode: String,
     /// "asc" | "desc" (ignored for "custom").
     pub page_sort_dir: String,
+    /// Scoped proofreading (execution-plan #5): per-category tri-state —
+    /// None = inherit, Some(true) = on, Some(false) = off — resolved
+    /// most-specific-wins (page ▸ section ▸ notebook) under the global master.
+    pub grammar_pref: Option<bool>,
+    pub spell_pref: Option<bool>,
 }
 
 pub async fn list_sections(pool: &Pool<Sqlite>) -> Result<Vec<Section>, String> {
     sqlx::query_as::<_, Section>(
-        "SELECT id, name, color, sort_order, page_template_id, page_sort_mode, page_sort_dir \
+        "SELECT id, name, color, sort_order, page_template_id, page_sort_mode, page_sort_dir, \
+         grammar_pref, spell_pref \
          FROM sections WHERE deleted_at IS NULL ORDER BY sort_order, name",
     )
     .fetch_all(pool)
@@ -69,6 +75,8 @@ pub async fn create_section(pool: &Pool<Sqlite>, name: &str) -> Result<Section, 
         page_template_id: None,
         page_sort_mode: "custom".into(),
         page_sort_dir: "asc".into(),
+        grammar_pref: None,
+        spell_pref: None,
     })
 }
 
@@ -248,6 +256,40 @@ pub async fn set_section_sort(
     Ok(())
 }
 
+/// Set a section's per-category proofreading preferences (execution-plan #5):
+/// None = inherit, Some(true) = on, Some(false) = off. The section is
+/// authoritative over its pages, so this also **clears every page's own prefs**
+/// (back to inherit) — otherwise a per-page override (e.g. one set via the
+/// toolbar badge) would linger and shadow later section changes, with no way to
+/// reset it. A metadata write: does NOT bump `updated_at`.
+pub async fn set_section_proofing(
+    pool: &Pool<Sqlite>,
+    id: &str,
+    grammar_pref: Option<bool>,
+    spell_pref: Option<bool>,
+) -> Result<(), String> {
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("begin set section proofing: {e}"))?;
+    sqlx::query("UPDATE sections SET grammar_pref = ?1, spell_pref = ?2 WHERE id = ?3")
+        .bind(grammar_pref)
+        .bind(spell_pref)
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("set section proofing: {e}"))?;
+    sqlx::query("UPDATE pages SET grammar_pref = NULL, spell_pref = NULL WHERE section_id = ?1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("clear page proofing under section: {e}"))?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("commit set section proofing: {e}"))?;
+    Ok(())
+}
+
 pub async fn reorder_sections(pool: &Pool<Sqlite>, ordered_ids: &[String]) -> Result<(), String> {
     let mut tx = pool.begin().await.map_err(|e| format!("begin reorder: {e}"))?;
     for (order, id) in ordered_ids.iter().enumerate() {
@@ -275,6 +317,10 @@ pub struct Page {
     pub updated_at: String,
     /// First line of content, denormalized for the page-list preview.
     pub preview: String,
+    /// Scoped proofreading (execution-plan #5): per-category tri-state —
+    /// None = inherit, Some(true) = on, Some(false) = off.
+    pub grammar_pref: Option<bool>,
+    pub spell_pref: Option<bool>,
 }
 
 /// Map a section's (mode, dir) to a safe ORDER BY clause. Whitelisted — the
@@ -313,7 +359,7 @@ pub async fn list_pages(pool: &Pool<Sqlite>, section_id: &str) -> Result<Vec<Pag
             .unwrap_or_else(|| ("custom".to_string(), "asc".to_string()));
 
     let sql = format!(
-        "SELECT id, section_id, title, sort_order, updated_at, preview \
+        "SELECT id, section_id, title, sort_order, updated_at, preview, grammar_pref, spell_pref \
          FROM pages WHERE section_id = ?1 AND deleted_at IS NULL ORDER BY {}",
         page_order_clause(&mode, &dir)
     );
@@ -358,6 +404,8 @@ pub async fn create_page(
         sort_order,
         updated_at: ts,
         preview: String::new(),
+        grammar_pref: None,
+        spell_pref: None,
     })
 }
 
@@ -369,6 +417,48 @@ pub async fn set_page_title(pool: &Pool<Sqlite>, id: &str, title: &str) -> Resul
         .execute(pool)
         .await
         .map_err(|e| format!("set page title: {e}"))?;
+    Ok(())
+}
+
+/// Set a page's per-category proofreading preferences (execution-plan #5):
+/// None = inherit, Some(true) = on, Some(false) = off. Deliberately does NOT
+/// bump `updated_at` — it's a metadata flag, not a content edit, so it must not
+/// reorder "modified"-sorted pages or move the search date.
+pub async fn set_page_proofing(
+    pool: &Pool<Sqlite>,
+    id: &str,
+    grammar_pref: Option<bool>,
+    spell_pref: Option<bool>,
+) -> Result<(), String> {
+    sqlx::query("UPDATE pages SET grammar_pref = ?1, spell_pref = ?2 WHERE id = ?3")
+        .bind(grammar_pref)
+        .bind(spell_pref)
+        .bind(id)
+        .execute(pool)
+        .await
+        .map_err(|e| format!("set page proofing: {e}"))?;
+    Ok(())
+}
+
+/// Clear every section's and page's own proofreading prefs in this notebook
+/// (back to inherit). Used when a notebook-level pref is set: the notebook is
+/// authoritative, so no narrower override should shadow it (execution-plan #5).
+pub async fn clear_all_proofing_prefs(pool: &Pool<Sqlite>) -> Result<(), String> {
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|e| format!("begin clear proofing: {e}"))?;
+    sqlx::query("UPDATE sections SET grammar_pref = NULL, spell_pref = NULL")
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("clear section proofing: {e}"))?;
+    sqlx::query("UPDATE pages SET grammar_pref = NULL, spell_pref = NULL")
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| format!("clear page proofing: {e}"))?;
+    tx.commit()
+        .await
+        .map_err(|e| format!("commit clear proofing: {e}"))?;
     Ok(())
 }
 
@@ -474,6 +564,8 @@ pub async fn duplicate_page(pool: &Pool<Sqlite>, id: &str) -> Result<Page, Strin
         sort_order,
         updated_at: ts,
         preview,
+        grammar_pref: None,
+        spell_pref: None,
     })
 }
 
@@ -1044,6 +1136,83 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(orphans, 0, "cascade should remove pages with the section");
+
+        pool.close().await;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn scoped_proofreading_prefs_default_inherit_and_persist() {
+        // execution-plan #5 (revised): sections and pages carry per-category
+        // proofreading prefs that default to inherit (existing content
+        // keeps proofreading), toggles independently, and \u2014 being a metadata
+        // flag \u2014 must NOT bump a page's updated_at (that drives "modified" sort).
+        let (pool, dir) = temp_pool().await;
+
+        let s = create_section(&pool, "Code snippets").await.unwrap();
+        let p = create_page(&pool, &s.id, "Regexes").await.unwrap();
+        assert_eq!(s.grammar_pref, None, "new section inherits by default");
+        assert_eq!(s.spell_pref, None);
+        assert_eq!(p.grammar_pref, None, "new page inherits by default");
+        assert_eq!(p.spell_pref, None);
+
+        // Independent per-category section prefs: grammar off, spelling on.
+        set_section_proofing(&pool, &s.id, Some(false), Some(true)).await.unwrap();
+        let sec = list_sections(&pool).await.unwrap().remove(0);
+        assert_eq!(sec.grammar_pref, Some(false));
+        assert_eq!(sec.spell_pref, Some(true));
+
+        // Page prefs persist and must leave updated_at untouched.
+        let updated_before = list_pages(&pool, &s.id).await.unwrap()[0].updated_at.clone();
+        set_page_proofing(&pool, &p.id, Some(true), None).await.unwrap();
+        let page_after = list_pages(&pool, &s.id).await.unwrap().remove(0);
+        assert_eq!(page_after.grammar_pref, Some(true));
+        assert_eq!(page_after.spell_pref, None);
+        assert_eq!(
+            page_after.updated_at, updated_before,
+            "toggling page proofreading must not change updated_at"
+        );
+
+        // Reset to inherit.
+        set_section_proofing(&pool, &s.id, None, None).await.unwrap();
+        set_page_proofing(&pool, &p.id, None, None).await.unwrap();
+        assert_eq!(list_sections(&pool).await.unwrap()[0].grammar_pref, None);
+        assert_eq!(list_pages(&pool, &s.id).await.unwrap()[0].spell_pref, None);
+
+        pool.close().await;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn setting_a_broader_scope_clears_narrower_proofing_overrides() {
+        // execution-plan #5 (feedback): a broader scope is authoritative. Setting
+        // a section clears its pages' overrides; a notebook-level set (here via
+        // clear_all_proofing_prefs) clears sections' + pages' overrides \u2014 so a
+        // stale per-page override (e.g. from the toolbar badge) can't linger and
+        // shadow later section/notebook changes.
+        let (pool, dir) = temp_pool().await;
+        let s = create_section(&pool, "S").await.unwrap();
+        let p = create_page(&pool, &s.id, "P").await.unwrap();
+
+        // A page override, as the badge would set it.
+        set_page_proofing(&pool, &p.id, Some(true), Some(true)).await.unwrap();
+        assert_eq!(list_pages(&pool, &s.id).await.unwrap()[0].grammar_pref, Some(true));
+
+        // Setting the section clears the page override.
+        set_section_proofing(&pool, &s.id, Some(false), Some(false)).await.unwrap();
+        let page = list_pages(&pool, &s.id).await.unwrap().remove(0);
+        assert_eq!(page.grammar_pref, None, "section set clears its pages' grammar override");
+        assert_eq!(page.spell_pref, None, "section set clears its pages' spell override");
+        assert_eq!(list_sections(&pool).await.unwrap()[0].grammar_pref, Some(false));
+
+        // Re-make overrides at both levels; a notebook-level clear wipes them all.
+        set_section_proofing(&pool, &s.id, Some(true), None).await.unwrap();
+        set_page_proofing(&pool, &p.id, Some(false), Some(false)).await.unwrap();
+        clear_all_proofing_prefs(&pool).await.unwrap();
+        assert_eq!(list_sections(&pool).await.unwrap()[0].grammar_pref, None);
+        let page = list_pages(&pool, &s.id).await.unwrap().remove(0);
+        assert_eq!(page.grammar_pref, None);
+        assert_eq!(page.spell_pref, None);
 
         pool.close().await;
         let _ = std::fs::remove_dir_all(&dir);

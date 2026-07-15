@@ -9,12 +9,30 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ### Added
 
+- **Scoped proofreading** — Spelling and grammar can now be turned on or off
+  independently for just one page, a whole section, or an entire notebook —
+  handy for a code-snippet section or notes written in another language — from
+  the new **Tools ▸ Proofread** menu (This Page / This Section / This Notebook,
+  each with its own Grammar and Spelling toggles). A more specific scope wins, so
+  you can proofread a single page inside a notebook you've otherwise turned off;
+  changing a section's or notebook's setting resets the pages inside it, so those
+  per-page exceptions never get stuck.
+  When checking is off for the page you're on, a button appears in the toolbar to
+  turn it back on for that page in one click. Code blocks and inline code are
+  never proofed. The **Settings ▸ Proofing** switches remain the overall on/off.
 - **Import documents** — A new **File ▸ Import documents…** wizard brings outside
   documents in as pages. Import one or more Markdown, HTML, plain-text, or Word
   (`.docx`) files, or a whole folder at once — a folder's subfolders become
   sections, so you can pull in an exported Azure DevOps wiki in one step. Each
   document's first heading becomes the page title, and referenced or embedded
   images come along with it. Choose which notebook and section the pages land in.
+
+### Changed
+
+- The **Tools** menu's old **Check Spelling** / **Check Grammar** switches are
+  now a **Proofread** submenu for turning grammar and spelling off per page,
+  section, or notebook. The global on/off switches still live in
+  **Settings ▸ Proofing**.
 
 ## [0.2.0] - 2026-07-14
 

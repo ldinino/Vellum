@@ -18,6 +18,7 @@ import * as api from "../data/api";
 import { randomPaletteColor } from "../data/palette";
 import { WELCOME_NOTEBOOK_NAME, buildWelcomePages } from "../data/welcome-content";
 import { setIgnoredRules as applyIgnoredRules } from "../components/editor/grammar";
+import { resolveProofing } from "../lib/proofing";
 import type {
   Notebook,
   Page,
@@ -33,6 +34,34 @@ export interface TreeNotebook extends Notebook {
   expanded: boolean;
   /** null = sections not loaded yet (lazy on first expand). */
   sections: Section[] | null;
+}
+
+/** One scope's proofreading state (execution-plan #5): its own stored prefs
+ * (null = inherit) plus the on/off effective at that scope level (this scope +
+ * broader, under the global master), and whether the scope is targetable. */
+export interface ProofingScope {
+  grammarPref: boolean | null;
+  spellPref: boolean | null;
+  grammarEffective: boolean;
+  spellEffective: boolean;
+  available: boolean;
+}
+
+/** Scoped proofreading derived from the open page's notebook → section → page
+ * chain (execution-plan #5). Grammar and spelling resolve independently,
+ * most-specific-wins, under the global master toggles. */
+export interface ProofingState {
+  globalGrammar: boolean;
+  globalSpell: boolean;
+  notebook: ProofingScope;
+  section: ProofingScope;
+  page: ProofingScope;
+  /** Effective for the open page (= page.grammarEffective / spellEffective). */
+  grammarEffective: boolean;
+  spellEffective: boolean;
+  /** True when a scope turns a category off that the global master has on — the
+   * open page has proofing quieted by a scope (drives the toolbar badge). */
+  suppressed: boolean;
 }
 
 interface VellumState {
@@ -155,6 +184,27 @@ export interface VellumActions {
     dir: PageSortDir,
   ) => Promise<void>;
 
+  /** Scoped proofreading (execution-plan #5): set a scope's per-category prefs
+   * (true = on, false = off, null = inherit). Grammar and spelling are
+   * independent; a page can override its section/notebook (most-specific-wins). */
+  setNotebookProofing: (
+    notebookId: string,
+    grammarPref: boolean | null,
+    spellPref: boolean | null,
+  ) => Promise<void>;
+  setSectionProofing: (
+    notebookId: string,
+    sectionId: string,
+    grammarPref: boolean | null,
+    spellPref: boolean | null,
+  ) => Promise<void>;
+  setPageProofing: (
+    notebookId: string,
+    pageId: string,
+    grammarPref: boolean | null,
+    spellPref: boolean | null,
+  ) => Promise<void>;
+
   setGrammarEnabled: (enabled: boolean) => Promise<void>;
   setSpellcheckEnabled: (enabled: boolean) => Promise<void>;
   /** Set the editor default font family (Settings → Editor; persisted + applied). */
@@ -200,7 +250,7 @@ export interface VellumActions {
   emptyRecycleBin: () => Promise<void>;
 }
 
-type VellumContextValue = VellumState & { actions: VellumActions };
+type VellumContextValue = VellumState & { actions: VellumActions; proofing: ProofingState };
 
 const VellumContext = createContext<VellumContextValue | null>(null);
 
@@ -1122,6 +1172,82 @@ export function VellumProvider({ children }: { children: ReactNode }) {
       }
     },
 
+    // --- Scoped proofreading (execution-plan #5) -----------------------------
+    // Optimistic (so the badge + menu flip instantly), then persist. Metadata
+    // prefs: no reindex and no page reload needed.
+    setNotebookProofing: async (notebookId, grammarPref, spellPref) => {
+      // The notebook is authoritative: set its prefs and clear every section's
+      // and page's own overrides (back to inherit) so none shadows it. Clears the
+      // loaded tree/pages optimistically; the backend clears the rest in the DB.
+      setState((s) => ({
+        ...s,
+        notebooks: s.notebooks.map((nb) =>
+          nb.id === notebookId
+            ? {
+                ...nb,
+                grammarPref,
+                spellPref,
+                sections:
+                  nb.sections?.map((sec) => ({
+                    ...sec,
+                    grammarPref: null,
+                    spellPref: null,
+                  })) ?? nb.sections,
+              }
+            : nb,
+        ),
+        pages:
+          s.selectedNotebookId === notebookId
+            ? s.pages.map((p) => ({ ...p, grammarPref: null, spellPref: null }))
+            : s.pages,
+      }));
+      try {
+        await api.setNotebookProofing(notebookId, grammarPref, spellPref);
+      } catch (e) {
+        fail(e);
+      }
+    },
+    setSectionProofing: async (notebookId, sectionId, grammarPref, spellPref) => {
+      // The section is authoritative over its pages: set its prefs and clear the
+      // pages' own overrides (back to inherit) so a stale per-page override (e.g.
+      // one set via the badge) can't linger and shadow this change.
+      setState((s) => ({
+        ...s,
+        notebooks: s.notebooks.map((nb) =>
+          nb.id === notebookId && nb.sections
+            ? {
+                ...nb,
+                sections: nb.sections.map((sec) =>
+                  sec.id === sectionId ? { ...sec, grammarPref, spellPref } : sec,
+                ),
+              }
+            : nb,
+        ),
+        pages:
+          s.selectedSectionId === sectionId
+            ? s.pages.map((p) => ({ ...p, grammarPref: null, spellPref: null }))
+            : s.pages,
+      }));
+      try {
+        await api.setSectionProofing(notebookId, sectionId, grammarPref, spellPref);
+      } catch (e) {
+        fail(e);
+      }
+    },
+    setPageProofing: async (notebookId, pageId, grammarPref, spellPref) => {
+      setState((s) => ({
+        ...s,
+        pages: s.pages.map((p) =>
+          p.id === pageId ? { ...p, grammarPref, spellPref } : p,
+        ),
+      }));
+      try {
+        await api.setPageProofing(notebookId, pageId, grammarPref, spellPref);
+      } catch (e) {
+        fail(e);
+      }
+    },
+
     createPage: async (notebookId, sectionId, title = "") => {
       try {
         const page = await api.createPage(notebookId, sectionId, title);
@@ -1247,8 +1373,56 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     },
   };
 
+  // Derive the open page's proofreading from its scope chain (notebook → section
+  // → page). Grammar and spelling resolve independently, most-specific-wins,
+  // under the global master toggles (execution-plan #5).
+  const selNotebook = state.notebooks.find((n) => n.id === state.selectedNotebookId) ?? null;
+  const selSection =
+    selNotebook?.sections?.find((s) => s.id === state.selectedSectionId) ?? null;
+  const selPage = state.pages.find((p) => p.id === state.selectedPageId) ?? null;
+  const gGram = state.grammarEnabled;
+  const gSpell = state.spellcheckEnabled;
+  const nbG = selNotebook?.grammarPref ?? null;
+  const nbS = selNotebook?.spellPref ?? null;
+  const secG = selSection?.grammarPref ?? null;
+  const secS = selSection?.spellPref ?? null;
+  const pgG = selPage?.grammarPref ?? null;
+  const pgS = selPage?.spellPref ?? null;
+  const proofingNotebook: ProofingScope = {
+    grammarPref: nbG,
+    spellPref: nbS,
+    grammarEffective: resolveProofing(gGram, nbG, null, null),
+    spellEffective: resolveProofing(gSpell, nbS, null, null),
+    available: !!selNotebook,
+  };
+  const proofingSection: ProofingScope = {
+    grammarPref: secG,
+    spellPref: secS,
+    grammarEffective: resolveProofing(gGram, nbG, secG, null),
+    spellEffective: resolveProofing(gSpell, nbS, secS, null),
+    available: !!selSection,
+  };
+  const proofingPage: ProofingScope = {
+    grammarPref: pgG,
+    spellPref: pgS,
+    grammarEffective: resolveProofing(gGram, nbG, secG, pgG),
+    spellEffective: resolveProofing(gSpell, nbS, secS, pgS),
+    available: !!selPage,
+  };
+  const proofing: ProofingState = {
+    globalGrammar: gGram,
+    globalSpell: gSpell,
+    notebook: proofingNotebook,
+    section: proofingSection,
+    page: proofingPage,
+    grammarEffective: proofingPage.grammarEffective,
+    spellEffective: proofingPage.spellEffective,
+    suppressed:
+      (gGram && !proofingPage.grammarEffective) || (gSpell && !proofingPage.spellEffective),
+  };
+
   return (
-    <VellumContext.Provider value={{ ...state, actions }}>
+    <VellumContext.Provider value={{ ...state, actions, proofing }}>
       {children}
     </VellumContext.Provider>
   );

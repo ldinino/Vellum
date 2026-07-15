@@ -103,6 +103,31 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE pages       ADD COLUMN deleted_at TEXT;
     ALTER TABLE attachments ADD COLUMN deleted_at TEXT;
     "#,
+    // 6: scoped proofreading (execution-plan #5). 0 = proofread normally;
+    //    1 = proofreading (spell + grammar) suppressed for this section/page.
+    //    Suppress-only: the effective state for the open page is
+    //    `global AND NOT notebookSuppressed AND NOT sectionSuppressed AND NOT
+    //    pageSuppressed` (the per-notebook flag lives in notebooks.json, not
+    //    here). Default 0 so existing notebooks keep proofreading everywhere.
+    r#"
+    ALTER TABLE sections ADD COLUMN proofing_suppressed INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE pages    ADD COLUMN proofing_suppressed INTEGER NOT NULL DEFAULT 0;
+    "#,
+    // 7: independent per-scope grammar/spell prefs (execution-plan #5, revised
+    //    on feedback). Replaces migration 6's single combined suppress flag with
+    //    a tri-state PER CATEGORY: NULL = inherit, 0 = off, 1 = on. Effective for
+    //    the open page is most-specific-wins (page ▸ section ▸ notebook, default
+    //    on) under the global master toggle. Migration 6 is left untouched (a dev
+    //    DB may already sit at user_version 6), so `proofing_suppressed` stays as
+    //    a now-unused column; its "suppressed" rows carry over as both off.
+    r#"
+    ALTER TABLE sections ADD COLUMN grammar_pref INTEGER;
+    ALTER TABLE sections ADD COLUMN spell_pref   INTEGER;
+    ALTER TABLE pages    ADD COLUMN grammar_pref INTEGER;
+    ALTER TABLE pages    ADD COLUMN spell_pref   INTEGER;
+    UPDATE sections SET grammar_pref = 0, spell_pref = 0 WHERE proofing_suppressed = 1;
+    UPDATE pages    SET grammar_pref = 0, spell_pref = 0 WHERE proofing_suppressed = 1;
+    "#,
 ];
 
 /// Open a single-connection pool to a notebook DB with foreign keys on and

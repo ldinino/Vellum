@@ -54,7 +54,16 @@ export function extractText(doc: PMNode): ExtractedText {
   let pendingBreak = false;
 
   doc.descendants((node, pos) => {
+    // Code is never proofed (spec Section 10): skip code blocks whole and inline
+    // `code` runs — Harper would only waste cycles flagging identifiers,
+    // keywords, and punctuation. A code block still counts as a paragraph break
+    // so the surrounding text tokenizes into separate sentences.
+    if (node.type.name === "codeBlock") {
+      pendingBreak = true;
+      return false;
+    }
     if (node.isText && node.text) {
+      if (node.marks.some((m) => m.type.name === "code")) return false;
       if (pendingBreak && text.length > 0) text += "\n\n";
       pendingBreak = false;
       segments.push({ from: pos, textStart: text.length, length: node.text.length });

@@ -12,6 +12,8 @@ export interface MenuItem {
   danger?: boolean;
   /** Show a check mark (e.g. the currently selected color). */
   checked?: boolean;
+  /** Muted trailing text (e.g. a disabled row's reason: "off for this notebook"). */
+  hint?: string;
   onSelect?: () => void;
   /** Nested items render a "label ▶" submenu (e.g. Refine ▶ templates). */
   submenu?: MenuItem[];
@@ -115,6 +117,7 @@ function MenuList({ items, onClose }: { items: MenuItem[]; onClose: () => void }
               ) : null}
             </span>
             <span className="v-menu__label">{item.label}</span>
+            {item.hint && <span className="v-menu__hint">{item.hint}</span>}
             {item.submenu && <span className="v-menu__arrow">▶</span>}
             {item.submenu && openSub === i && (
               <SubMenu items={item.submenu} onClose={onClose} />

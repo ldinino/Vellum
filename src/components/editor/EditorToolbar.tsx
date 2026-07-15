@@ -6,6 +6,7 @@ import { useActiveEditor } from "../../state/activeEditor";
 import { useVellum } from "../../state/vellum";
 import { FONTS, SIZES } from "../../data/fonts";
 import { LinkDialog } from "./LinkDialog";
+import { ProofingBadge } from "./ProofingBadge";
 import { ContextMenu, type MenuItem } from "../ui/ContextMenu";
 import {
   DYNAMIC_FIELD_PRESETS,
@@ -459,6 +460,7 @@ export function TopToolbar() {
             setLinkOpen={setLinkOpen}
           />
         </div>
+        <ProofingBadge />
       </div>
       {linkOpen && editor && <ToolbarLinkDialog editor={editor} onClose={() => setLinkOpen(false)} />}
     </div>

@@ -10,6 +10,10 @@ export interface Notebook {
   createdAt: string;
   /** Soft-delete timestamp (RFC3339) while in the Recycle Bin; absent when live. */
   deletedAt?: string | null;
+  /** Scoped proofreading prefs (execution-plan #5): true = on, false = off,
+   * null/absent = inherit. Grammar and spelling are independent. */
+  grammarPref?: boolean | null;
+  spellPref?: boolean | null;
 }
 
 /** Page sort preference for a section (spec Section 5 / Phase 9). */
@@ -26,6 +30,10 @@ export interface Section {
   pageSortMode: PageSortMode;
   /** "asc" | "desc" (ignored for "custom"). */
   pageSortDir: PageSortDir;
+  /** Scoped proofreading prefs (execution-plan #5): true = on, false = off,
+   * null = inherit. Grammar and spelling are independent. */
+  grammarPref: boolean | null;
+  spellPref: boolean | null;
 }
 
 export interface Page {
@@ -36,6 +44,10 @@ export interface Page {
   updatedAt: string;
   /** First line of content, for the page-list preview. */
   preview: string;
+  /** Scoped proofreading prefs (execution-plan #5): true = on, false = off,
+   * null = inherit. */
+  grammarPref: boolean | null;
+  spellPref: boolean | null;
 }
 
 export interface SearchFilters {

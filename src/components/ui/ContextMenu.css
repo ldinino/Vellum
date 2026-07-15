@@ -80,6 +80,13 @@
   flex: 1;
 }
 
+.v-menu__hint {
+  margin-left: var(--space-2);
+  font-size: calc(var(--text-size-ui) - 1px);
+  font-style: italic;
+  color: var(--text-muted);
+}
+
 .v-menu__arrow {
   font-size: 8px;
   color: var(--text-muted);

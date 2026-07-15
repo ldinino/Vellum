@@ -143,6 +143,14 @@ pub struct NotebookMeta {
     /// notebook is purged). Skipped on serialize so live notebooks stay clean.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub deleted_at: Option<String>,
+    /// Scoped proofreading (execution-plan #5): per-category tri-state —
+    /// None = inherit, Some(true) = on, Some(false) = off — for every page in
+    /// this notebook. Skipped on serialize when None so unaffected notebooks
+    /// stay clean in notebooks.json.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grammar_pref: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spell_pref: Option<bool>,
 }
 
 // ---------------------------------------------------------------------------
@@ -300,5 +308,35 @@ mod tests {
         };
         let s = serde_json::to_string(&t).unwrap();
         assert!(s.contains("\"examples\":[]"), "empty examples serialize as []");
+    }
+
+    #[test]
+    fn notebook_proofing_prefs_skip_when_inherit_and_roundtrip() {
+        // execution-plan #5: per-category proofreading prefs live here.
+        // Live notebooks stay clean \u2014 it's not written when a pref is None (inherit), like deleted_at.
+        let clean = NotebookMeta {
+            id: "n1".into(),
+            name: "Work".into(),
+            folder: "n1".into(),
+            ..Default::default()
+        };
+        let s = serde_json::to_string(&clean).unwrap();
+        assert!(!s.contains("grammarPref"), "an inherited (None) pref is not written");
+        assert!(!s.contains("spellPref"));
+
+        // Explicit prefs serialize under camelCase keys and round-trip.
+        let set = NotebookMeta { grammar_pref: Some(false), spell_pref: Some(true), ..clean };
+        let s = serde_json::to_string(&set).unwrap();
+        assert!(s.contains("\"grammarPref\":false"));
+        assert!(s.contains("\"spellPref\":true"));
+        let back: NotebookMeta = serde_json::from_str(&s).unwrap();
+        assert_eq!(back.grammar_pref, Some(false));
+        assert_eq!(back.spell_pref, Some(true));
+
+        // An older notebooks.json entry (no prefs) reads as inherit.
+        let old: NotebookMeta =
+            serde_json::from_str(r#"{"id":"n1","name":"Work","folder":"n1"}"#).unwrap();
+        assert_eq!(old.grammar_pref, None);
+        assert_eq!(old.spell_pref, None);
     }
 }

@@ -161,6 +161,14 @@ export const renameNotebook = (notebookId: string, name: string) =>
 export const setNotebookColor = (notebookId: string, color: string | null) =>
   invoke<void>("set_notebook_color", { notebookId, color });
 
+/** Set a notebook's per-category proofreading prefs (execution-plan #5):
+ * true = on, false = off, null = inherit. */
+export const setNotebookProofing = (
+  notebookId: string,
+  grammarPref: boolean | null,
+  spellPref: boolean | null,
+) => invoke<void>("set_notebook_proofing", { notebookId, grammarPref, spellPref });
+
 /** Move a notebook to the Recycle Bin (recoverable; spec Section 5.1). */
 export const softDeleteNotebook = (notebookId: string) =>
   invoke<void>("soft_delete_notebook", { notebookId });
@@ -202,6 +210,15 @@ export const setSectionSort = (
   dir: PageSortDir,
 ) => invoke<void>("set_section_sort", { notebookId, sectionId, mode, dir });
 
+/** Set a section's per-category proofreading prefs (execution-plan #5):
+ * true = on, false = off, null = inherit. */
+export const setSectionProofing = (
+  notebookId: string,
+  sectionId: string,
+  grammarPref: boolean | null,
+  spellPref: boolean | null,
+) => invoke<void>("set_section_proofing", { notebookId, sectionId, grammarPref, spellPref });
+
 // --- Pages (per-notebook DB) ------------------------------------------------
 
 export const listPages = (notebookId: string, sectionId: string) =>
@@ -212,6 +229,15 @@ export const createPage = (notebookId: string, sectionId: string, title: string)
 
 export const setPageTitle = (notebookId: string, pageId: string, title: string) =>
   invoke<void>("set_page_title", { notebookId, pageId, title });
+
+/** Set a page's per-category proofreading prefs (execution-plan #5):
+ * true = on, false = off, null = inherit. */
+export const setPageProofing = (
+  notebookId: string,
+  pageId: string,
+  grammarPref: boolean | null,
+  spellPref: boolean | null,
+) => invoke<void>("set_page_proofing", { notebookId, pageId, grammarPref, spellPref });
 
 /** Move a page to the Recycle Bin (spec Section 5.1). */
 export const softDeletePage = (notebookId: string, pageId: string) =>

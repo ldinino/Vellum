@@ -24,7 +24,7 @@ and page).
 | [LINUX](#2-linux-build-planning) | Linux build _(deferred)_ | Platform | L | — |
 | [MOVESECTION](#3-move-sections-between-notebooks) | Move sections between notebooks | Feature | XL | — |
 | [IMPORT](#4-import-documents-into-notebooks) | Import documents (Markdown + more) into notebooks _(shipped)_ | Feature | L | — |
-| [PROOFSCOPE](#5-scoped-proofreading-per-notebook-section-page) | Scoped proofreading (per-notebook, section, page) | Editing | M | — |
+| [PROOFSCOPE](#5-scoped-proofreading-per-notebook-section-page) | Scoped proofreading (per-notebook, section, page) _(shipped)_ | Editing | M | — |
 
 ---
 
@@ -414,6 +414,41 @@ ADO/GFM dialect; import should read the same one:
 
 ### 5. Scoped proofreading (per-notebook, section, page)
 
+**Shipped ([Unreleased], 2026-07-15; revised same day on maintainer feedback).**
+Backend: migration 7 adds tri-state `grammar_pref` / `spell_pref` columns
+(NULL = inherit, 0 = off, 1 = on) to `sections` + `pages`
+([db.rs](../src-tauri/src/db.rs)) — superseding the first cut's single
+`proofing_suppressed` flag (migration 6, left as a dead column since a dev DB may
+already sit at v6); `Section`/`Page` carry the prefs + their list `SELECT`s, plus
+`set_section_proofing` / `set_page_proofing`
+([notebook.rs](../src-tauri/src/notebook.rs)); `NotebookMeta` gains `grammar_pref`
+/ `spell_pref` ([config.rs](../src-tauri/src/config.rs)); three commands
+registered in [lib.rs](../src-tauri/src/lib.rs). **No `grammar.rs` change**
+(Harper is context-free) — but `extractText` now **skips code blocks and inline
+code**, so code is never proofed. Frontend: effective grammar/spell resolve
+**most-specific-wins** under the global master (`resolveProofing` in
+[src/lib/proofing.ts](../src/lib/proofing.ts); the `proofing` selector in
+`vellum.tsx`) and gate `PageEditor`'s `runGrammar` toggles; **Tools ▸ Proofread**
+is a This Page / Section / Notebook submenu, each with **independent Grammar +
+Spelling** toggles (built by `buildProofreadMenu`); the toolbar **badge** is a
+plain one-click button that re-enables all proofreading for just the open page.
+**Broader scopes are authoritative** — setting a section clears its pages'
+overrides and setting a notebook clears all its sections'/pages' overrides — so a
+badge-set page override can't get stuck (fixes a maintainer-reported
+stickiness bug). Verified: `cargo check` + `cargo test` (3 new tests) +
+`npm run build` + a throwaway harness for `resolveProofing` / code-exclusion, all
+green.
+**Residual:** the submenu + badge weren't eyeballed at runtime (env can't launch
+the native window). Folded into spec §10 + CHANGELOG.
+
+**Decisions (autonomous, = the recommendations below, refined on feedback):**
+(1) grammar + spelling **independent per scope** (tri-state, 6 prefs); (2)
+**most-specific-wins** — a page can override its section/notebook (not
+suppress-only); (3) Tools submenu + a plain one-click badge button; (4)
+per-notebook prefs in the `notebooks.json` registry; (5) **no** Properties-dialog
+surface (Tools menu + badge only); (6) code is never proofed; (7) broader scopes
+are **authoritative** — setting a section/notebook clears narrower overrides.
+
 **Current state.** Spelling and grammar are a **single global pair of toggles** —
 `grammar_enabled` + `spellcheck_enabled` in [config.rs](../src-tauri/src/config.rs)
 `AppSettings` (persisted in `app.json`). They are set from **two** places today:
@@ -537,13 +572,13 @@ spelling/grammar.
 
 [IMPORT](#4-import-documents-into-notebooks) **shipped** ([Unreleased],
 2026-07-14) — the full slice (Markdown / HTML / text **+ DOCX**, single-file
-**and** folder round-trip). That leaves two active features.
-[PROOFSCOPE](#5-scoped-proofreading-per-notebook-section-page) is the smaller and
-most self-contained (M — persistence + a frontend gate, no engine change) and a
-clean near-term win. [MOVESECTION](#3-move-sections-between-notebooks) is the
-heaviest — a cross-database migration; schedule it as its own mini-project with
-dedicated testing (see its section for the risks). [macOS](#1-macos-build-planning)
-and [Linux](#2-linux-build-planning) stay deferred post-v1 and unblocked whenever
+**and** folder round-trip), and [PROOFSCOPE](#5-scoped-proofreading-per-notebook-section-page)
+**shipped** ([Unreleased], 2026-07-15) — the suppress-only per-page/section/notebook
+model with the Tools submenu + toolbar badge. That leaves one active feature.
+[MOVESECTION](#3-move-sections-between-notebooks) is the heaviest — a
+cross-database migration; schedule it as its own mini-project with dedicated
+testing (see its section for the risks). [macOS](#1-macos-build-planning) and
+[Linux](#2-linux-build-planning) stay deferred post-v1 and unblocked whenever
 they're picked up (Linux first — AppImage, no signing friction — then macOS).
 
 ## Decisions log
@@ -558,9 +593,9 @@ shipped in v0.2.0).
 | 3 | macOS titlebar | Keep the Windows-style layout (themes planned later) |
 | 4 | Linux packaging | AppImage for v1 (keeps the updater consistent); Flatpak flagged as a later, separate-update-mechanism channel |
 | 5 | Move-section confirmation | Required, via the existing `ask()` dialog pattern |
-| 6 | Proofreading scope model | **Proposed** (awaiting sign-off): suppress-only cascade — a narrower scope can only turn off |
-| 7 | Per-scope granularity | **Proposed** (awaiting sign-off): one combined proofreading flag per scope, not separate spelling/grammar |
-| 8 | Scoped-proofreading indicator | **Proposed** (awaiting sign-off): ambient editor-toolbar badge that names the suppressing scope + doubles as the control; Tools menu repurposed to a This Page / Section / Notebook submenu |
+| 6 | Proofreading scope model | **Shipped (revised):** most-specific-wins — a page can override its section/notebook, under a hard global master |
+| 7 | Per-scope granularity | **Shipped (revised):** grammar + spelling independent per scope (tri-state: inherit/on/off) |
+| 8 | Scoped-proofreading indicator | **Shipped (revised):** Tools ▸ Proofread submenu with per-scope Grammar/Spelling toggles + a plain one-click toolbar badge button; code blocks never proofed |
 
 **Residual open item:** whether ARM64 Linux is in scope — moot for now, since
 [Linux](#2-linux-build-planning) is **deferred**; revisit alongside the Linux

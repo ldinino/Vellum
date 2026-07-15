@@ -810,6 +810,8 @@ pub async fn create_notebook(app: AppHandle, name: String) -> Result<NotebookMet
             .map_or(0, |m| m + 1),
         created_at: chrono::Utc::now().to_rfc3339(),
         deleted_at: None,
+        grammar_pref: None,
+        spell_pref: None,
     };
     registry.notebooks.push(meta.clone());
     if let Err(e) = config::save_registry(&app, &registry) {
@@ -892,6 +894,34 @@ pub fn set_notebook_color(
         .ok_or_else(|| format!("Unknown notebook id {notebook_id}"))?;
     meta.color = color;
     config::save_registry(&app, &registry)
+}
+
+/// Set a notebook's per-category proofreading preferences (execution-plan #5).
+/// They live in the registry (notebooks have no DB metadata row), next to
+/// `color`/`deleted_at`. The notebook is authoritative, so this also clears
+/// every section's and page's own overrides (back to inherit) — so a stale
+/// narrower override (e.g. one set via the badge) can't linger and shadow it.
+#[tauri::command]
+pub async fn set_notebook_proofing(
+    app: AppHandle,
+    notebook_id: String,
+    grammar_pref: Option<bool>,
+    spell_pref: Option<bool>,
+) -> Result<(), String> {
+    let mut registry = config::load_registry(&app)?;
+    let meta = registry
+        .notebooks
+        .iter_mut()
+        .find(|n| n.id == notebook_id)
+        .ok_or_else(|| format!("Unknown notebook id {notebook_id}"))?;
+    meta.grammar_pref = grammar_pref;
+    meta.spell_pref = spell_pref;
+    config::save_registry(&app, &registry)?;
+
+    let pool = pool_for(&app, &notebook_id).await?;
+    let r = notebook::clear_all_proofing_prefs(&pool).await;
+    pool.close().await;
+    r
 }
 
 /// Soft-delete a notebook into the Recycle Bin (spec Section 5.1): stamp its
@@ -1098,6 +1128,21 @@ pub async fn set_section_sort(
     r
 }
 
+/// Set a section's per-category proofreading preferences (execution-plan #5).
+#[tauri::command]
+pub async fn set_section_proofing(
+    app: AppHandle,
+    notebook_id: String,
+    section_id: String,
+    grammar_pref: Option<bool>,
+    spell_pref: Option<bool>,
+) -> Result<(), String> {
+    let pool = pool_for(&app, &notebook_id).await?;
+    let r = notebook::set_section_proofing(&pool, &section_id, grammar_pref, spell_pref).await;
+    pool.close().await;
+    r
+}
+
 // ---------------------------------------------------------------------------
 // Pages
 // ---------------------------------------------------------------------------
@@ -1269,6 +1314,21 @@ pub async fn set_page_title(
     r?;
     index_page(&app, &notebook_id, &page_id).await;
     Ok(())
+}
+
+/// Set a page's per-category proofreading preferences (execution-plan #5).
+#[tauri::command]
+pub async fn set_page_proofing(
+    app: AppHandle,
+    notebook_id: String,
+    page_id: String,
+    grammar_pref: Option<bool>,
+    spell_pref: Option<bool>,
+) -> Result<(), String> {
+    let pool = pool_for(&app, &notebook_id).await?;
+    let r = notebook::set_page_proofing(&pool, &page_id, grammar_pref, spell_pref).await;
+    pool.close().await;
+    r
 }
 
 /// Soft-delete a page into the Recycle Bin (spec Section 5.1): hidden from its
