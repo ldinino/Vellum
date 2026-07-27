@@ -62,6 +62,21 @@ pub fn run() {
                 default_hook(info);
             }));
 
+            // Inline images (and anything else the webview loads with
+            // `convertFileSrc`) come through the asset protocol, whose scope in
+            // tauri.conf.json only covers the DEFAULT root, `$DOCUMENT/Vellum`.
+            // The root is relocatable (Settings ▸ General), and a moved root is
+            // outside that glob — every image then 403s and renders as a broken
+            // 0×0 box. Grant the scope for wherever the data actually lives.
+            match paths::data_dir(&app.handle().clone()) {
+                Ok(root) => {
+                    if let Err(e) = app.asset_protocol_scope().allow_directory(&root, true) {
+                        app_log.error("app", format!("asset scope {}: {e}", root.display()));
+                    }
+                }
+                Err(e) => app_log.error("app", format!("asset scope: {e}")),
+            }
+
             // Load the user's saved custom dictionary into the grammar engine so
             // the very first lint already accepts their words (spec Section 10),
             // independent of when the renderer syncs.

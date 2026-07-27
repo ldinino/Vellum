@@ -739,6 +739,12 @@ pub fn set_data_dir(app: AppHandle, new_parent: String) -> Result<String, String
     }
 
     paths::set_data_root(&app, &new_root)?;
+    // The asset protocol is scoped to the old root until the app restarts; grant
+    // the new one now so inline images keep loading in the meantime.
+    if let Err(e) = app.asset_protocol_scope().allow_directory(&new_root, true) {
+        app.state::<AppLog>()
+            .warn("data", format!("asset scope {}: {e}", new_root.display()));
+    }
     app.state::<AppLog>()
         .info("data", format!("Data location changed to {}", new_root.display()));
     Ok(new_root.to_string_lossy().to_string())

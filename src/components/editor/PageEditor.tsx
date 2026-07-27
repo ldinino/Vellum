@@ -500,13 +500,20 @@ export function PageEditor({
       handlePaste: (view, event) => {
         const cd = event.clipboardData;
         if (!cd) return false;
+        // A copy made in Vellum carries BOTH the picture and the original HTML
+        // (see lib/clipboard.ts). Prefer the HTML so the image keeps its stored
+        // file and size instead of being saved again from the bitmap.
+        const ownHtml =
+          cd.types.includes("text/html") && cd.getData("text/html").includes("data-vellum-src");
         // Image on the clipboard → embed it inline.
-        for (const it of cd.items) {
-          if (it.type.startsWith("image/")) {
-            const f = it.getAsFile();
-            if (f) {
-              void insertImage(f);
-              return true;
+        if (!ownHtml) {
+          for (const it of cd.items) {
+            if (it.type.startsWith("image/")) {
+              const f = it.getAsFile();
+              if (f) {
+                void insertImage(f);
+                return true;
+              }
             }
           }
         }

@@ -7,6 +7,20 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Fixed
+
+- **Images after moving the data folder** — Pictures stopped displaying (an
+  empty box with only a resize grip) once **Settings ▸ General** had been used to
+  store Vellum's data somewhere other than the default `Documents\Vellum`. Vellum
+  now allows the folder you actually chose, so images show up wherever your data
+  lives.
+- **Copying images out of Vellum** — Copying a page (or a single picture) and
+  pasting it into another application — Teams, Word, Outlook, a browser — now
+  brings the images along instead of leaving broken placeholders. A picture
+  copied on its own can also be pasted into apps that only take an image, such
+  as Paint. Pasting back into Vellum still keeps the picture's stored file and
+  size, so nothing is duplicated.
+
 ## [0.2.5] - 2026-07-15
 
 ### Added
