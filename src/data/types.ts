@@ -109,6 +109,8 @@ export interface AppSettings {
   spellcheckEnabled: boolean;
   defaultFont: string;
   defaultFontSize: number;
+  /** UI theme: "light" or "dark" (applied as `data-theme` on the document root). */
+  theme: string;
   /** Strict (0.0) .. Liberal (1.0) global default. */
   refineAdherence: number;
   /** "Fast" | "Balanced" | "Thorough"; null until a tier is chosen. */

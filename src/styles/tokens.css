@@ -28,6 +28,14 @@
   --surface-window: #eaedf1;          /* app background */
   --surface-panel: #f1f3f4;           /* nav / page-list panels */
   --surface-content: #ffffff;         /* editor canvas */
+  --surface-raised: #ffffff;          /* buttons, tabs, menus, popups */
+  --surface-sunken: #f5f6f7;          /* inputs, wells, code blocks */
+  /* Section/notebook colours are pastels chosen for a white UI, and are used
+     via `color-mix(... var(--section-color) N%, var(--tint-base))` to tint tabs,
+     the page "desk", and list rows. Mixing toward these tokens (rather than a
+     literal white/grey) is what lets the same percentages work in dark mode. */
+  --tint-base: #ffffff;               /* what colour tints blend toward */
+  --tint-edge: #9a9a9a;               /* what colour tint borders blend toward */
   --gradient-toolbar: linear-gradient(#ffffff, #eaedf1);
   --gradient-panel: linear-gradient(#fdfdfe, #f1f3f4);
   --gradient-titlebar-fallback: linear-gradient(#dde6f1, #b6c8de);
@@ -120,4 +128,104 @@
   --nb-teal: #76c5c0;
   --nb-yellow: #e6d06e;
   --nb-magenta: #d98ac2;
+}
+
+/*
+ * Dark theme.
+ *
+ * Applied by setting `data-theme="dark"` on <html> (see applyTheme in
+ * src/state/vellum.tsx); everything below is a token override, so component CSS
+ * never needs a theme branch as long as it uses tokens rather than literal
+ * colours.
+ *
+ * The page colour is #262626 — measured from a blank page in Word's dark mode —
+ * and the rest of the palette is built around it. Surfaces are deliberately
+ * grouped first and defined only in terms of themselves so a future OLED theme
+ * can override just that block (surfaces to true black) and inherit the rest.
+ */
+:root[data-theme="dark"] {
+  /* ---- Surfaces --------------------------------------------------------- */
+  /* Chrome sits darker than the page so the writing area is the brightest
+     thing on screen, the same hierarchy the light theme has. */
+  --surface-window: #1e1e1e;          /* app background, behind everything */
+  --surface-panel: #2b2b2b;           /* nav / page-list panels */
+  --surface-content: #262626;         /* the page itself (Word's dark page) */
+  --surface-raised: #333333;          /* buttons, tabs, menus, popups */
+  --surface-sunken: #1a1a1a;          /* inputs, wells, code blocks */
+  /* Section tints blend toward the dark page instead of white, so the same
+     percentages that give pastel surfaces in light mode give muted, tinted
+     dark ones here. */
+  --tint-base: #262626;
+  --tint-edge: #5a5a5a;
+
+  /* ---- Text ------------------------------------------------------------- */
+  /* Not pure white: #e8e8e8 on #262626 is ~11:1, comfortably past WCAG AAA
+     without the harsh glare of #fff on a dark page. */
+  --text-primary: #e8e8e8;
+  --text-secondary: #bdbdbd;
+  --text-muted: #9a9a9a;
+  --text-disabled: #6b6b6b;
+  --text-on-accent: #ffffff;
+
+  /* ---- Borders ---------------------------------------------------------- */
+  --border-strong: #5a5a5a;
+  --border-default: #454545;
+  --border-soft: #3c3c3c;
+  --border-faint: #343434;
+
+  /* ---- Gradients -------------------------------------------------------- */
+  /* Still top-lit, just compressed: a dark theme needs far less contrast
+     between the two stops or the chrome reads as striped. */
+  --gradient-toolbar: linear-gradient(#333333, #272727);
+  --gradient-panel: linear-gradient(#2f2f2f, #2a2a2a);
+  --gradient-button: linear-gradient(#3a3a3a, #303030);
+  --gradient-titlebar-fallback: linear-gradient(#3a3f45, #2a2e33);
+  --button-border: var(--border-default);
+  --shadow-button: 0 1px 2px rgba(0, 0, 0, 0.5);
+
+  /* Amber hover/active glow — the signature Office 2007 highlight, dimmed so it
+     glows against a dark toolbar instead of blaring. */
+  --hover-border: #a5822f;
+  --gradient-hover: linear-gradient(#4a3c1c, #5c4923);
+  --active-border: #c8a04a;
+  --gradient-active: linear-gradient(#5c4923, #6d5628);
+  --selected-fill: #4a3c1c;
+  --selected-border: #a5822f;
+
+  /* ---- Accent ----------------------------------------------------------- */
+  /* Lifted from the light theme's #2860b3, which is too dark to read here. */
+  --accent: #5b9bf0;
+  --accent-bright: #7ab0ff;
+  --accent-deep: #3f7fd4;
+  --accent-soft: #8cbcff;
+  --gradient-accent: linear-gradient(#4a86d8, #2f66b4);
+  --gradient-accent-hover: linear-gradient(#5b9bf0, #3f7fd4);
+  --gradient-accent-pressed: linear-gradient(#2f66b4, #4a86d8);
+
+  /* ---- Shadows & depth --------------------------------------------------- */
+  --shadow-raised: 0 1px 3px rgba(0, 0, 0, 0.6);
+  --shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --shadow-popup: 2px 2px 8px rgba(0, 0, 0, 0.6);
+  --shadow-modal: 2px 2px 12px 1px rgba(0, 0, 0, 0.75);
+
+  /* ---- Aero glass titlebar ------------------------------------------------ */
+  /* The acrylic behind the titlebar picks up the desktop, so only the overlays
+     need flipping: white sheens become dark, and the text shadow that made
+     light-mode titles legible would halo here. */
+  --glass-tint: rgba(40, 46, 54, 0.85);
+  --glass-border: rgba(0, 0, 0, 0.75);
+  --glass-inner-stroke: rgba(255, 255, 255, 0.12);
+  --aero-window-glass: linear-gradient(135deg, #ffffff14 70px, transparent 100px),
+    linear-gradient(225deg, #ffffff14 70px, transparent 100px);
+  --aero-window-frost: rgba(20, 24, 28, 0.45);
+  --aero-window-border: #000000d9;
+  --glass-sheen:
+    linear-gradient(transparent 20%, rgba(255, 255, 255, 0.12) 40%, transparent 41%),
+    linear-gradient(to right, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.04));
+  --glass-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+
+  /* ---- Feature underlines ------------------------------------------------- */
+  /* Brightened so the squiggles stay visible over #262626. */
+  --grammar-underline: #4cc38a;
+  --spell-underline: #ff7b70;
 }

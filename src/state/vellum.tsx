@@ -86,6 +86,8 @@ interface VellumState {
    * on the document root, so unstyled page text uses them). */
   defaultFont: string;
   defaultFontSize: number;
+  /** UI theme ("light" | "dark"), mirrored onto <html data-theme>. */
+  theme: string;
   /** Words the user added to the Harper dictionary (app.json, spec Section 10). */
   customDictionary: string[];
   /** Grammar lint categories the user has ignored via "Ignore this rule". */
@@ -127,6 +129,7 @@ const initial: VellumState = {
   spellcheckEnabled: true,
   defaultFont: "Segoe UI",
   defaultFontSize: 14,
+  theme: "light",
   customDictionary: [],
   ignoredGrammarRules: [],
   pageTemplates: [],
@@ -213,6 +216,8 @@ export interface VellumActions {
 
   setGrammarEnabled: (enabled: boolean) => Promise<void>;
   setSpellcheckEnabled: (enabled: boolean) => Promise<void>;
+  /** Switch the UI theme ("light" | "dark") and persist it. */
+  setTheme: (theme: string) => Promise<void>;
   /** Set the editor default font family (Settings → Editor; persisted + applied). */
   setDefaultFont: (font: string) => Promise<void>;
   /** Set the editor default font size in px (Settings → Editor; persisted + applied). */
@@ -355,6 +360,18 @@ function applyEditorFont(font: string, size: number) {
   else root.style.removeProperty("--editor-font");
   if (size > 0) root.style.setProperty("--editor-font-size", `${size}px`);
   else root.style.removeProperty("--editor-font-size");
+}
+
+/** Themes we ship. Anything else in app.json falls back to light. */
+const THEMES = ["light", "dark"];
+
+/** Put the theme on the document root as `data-theme`, which every design token
+ * keys off (see tokens.css). Set on config load and whenever the setting
+ * changes, so the whole UI — including which icon set is used — switches live
+ * with no reload. */
+function applyTheme(theme: string) {
+  const value = THEMES.includes(theme) ? theme : "light";
+  document.documentElement.dataset.theme = value;
 }
 
 export function VellumProvider({ children }: { children: ReactNode }) {
@@ -530,12 +547,15 @@ export function VellumProvider({ children }: { children: ReactNode }) {
         const defaultFont = cfg.settings.defaultFont || "Segoe UI";
         const defaultFontSize = cfg.settings.defaultFontSize || 14;
         applyEditorFont(defaultFont, defaultFontSize);
+        const theme = cfg.settings.theme || "light";
+        applyTheme(theme);
         setState((s) => ({
           ...s,
           grammarEnabled: cfg.settings.grammarEnabled,
           spellcheckEnabled: cfg.settings.spellcheckEnabled,
           defaultFont,
           defaultFontSize,
+          theme,
           customDictionary: cfg.settings.customDictionary ?? [],
           ignoredGrammarRules: cfg.settings.ignoredGrammarRules ?? [],
           pageTemplates: cfg.pageTemplates ?? [],
@@ -861,6 +881,20 @@ export function VellumProvider({ children }: { children: ReactNode }) {
         await api.saveAppConfig({
           ...cfg,
           settings: { ...cfg.settings, spellcheckEnabled: enabled },
+        });
+      } catch (e) {
+        fail(e);
+      }
+    },
+    setTheme: async (theme) => {
+      // Repaint immediately (the attribute drives every token), then persist.
+      applyTheme(theme);
+      setState((s) => ({ ...s, theme }));
+      try {
+        const cfg = await api.getAppConfig();
+        await api.saveAppConfig({
+          ...cfg,
+          settings: { ...cfg.settings, theme },
         });
       } catch (e) {
         fail(e);

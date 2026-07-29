@@ -30,6 +30,11 @@ pub struct AppSettings {
     pub spellcheck_enabled: bool,
     pub default_font: String,
     pub default_font_size: u32,
+    /// UI theme: "light" (default) or "dark". Applied as `data-theme` on the
+    /// document root, which every design token keys off. Left as a free-form
+    /// string rather than an enum so a future variant (e.g. an OLED black) is a
+    /// CSS-only change and an unknown value degrades to light.
+    pub theme: String,
     /// Strict (0.0) .. Liberal (1.0) global default.
     pub refine_adherence: f32,
     /// Fast | Balanced | Thorough; None until first-run detection picks one.
@@ -66,6 +71,7 @@ impl Default for AppSettings {
             // 14px = the editor's base size token (--text-size-editor); keep in
             // sync so a fresh app.json matches the default page look.
             default_font_size: 14,
+            theme: "light".into(),
             refine_adherence: 0.5,
             refine_model_tier: None,
             grammar_language: "en-US".into(),

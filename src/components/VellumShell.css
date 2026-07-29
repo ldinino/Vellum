@@ -26,9 +26,9 @@
      set inline per the open section. */
   --desk-gradient: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--section-color) 22%, white) 0,
-    color-mix(in srgb, var(--section-color) 12%, white) 240px,
-    color-mix(in srgb, var(--section-color) 12%, white)
+    color-mix(in srgb, var(--section-color) 22%, var(--tint-base)) 0,
+    color-mix(in srgb, var(--section-color) 12%, var(--tint-base)) 240px,
+    color-mix(in srgb, var(--section-color) 12%, var(--tint-base))
   );
 }
 
@@ -89,7 +89,7 @@
   min-width: 0;
   min-height: 0;
   display: flex;
-  border: 1px solid color-mix(in srgb, var(--section-color) 50%, #9a9a9a);
+  border: 1px solid color-mix(in srgb, var(--section-color) 50%, var(--tint-edge));
   border-radius: var(--radius-panel);
   overflow: hidden;
 }

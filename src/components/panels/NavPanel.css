@@ -79,14 +79,14 @@
   justify-content: center;
   width: 30px;
   padding: var(--space-4) var(--space-1);
-  border: 1px solid color-mix(in srgb, var(--nb-color) 55%, #9a9a9a);
+  border: 1px solid color-mix(in srgb, var(--nb-color) 55%, var(--tint-edge));
   border-radius: var(--radius-control);
-  background: color-mix(in srgb, var(--nb-color) 40%, white);
+  background: color-mix(in srgb, var(--nb-color) 40%, var(--tint-base));
   cursor: pointer;
 }
 
 .v-nav__rail-item:hover {
-  background: color-mix(in srgb, var(--nb-color) 55%, white);
+  background: color-mix(in srgb, var(--nb-color) 55%, var(--tint-base));
 }
 
 .v-nav__rail-item--selected,
@@ -118,9 +118,9 @@
    lighter body holding its sections. */
 .v-nav__group {
   margin-bottom: var(--space-3);
-  border: 1px solid color-mix(in srgb, var(--nb-color) 55%, #9a9a9a);
+  border: 1px solid color-mix(in srgb, var(--nb-color) 55%, var(--tint-edge));
   border-radius: var(--radius-panel);
-  background: color-mix(in srgb, var(--nb-color) 12%, white);
+  background: color-mix(in srgb, var(--nb-color) 12%, var(--tint-base));
   overflow: hidden;
 }
 
@@ -144,7 +144,7 @@
 .v-nav__notebook {
   font-weight: 600;
   /* Colored header bar; square so it fills the rounded box's top corners. */
-  background: color-mix(in srgb, var(--nb-color) 58%, white);
+  background: color-mix(in srgb, var(--nb-color) 58%, var(--tint-base));
   border-color: transparent;
   border-radius: 0;
 }

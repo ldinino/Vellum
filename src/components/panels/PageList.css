@@ -92,11 +92,11 @@
   text-align: left;
   /* Light tabs that rest on the desk (just a touch above it), defined mainly by a
      soft outline — not dark blocks. */
-  background: color-mix(in srgb, var(--section-color) 26%, white);
+  background: color-mix(in srgb, var(--section-color) 26%, var(--tint-base));
   /* No left edge of its own — the editor's right border is the page-edge line that
      sits just to the tab's left. Shift 1px right to undo the items' -1px so the tab
      lands on the boundary, leaving the editor's border showing beside it. */
-  border: 1px solid color-mix(in srgb, var(--section-color) 42%, white);
+  border: 1px solid color-mix(in srgb, var(--section-color) 42%, var(--tint-base));
   border-left: none;
   border-radius: 0 var(--radius-control) var(--radius-control) 0;
   cursor: pointer;
@@ -105,7 +105,7 @@
 }
 
 .v-pagelist__item:hover {
-  background: color-mix(in srgb, var(--section-color) 38%, white);
+  background: color-mix(in srgb, var(--section-color) 38%, var(--tint-base));
 }
 
 .v-pagelist__item--selected,
@@ -116,9 +116,9 @@
   background: linear-gradient(
     90deg,
     var(--surface-content) 0%,
-    color-mix(in srgb, var(--section-color) 18%, white) 100%
+    color-mix(in srgb, var(--section-color) 18%, var(--tint-base)) 100%
   );
-  border-color: color-mix(in srgb, var(--section-color) 50%, #9a9a9a);
+  border-color: color-mix(in srgb, var(--section-color) 50%, var(--tint-edge));
   /* The active tab keeps the items' -1px shift (no +1px reset), so its white slides
      1px left over the editor's right border and covers just that slice — blending
      into the editor while the border stays intact above and below. */
