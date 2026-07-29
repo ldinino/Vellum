@@ -257,12 +257,15 @@
   --selection-text: var(--w98-title-text);
   --button-border: var(--w98-shadow);
 
-  /* 98 casts no shadows. */
+  /* 98 casts no shadows — except popups, which still need to lift off the
+     surface behind them. They get the flat offset block rather than a blur, so
+     every `--shadow-popup` consumer (search results, grammar popover, update
+     notice, error boundary) is covered without enumerating them. */
   --shadow-button: none;
   --shadow-raised: none;
   --shadow-toolbar: none;
   --shadow-panel: none;
-  --shadow-popup: none;
+  --shadow-popup: var(--w98-drop-shadow);
   --shadow-modal: none;
 
   /* The glass tokens still feed a few Aero rules; neutralise them so nothing
