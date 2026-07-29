@@ -23,6 +23,9 @@ interface Segment {
 export interface ExtractedText {
   text: string;
   segments: Segment[];
+  /** UTF-16 [start, end) ranges of hyperlink text within `text`. Lints that
+   * overlap these are dropped so hyperlinks aren't spell- or grammar-checked. */
+  linkRanges: Array<[number, number]>;
 }
 
 /** A backend span resolved to live document coordinates plus its lint data. */
@@ -47,9 +50,16 @@ export interface MappedLint {
  * following paragraph into one sentence and mis-flagged as an over-long
  * run-on. A blank line reads as a hard paragraph break in every sentence
  * tokenizer.
+ *
+ * A hard line break (Shift+Enter) inside a paragraph is treated the same way,
+ * so two visual lines split within one paragraph don't merge into a single
+ * run-on either. Hyperlink text is recorded in `linkRanges` (but left in place)
+ * so lints landing on a link can be dropped later — URLs and link labels
+ * aren't proofed.
  */
 export function extractText(doc: PMNode): ExtractedText {
   const segments: Segment[] = [];
+  const linkRanges: Array<[number, number]> = [];
   let text = "";
   let pendingBreak = false;
 
@@ -62,10 +72,23 @@ export function extractText(doc: PMNode): ExtractedText {
       pendingBreak = true;
       return false;
     }
+    // A hard line break (Shift+Enter) inside a paragraph starts a new visual
+    // line; treat it as a paragraph break too, so a line ending in a colon
+    // isn't merged with the next line into one over-long run-on sentence.
+    if (node.type.name === "hardBreak") {
+      pendingBreak = true;
+      return false;
+    }
     if (node.isText && node.text) {
       if (node.marks.some((m) => m.type.name === "code")) return false;
       if (pendingBreak && text.length > 0) text += "\n\n";
       pendingBreak = false;
+      // Hyperlinks aren't proofed (the text is often a URL or a UI label, not
+      // prose): record the span so lints landing on it are dropped, but keep the
+      // text so the surrounding sentence still reads normally for grammar.
+      if (node.marks.some((m) => m.type.name === "link")) {
+        linkRanges.push([text.length, text.length + node.text.length]);
+      }
       segments.push({ from: pos, textStart: text.length, length: node.text.length });
       text += node.text;
       return false; // text nodes have no children to visit
@@ -77,7 +100,7 @@ export function extractText(doc: PMNode): ExtractedText {
     return true;
   });
 
-  return { text, segments };
+  return { text, segments, linkRanges };
 }
 
 /**
@@ -133,6 +156,8 @@ export function mapLints(
   for (const s of spans) {
     if (s.isSpelling ? !toggles.spell : !toggles.grammar) continue;
     if (ignoredRules.has(s.kind)) continue;
+    // Hyperlinks aren't proofed: drop any lint that overlaps a link's text.
+    if (extracted.linkRanges.some(([a, b]) => s.start < b && s.end > a)) continue;
     const from = mapOffset(extracted.segments, s.start);
     const to = mapOffset(extracted.segments, s.end);
     if (from == null || to == null || from >= to) continue;

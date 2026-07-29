@@ -18,14 +18,14 @@ _None logged yet._
 ### UI
 
 - [ ] Refine spinner needs a better asset — an hourglass GIF or something.
-- [ ] Grammar check sometimes incorrectly flags two lines as a run-on sentence:
+- [x] Grammar check sometimes incorrectly flags two lines as a run-on sentence:
   finish a sentence with a colon, hit Return, and begin a new sentence, and
   Harper mistakes the two for one long sentence.
 - [x] Image grabbers are always visible — they should only appear on hover.
 
 ### UX
 
-- [ ] Don't spell-check or grammar-check hyperlinks.
+- [x] Don't spell-check or grammar-check hyperlinks.
 - [ ] Make code blocks more dynamic. Sometimes a code block should behave more
   like an inline `code` insert mid-sentence. If the code block is on its own
   line, keep today's behavior. If I highlight a word within a sentence (or invoke

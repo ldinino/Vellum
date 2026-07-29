@@ -11,6 +11,13 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 - **Image resize handle** — The small resize grip on a picture now appears only
   when you hover over the picture or select it, instead of always being visible.
+- **False run-on warning across a line break** — Two lines separated by a soft
+  line break (Shift+Enter) — for example a line ending in a colon followed by a
+  new sentence — are no longer merged and flagged as a single over-long "run-on"
+  sentence. Each line is now checked on its own, matching separate paragraphs.
+- **Hyperlinks are no longer proofed** — Spell check and grammar check now skip
+  the text of hyperlinks, so link labels and pasted URLs aren't underlined as
+  misspellings or grammar mistakes.
 
 ## [0.2.6] - 2026-07-27
 
