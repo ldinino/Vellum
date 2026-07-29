@@ -63,6 +63,9 @@ function FormattingGroups({
   // placeholder — and stay accurate when the user changes the default.
   const { defaultFont, defaultFontSize } = useVellum();
   const [phMenu, setPhMenu] = useState<{ x: number; y: number } | null>(null);
+  const [colorMenu, setColorMenu] = useState<{ x: number; y: number; kind: "text" | "highlight" } | null>(null);
+  const textColorRef = useRef<HTMLInputElement>(null);
+  const highlightRef = useRef<HTMLInputElement>(null);
   // Text with no colour mark follows the theme, so the colour picker's fallback
   // has to as well — otherwise dark mode shows a black swatch for text that is
   // actually rendering light.
@@ -104,6 +107,41 @@ function FormattingGroups({
       { label: "Live date & time", icon: "calendar", submenu: liveSub("datetime") },
     ];
   };
+
+  // Text colour / highlight menus. "Automatic" is the important one: it removes
+  // the colour mark entirely rather than setting a colour, so the text follows
+  // the theme (black on the light page, light on the dark one). Text with an
+  // explicit colour keeps it in both themes, matching Word — which is why the
+  // reset needs to be reachable at all.
+  const textColorItems = (): MenuItem[] => [
+    {
+      label: "Automatic",
+      icon: "edit-color",
+      checked: !s?.color,
+      onSelect: () => editor?.chain().focus().unsetColor().run(),
+      separatorAfter: true,
+    },
+    {
+      label: "More colors…",
+      icon: "highlighter-color",
+      onSelect: () => textColorRef.current?.click(),
+    },
+  ];
+
+  const highlightItems = (): MenuItem[] => [
+    {
+      label: "No highlight",
+      icon: "eraser",
+      checked: !s?.highlight,
+      onSelect: () => editor?.chain().focus().unsetHighlight().run(),
+      separatorAfter: true,
+    },
+    {
+      label: "More colors…",
+      icon: "highlighter-color",
+      onSelect: () => highlightRef.current?.click(),
+    },
+  ];
 
   // Tiptap v3's `useEditor` no longer re-renders on every transaction, so the
   // toolbar must subscribe explicitly to keep active states / select values in
@@ -248,28 +286,53 @@ function FormattingGroups({
             </option>
           ))}
         </select>
-        <label className={colorClass} title="Text color">
+        <button
+          type="button"
+          className={colorClass}
+          title="Text color"
+          disabled={disabled}
+          onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setColorMenu({ x: r.left, y: r.bottom, kind: "text" });
+          }}
+        >
           {/* No colour mark means "automatic": the letter inherits the theme's
               text colour rather than being pinned to black, so the swatch shows
-              what the text will actually look like. The native colour input
-              still needs a concrete hex, so fall back to the theme default. */}
+              what the text will actually look like. */}
           <span style={s?.color ? { color: s.color } : undefined}>A</span>
-          <input
-            type="color"
-            value={s?.color ?? automaticTextColor}
-            disabled={disabled}
-            onChange={(e) => editor?.chain().focus().setColor(e.target.value).run()}
-          />
-        </label>
-        <label className={`${colorClass} v-editortoolbar__color--hl`} title="Highlight">
+        </button>
+        {/* The native picker is opened from the menu's "More colors…" entry; it
+            still needs a concrete hex, so fall back to the theme's automatic. */}
+        <input
+          ref={textColorRef}
+          className="v-editortoolbar__colorinput"
+          type="color"
+          value={s?.color ?? automaticTextColor}
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(e) => editor?.chain().focus().setColor(e.target.value).run()}
+        />
+        <button
+          type="button"
+          className={`${colorClass} v-editortoolbar__color--hl`}
+          title="Highlight"
+          disabled={disabled}
+          onClick={(e) => {
+            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+            setColorMenu({ x: r.left, y: r.bottom, kind: "highlight" });
+          }}
+        >
           <span style={{ background: s?.highlight ?? "#ffe600" }} />
-          <input
-            type="color"
-            value={s?.highlight ?? "#ffe600"}
-            disabled={disabled}
-            onChange={(e) => editor?.chain().focus().setHighlight({ color: e.target.value }).run()}
-          />
-        </label>
+        </button>
+        <input
+          ref={highlightRef}
+          className="v-editortoolbar__colorinput"
+          type="color"
+          value={s?.highlight ?? "#ffe600"}
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(e) => editor?.chain().focus().setHighlight({ color: e.target.value }).run()}
+        />
       </ToolbarGroup>
 
       <ToolbarSeparator />
@@ -428,6 +491,14 @@ function FormattingGroups({
           x={phMenu.x}
           y={phMenu.y}
           onClose={() => setPhMenu(null)}
+        />
+      )}
+      {colorMenu && (
+        <ContextMenu
+          items={colorMenu.kind === "text" ? textColorItems() : highlightItems()}
+          x={colorMenu.x}
+          y={colorMenu.y}
+          onClose={() => setColorMenu(null)}
         />
       )}
     </>

@@ -94,6 +94,9 @@
   justify-content: center;
   width: 26px;
   height: 24px;
+  padding: 0;
+  font: inherit;
+  color: var(--text-primary);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-control);
   background: var(--gradient-button);
@@ -113,21 +116,21 @@
   border-radius: 1px;
 }
 
-/* The native color input sits invisibly over the swatch. */
-.v-editortoolbar__color input[type="color"] {
+/* The native color pickers are opened from the swatch menus' "More colors…"
+   entry, so they are kept out of the layout entirely rather than laid over the
+   swatch (which would swallow the click that opens the menu). */
+.v-editortoolbar__colorinput {
   position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-  border: none;
+  width: 0;
+  height: 0;
   padding: 0;
+  border: none;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.v-editortoolbar__color.is-disabled {
+.v-editortoolbar__color.is-disabled,
+.v-editortoolbar__color:disabled {
   opacity: 0.45;
-  cursor: default;
-}
-
-.v-editortoolbar__color.is-disabled input[type="color"] {
   cursor: default;
 }
