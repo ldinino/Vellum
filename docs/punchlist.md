@@ -34,9 +34,14 @@ _None logged yet._
 
 ### Other
 
-- [ ] The UI is slow to draw: clicking a section takes a couple of seconds for
+- [x] The UI is slow to draw: clicking a section takes a couple of seconds for
   the pages to come in, especially on ARM64 machines (tested on a Mac running
   Parallels).
+  - Two measured backend causes fixed: every command was reopening the notebook
+    database (~5 ms of setup vs ~0.2 ms of query — 24x overhead), and every
+    launch rebuilt the whole search index (~1.2 s for 300 pages). Both are now
+    cached / incremental. Frontend startup cost (bundle size, editor mount) has
+    not been profiled yet — revisit if it still feels sluggish.
 
 ## Features
 
