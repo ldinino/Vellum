@@ -23,9 +23,10 @@ interface Segment {
 export interface ExtractedText {
   text: string;
   segments: Segment[];
-  /** UTF-16 [start, end) ranges of hyperlink text within `text`. Lints that
-   * overlap these are dropped so hyperlinks aren't spell- or grammar-checked. */
-  linkRanges: Array<[number, number]>;
+  /** UTF-16 [start, end) ranges of text that must not be proofed — hyperlinks
+   * and inline `code`. Any lint overlapping one of these is dropped, so their
+   * text is never spell- or grammar-checked. */
+  noProofRanges: Array<[number, number]>;
 }
 
 /** A backend span resolved to live document coordinates plus its lint data. */
@@ -53,21 +54,23 @@ export interface MappedLint {
  *
  * A hard line break (Shift+Enter) inside a paragraph is treated the same way,
  * so two visual lines split within one paragraph don't merge into a single
- * run-on either. Hyperlink text is recorded in `linkRanges` (but left in place)
- * so lints landing on a link can be dropped later — URLs and link labels
- * aren't proofed.
+ * run-on either. Hyperlink and inline-`code` text is left in place (so the
+ * sentence around it still reads normally, with no spliced-out gap) but its
+ * span is recorded in `noProofRanges` so any lint landing on or across it is
+ * dropped later — URLs, link labels, and code aren't proofed.
  */
 export function extractText(doc: PMNode): ExtractedText {
   const segments: Segment[] = [];
-  const linkRanges: Array<[number, number]> = [];
+  const noProofRanges: Array<[number, number]> = [];
   let text = "";
   let pendingBreak = false;
 
   doc.descendants((node, pos) => {
-    // Code is never proofed (spec Section 10): skip code blocks whole and inline
-    // `code` runs — Harper would only waste cycles flagging identifiers,
-    // keywords, and punctuation. A code block still counts as a paragraph break
-    // so the surrounding text tokenizes into separate sentences.
+    // Code blocks are never proofed (spec Section 10): skip them whole. (Inline
+    // `code` is handled in the text branch below — its text is kept but recorded
+    // so its lints are dropped, which avoids splicing a gap into the sentence.)
+    // A code block still counts as a paragraph break so the surrounding text
+    // tokenizes into separate sentences.
     if (node.type.name === "codeBlock") {
       pendingBreak = true;
       return false;
@@ -80,14 +83,14 @@ export function extractText(doc: PMNode): ExtractedText {
       return false;
     }
     if (node.isText && node.text) {
-      if (node.marks.some((m) => m.type.name === "code")) return false;
       if (pendingBreak && text.length > 0) text += "\n\n";
       pendingBreak = false;
-      // Hyperlinks aren't proofed (the text is often a URL or a UI label, not
-      // prose): record the span so lints landing on it are dropped, but keep the
-      // text so the surrounding sentence still reads normally for grammar.
-      if (node.marks.some((m) => m.type.name === "link")) {
-        linkRanges.push([text.length, text.length + node.text.length]);
+      // Inline `code` and hyperlinks aren't proofed. Keep their text in place
+      // (so the surrounding sentence still reads normally and no false gap is
+      // spliced in) but record the span so any lint that lands on — or spans
+      // across — it is dropped in mapLints.
+      if (node.marks.some((m) => m.type.name === "code" || m.type.name === "link")) {
+        noProofRanges.push([text.length, text.length + node.text.length]);
       }
       segments.push({ from: pos, textStart: text.length, length: node.text.length });
       text += node.text;
@@ -100,7 +103,7 @@ export function extractText(doc: PMNode): ExtractedText {
     return true;
   });
 
-  return { text, segments, linkRanges };
+  return { text, segments, noProofRanges };
 }
 
 /**
@@ -156,8 +159,8 @@ export function mapLints(
   for (const s of spans) {
     if (s.isSpelling ? !toggles.spell : !toggles.grammar) continue;
     if (ignoredRules.has(s.kind)) continue;
-    // Hyperlinks aren't proofed: drop any lint that overlaps a link's text.
-    if (extracted.linkRanges.some(([a, b]) => s.start < b && s.end > a)) continue;
+    // Hyperlinks and inline code aren't proofed: drop any lint overlapping them.
+    if (extracted.noProofRanges.some(([a, b]) => s.start < b && s.end > a)) continue;
     const from = mapOffset(extracted.segments, s.start);
     const to = mapOffset(extracted.segments, s.end);
     if (from == null || to == null || from >= to) continue;
