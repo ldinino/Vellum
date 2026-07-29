@@ -211,6 +211,37 @@ pub fn get_paths(app: AppHandle) -> Result<AppPaths, String> {
     })
 }
 
+/// The tint applied to the acrylic blur behind the Aero chrome. Also used by
+/// `lib.rs` at startup, so both paths stay in sync.
+#[cfg(target_os = "windows")]
+pub const ACRYLIC_TINT: (u8, u8, u8, u8) = (215, 228, 242, 50);
+
+/// Turn the desktop acrylic blur behind the window chrome on or off.
+///
+/// The Aero themes are built on real desktop glass; the Windows 98 family needs
+/// a flat opaque window, so switching theme family re-applies or clears it live
+/// rather than waiting for a restart. Best-effort on every platform — a failure
+/// just leaves the current window effect in place.
+#[tauri::command]
+pub fn set_window_acrylic(app: AppHandle, enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(win) = app.get_webview_window("main") {
+            let result = if enabled {
+                window_vibrancy::apply_acrylic(&win, Some(ACRYLIC_TINT))
+            } else {
+                window_vibrancy::clear_acrylic(&win)
+            };
+            if let Err(e) = result {
+                app.state::<AppLog>().warn("ui", format!("window acrylic: {e}"));
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = (app, enabled);
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Export / Print & version info (Phase 10, spec Sections 14 / 15)
 // ---------------------------------------------------------------------------

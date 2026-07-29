@@ -539,7 +539,7 @@ No PDF or HTML *export* in v1; PDF, RTF, and OneNote (`.one`) *import* are likew
 - Mobile
 - Plugin/extension system
 - NPU acceleration
-- Themes beyond the retro aesthetic. **Future item:** a theme system (e.g. swappable Windows 9x / classic asset themes — there's a large ecosystem of these). Out of scope for v1, but the architecture already leaves room: the palette/gradients/metrics are centralized as CSS custom properties in `tokens.css`, so a theme is largely an alternate token set. No work planned now.
+- Swappable *asset* themes (third-party icon/sound/wallpaper packs from the classic-Windows ecosystem). The theme *system* itself now exists: `data-chrome` picks a chrome family (`aero`, `98`), `data-theme` picks a colour scheme within it, `data-scheme` carries light/dark, and `data-corners` carries the corner style — so a new scheme is an alternate token set in `tokens.css` / `theme98.css` and a new family is one more stylesheet. Loading packs from disk at runtime is what remains out of scope.
 
 ---
 

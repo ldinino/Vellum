@@ -10,3 +10,17 @@ kind. Full text: https://github.com/khang-nd/7.css/blob/main/LICENSE
 
 This attribution must also appear in the app's About dialog (Phase 10), alongside
 the Fugue Icons credit (see src/assets/icons/ATTRIBUTION.txt).
+
+The bevel geometry in src/styles/theme98.css (the raised, sunken and field
+inset-shadow rings that give the Windows 98 theme its 3D controls) follows
+98.css by Jordan Scales (https://github.com/jdan/98.css), Copyright (c) 2020,
+licensed under the MIT License. The recipes are re-expressed as our own custom
+properties; no code is copied and 98.css is not a dependency. The Windows
+Standard palette (#c0c0c0 / #dfdfdf / #808080 / #000080) is the Microsoft system
+colour set; the other schemes are our own interpretations of the names from the
+Windows 98 Display > Appearance tab.
+
+MIT License — permission is hereby granted, free of charge, to use, copy, modify,
+and distribute the software, provided the copyright notice and this permission
+notice are included. The software is provided "as is", without warranty of any
+kind. Full text: https://github.com/jdan/98.css/blob/main/LICENSE

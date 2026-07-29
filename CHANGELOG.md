@@ -9,6 +9,18 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ### Added
 
+- **Windows 98 theme** — Vellum can now dress up as Windows 98, chosen under
+  **Settings ▸ General ▸ Appearance**. It brings the era's own window chrome: a
+  solid gradient title bar with square caption buttons, flat grey surfaces, and
+  3D bevelled buttons, tabs, list boxes and scrollbars in place of Aero's
+  gradients and glass. Seven colour schemes ship with it — **Windows Standard**,
+  **Dark**, **Eggplant**, **Spruce**, **Rose**, **Desert** and **Storm (VGA)** —
+  and, just like the real thing, you can pick the two colours its title bar
+  fades between. Is it era-appropriate for a note-taking app? No. Is it fun? Yes.
+- **Rounded or square corners** — A new **Corners** setting rounds or squares the
+  section tabs, notebooks, buttons and panels across the whole app. **Automatic**
+  follows the theme (rounded in Aero, square in Windows 98), so you can also have
+  a rounded Windows 98 or a square Aero if you want one.
 - **Dark mode** — Vellum can now be dark throughout, chosen under
   **Settings ▸ General ▸ Appearance**. There are two dark themes: **Dark**, built
   around the same page colour Word uses, and **Dark (OLED black)**, which uses

@@ -338,3 +338,24 @@
      hairline of its own instead. */
   --shadow-toolbar: 0 1px 0 var(--border-soft);
 }
+
+/*
+ * Corner style (Settings ▸ General ▸ Appearance).
+ *
+ * `data-corners` is resolved by applyAppearance in src/state/vellum.tsx —
+ * "Automatic" means rounded in Aero and square in Windows 98, and the user can
+ * pin either. Squaring is one sweep rather than 36 hand-edited literals, so it
+ * also covers rules we don't own (ProseMirror, mermaid, KaTeX) and anything
+ * added later; the tokens are zeroed too so values derived from them agree.
+ */
+:root[data-corners="square"] {
+  --radius-control: 0;
+  --radius-panel: 0;
+  --aero-window-radius: 0;
+}
+
+:root[data-corners="square"] *,
+:root[data-corners="square"] *::before,
+:root[data-corners="square"] *::after {
+  border-radius: 0 !important;
+}

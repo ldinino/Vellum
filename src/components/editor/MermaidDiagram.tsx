@@ -26,7 +26,7 @@ import {
 } from "@tiptap/react";
 import mermaid from "mermaid";
 import { useEffect, useRef, useState } from "react";
-import { useThemeName } from "../ui/Icon";
+import { useIsDarkTheme } from "../ui/Icon";
 
 /** Starter diagram inserted by Insert ▸ Mermaid Diagram. */
 export const DEFAULT_MERMAID_SOURCE = `graph TD
@@ -108,7 +108,7 @@ function MermaidNodeView({ node, updateAttributes, editor, selected }: NodeViewP
   const [svg, setSvg] = useState("");
   const [error, setError] = useState<string | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const themeName = useThemeName();
+  const dark = useIsDarkTheme();
 
   // Re-render whenever the committed source changes (not while editing the
   // draft), and when the theme flips — mermaid's palette is baked into the SVG.
@@ -120,7 +120,7 @@ function MermaidNodeView({ node, updateAttributes, editor, selected }: NodeViewP
       setError(null);
       return;
     }
-    renderMermaid(text, themeName !== "light").then(
+    renderMermaid(text, dark).then(
       (out) => {
         if (!cancelled) {
           setSvg(out);
@@ -137,7 +137,7 @@ function MermaidNodeView({ node, updateAttributes, editor, selected }: NodeViewP
     return () => {
       cancelled = true;
     };
-  }, [source, themeName]);
+  }, [source, dark]);
 
   useEffect(() => {
     if (editing) taRef.current?.focus();

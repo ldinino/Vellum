@@ -81,7 +81,11 @@ pub fn run() {
             // Load the user's saved custom dictionary into the grammar engine so
             // the very first lint already accepts their words (spec Section 10),
             // independent of when the renderer syncs.
+            #[cfg_attr(not(target_os = "windows"), allow(unused_mut, unused_assignments))]
+            let mut wants_acrylic = true;
             if let Ok(cfg) = config::load_app_config(app.handle()) {
+                // The Windows 98 family is a flat opaque window — no desktop glass.
+                wants_acrylic = cfg.settings.theme != "98";
                 grammar::set_user_words(cfg.settings.custom_dictionary);
             }
             // Real Aero-style glass behind the chrome (Phase 9): acrylic
@@ -90,8 +94,9 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             {
                 if let Some(win) = app.get_webview_window("main") {
-                    let _ = window_vibrancy::apply_acrylic(&win, Some((215, 228, 242, 50)));
-
+                    if wants_acrylic {
+                        let _ = window_vibrancy::apply_acrylic(&win, Some(commands::ACRYLIC_TINT));
+                    }
                     // Turn off WebView2's browser accelerator keys so the shipped
                     // app can't be reloaded (Ctrl+R / F5), printed (Ctrl+P),
                     // zoomed, or pop DevTools (F12) like a web page — it's a fixed
@@ -117,6 +122,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_paths,
+            commands::set_window_acrylic,
             commands::export_page,
             commands::export_batch,
             commands::reveal_path,

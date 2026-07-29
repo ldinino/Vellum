@@ -52,18 +52,8 @@ function currentTheme(): string {
   return document.documentElement.dataset.scheme ?? "light";
 }
 
-function currentThemeName(): string {
-  return document.documentElement.dataset.theme ?? "light";
-}
-
 export function useIsDarkTheme(): boolean {
   return useSyncExternalStore(subscribeToTheme, currentTheme, () => "light") === "dark";
-}
-
-/** The exact theme ("light" | "dark" | "oled"), for the few places that must
- * tell the dark variants apart rather than just light from dark. */
-export function useThemeName(): string {
-  return useSyncExternalStore(subscribeToTheme, currentThemeName, () => "light");
 }
 
 export type IconName = string;

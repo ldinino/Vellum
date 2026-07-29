@@ -171,7 +171,8 @@ export function AboutSettings() {
       <section className="v-set__section">
         <h3 className="v-set__heading">Acknowledgements</h3>
         <p className="v-set__hint">
-          Window chrome adapted from <strong>7.css</strong> (MIT). Icons from the{" "}
+          Window chrome adapted from <strong>7.css</strong> (MIT); the Windows 98 theme's bevels
+          from <strong>98.css</strong> (MIT). Icons from the{" "}
           <strong>Fugue</strong> set by Yusuke Kamiyamane (CC BY 3.0). Grammar and spelling by{" "}
           <strong>Harper</strong> (Apache-2.0). Refine runs on <strong>Ollama</strong> (MIT).
         </p>

@@ -47,6 +47,16 @@ _None logged yet._
 
 ### UI
 
-- [ ] Evaluate dropping in [98.css](https://jdan.github.io/98.css/) — a design
+- [x] Evaluate dropping in [98.css](https://jdan.github.io/98.css/) — a design
   system for building faithful recreations of old UIs.
-- [ ] Dark mode for both themes.
+  - Evaluated and shipped as a **fourth theme family** rather than a dependency.
+    98.css has no scoped build (it styles bare `button`/`input`/`select`/`a`/
+    `pre` and the scrollbars), so importing it would have half-restyled all 101
+    buttons in the app. Its actual value was ~10 colours and 6 bevel recipes,
+    now re-expressed in `src/styles/theme98.css` under MIT attribution. Also
+    found that **7.css was imported but applied to nothing** (no `.win7`
+    element exists) — 82 KB of dead CSS, now removed.
+- [x] Dark mode for both themes.
+  - Aero has **Dark** and **Dark (OLED black)**; Windows 98 has **Dark**, which
+    reuses the same palette behind 98 bevels. (Read as "both theme families" —
+    untick if you meant something else.)

@@ -102,6 +102,13 @@ export interface GrammarSpan {
   suggestions: string[];
 }
 
+/** The two stops of the Windows 98 title bar gradient (its Appearance tab
+ * exposed exactly this pair as "Color 1" / "Color 2"). */
+export interface TitlebarColors {
+  start: string;
+  end: string;
+}
+
 /** Subset of app.json settings the frontend reads/writes in v1. */
 export interface AppSettings {
   refineEnabled: boolean;
@@ -109,9 +116,19 @@ export interface AppSettings {
   spellcheckEnabled: boolean;
   defaultFont: string;
   defaultFontSize: number;
-  /** UI theme: "light", "dark" or "oled" (applied as `data-theme` on the
-   * document root, alongside a `data-scheme` of light/dark). */
+  /** Theme family: "aero" or "98" (applied as `data-chrome` on the document
+   * root). Pre-98 files stored the scheme here; the backend migrates them. */
   theme: string;
+  /** Colour scheme within the family — aero: "light" | "dark" | "oled";
+   * 98: "standard" | "dark" | "eggplant" | "spruce" | "rose" | "desert" |
+   * "storm". Applied as `data-theme`, prefixed with the family, alongside a
+   * `data-scheme` of light/dark. */
+  themeScheme: string;
+  /** "auto" (rounded in aero, square in 98), "rounded" or "square"; applied as
+   * `data-corners`. */
+  cornerStyle: string;
+  /** Overrides the active 98 scheme's title bar gradient; null = scheme default. */
+  titlebarColors: TitlebarColors | null;
   /** Strict (0.0) .. Liberal (1.0) global default. */
   refineAdherence: number;
   /** "Fast" | "Balanced" | "Thorough"; null until a tier is chosen. */

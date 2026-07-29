@@ -1,7 +1,8 @@
 /**
  * Settings → General (spec Section 15): appearance and the app data location.
- * The theme writes `data-theme` on the document root, which every design token
- * keys off (see tokens.css). The data location shows where Vellum stores its
+ * Appearance writes `data-chrome`, `data-theme`, `data-scheme` and
+ * `data-corners` on the document root, which every design token keys off (see
+ * tokens.css and theme98.css). The data location shows where Vellum stores its
  * data (default `Documents\Vellum`, which OneDrive syncs) and lets the user
  * move it to a folder of their choice — e.g. a local, non-synced folder so
  * OneDrive stops making duplicate copies of the live databases and search
@@ -18,18 +19,60 @@ import { useVellum } from "../../state/vellum";
 import * as api from "../../data/api";
 import "./SettingsPanels.css";
 
-const THEME_OPTIONS = [
-  { value: "light", label: "Light" },
-  { value: "dark", label: "Dark" },
-  { value: "oled", label: "Dark (OLED black)" },
+const FAMILY_OPTIONS = [
+  { value: "aero", label: "Aero (Office 2007)" },
+  { value: "98", label: "Windows 98" },
 ];
+
+const SCHEME_OPTIONS: Record<string, { value: string; label: string }[]> = {
+  aero: [
+    { value: "light", label: "Light" },
+    { value: "dark", label: "Dark" },
+    { value: "oled", label: "Dark (OLED black)" },
+  ],
+  "98": [
+    { value: "standard", label: "Windows Standard" },
+    { value: "dark", label: "Dark" },
+    { value: "eggplant", label: "Eggplant" },
+    { value: "spruce", label: "Spruce" },
+    { value: "rose", label: "Rose" },
+    { value: "desert", label: "Desert" },
+    { value: "storm", label: "Storm (VGA)" },
+  ],
+};
+
+const CORNER_OPTIONS = [
+  { value: "auto", label: "Automatic" },
+  { value: "rounded", label: "Rounded" },
+  { value: "square", label: "Square" },
+];
+
+/** Each 98 scheme's own title bar gradient, so the colour pickers start from
+ * the active scheme instead of black when nothing is overridden. Keep in sync
+ * with the `--titlebar-start` / `--titlebar-end` values in theme98.css. */
+const SCHEME_TITLEBARS: Record<string, [string, string]> = {
+  standard: ["#000080", "#1084d0"],
+  dark: ["#1f1f1f", "#3c3c3c"],
+  eggplant: ["#40364c", "#6c5b7f"],
+  spruce: ["#0a4a3c", "#1f8a6d"],
+  rose: ["#6b2438", "#a85068"],
+  desert: ["#6b5a2a", "#806b38"],
+  storm: ["#2c3e50", "#5a7a99"],
+};
 
 export function GeneralSettings() {
   const [currentPath, setCurrentPath] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const { active } = useActiveEditor();
-  const { theme, actions } = useVellum();
+  const { theme, themeScheme, cornerStyle, titlebarColors, actions } = useVellum();
+
+  const family = FAMILY_OPTIONS.some((f) => f.value === theme) ? theme : "aero";
+  const schemes = SCHEME_OPTIONS[family];
+  const scheme = schemes.some((s) => s.value === themeScheme) ? themeScheme : schemes[0].value;
+  const [defaultStart, defaultEnd] = SCHEME_TITLEBARS[scheme] ?? SCHEME_TITLEBARS.standard;
+  const titlebarStart = titlebarColors?.start || defaultStart;
+  const titlebarEnd = titlebarColors?.end || defaultEnd;
 
   useEffect(() => {
     let alive = true;
@@ -81,27 +124,107 @@ export function GeneralSettings() {
       <section className="v-set__section">
         <h3 className="v-set__heading">Appearance</h3>
         <p className="v-set__hint">
-          Dark mode uses a dark page and toolbars throughout the app. OLED black uses pure black,
-          which switches the pixels off on an OLED screen. Printing and exported documents stay
-          light.
+          Aero is the Office 2007 look, with a glass title bar. Windows 98 swaps in flat grey
+          chrome, a solid title bar, and the 3D bevelled controls of the era. Dark schemes use a
+          dark page and toolbars throughout the app; printing and exported documents stay light.
         </p>
         <div className="v-set__row">
           <label className="v-set__field">
             <span className="v-set__label">Theme</span>
             <select
               className="v-set__select v-set__select--size"
-              value={THEME_OPTIONS.some((t) => t.value === theme) ? theme : "light"}
-              onChange={(e) => void actions.setTheme(e.target.value)}
+              value={family}
+              onChange={(e) => void actions.setAppearance({ family: e.target.value })}
             >
-              {THEME_OPTIONS.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
+              {FAMILY_OPTIONS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="v-set__field">
+            <span className="v-set__label">Colour scheme</span>
+            <select
+              className="v-set__select v-set__select--size"
+              value={scheme}
+              onChange={(e) => void actions.setAppearance({ scheme: e.target.value })}
+            >
+              {schemes.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="v-set__field">
+            <span className="v-set__label">Corners</span>
+            <select
+              className="v-set__select v-set__select--size"
+              value={CORNER_OPTIONS.some((c) => c.value === cornerStyle) ? cornerStyle : "auto"}
+              onChange={(e) => void actions.setAppearance({ cornerStyle: e.target.value })}
+            >
+              {CORNER_OPTIONS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
                 </option>
               ))}
             </select>
           </label>
         </div>
+        <p className="v-set__hint">
+          Corners round the section tabs, notebooks and controls. Automatic follows the theme —
+          rounded in Aero, square in Windows 98.
+        </p>
       </section>
+
+      {family === "98" && (
+        <section className="v-set__section">
+          <h3 className="v-set__heading">Title bar colours</h3>
+          <p className="v-set__hint">
+            Windows 98 let you pick the two colours its title bar faded between. So does Vellum.
+          </p>
+          <div className="v-set__row">
+            <label className="v-set__field">
+              <span className="v-set__label">Left</span>
+              <input
+                type="color"
+                className="v-set__color"
+                value={titlebarStart}
+                onChange={(e) =>
+                  void actions.setAppearance({
+                    titlebarColors: { start: e.target.value, end: titlebarEnd },
+                  })
+                }
+              />
+            </label>
+            <label className="v-set__field">
+              <span className="v-set__label">Right</span>
+              <input
+                type="color"
+                className="v-set__color"
+                value={titlebarEnd}
+                onChange={(e) =>
+                  void actions.setAppearance({
+                    titlebarColors: { start: titlebarStart, end: e.target.value },
+                  })
+                }
+              />
+            </label>
+            <div
+              className="v-set__gradient-preview"
+              style={{ background: `linear-gradient(90deg, ${titlebarStart}, ${titlebarEnd})` }}
+              aria-hidden="true"
+            />
+            <Button
+              onClick={() => void actions.setAppearance({ titlebarColors: null })}
+              disabled={!titlebarColors}
+            >
+              Reset
+            </Button>
+          </div>
+        </section>
+      )}
 
       <section className="v-set__section">
         <h3 className="v-set__heading">App data location</h3>

@@ -28,6 +28,7 @@ import type {
   RecycleItem,
   RefineTemplate,
   Section,
+  TitlebarColors,
 } from "../data/types";
 
 export interface TreeNotebook extends Notebook {
@@ -86,8 +87,14 @@ interface VellumState {
    * on the document root, so unstyled page text uses them). */
   defaultFont: string;
   defaultFontSize: number;
-  /** UI theme ("light" | "dark" | "oled"), mirrored onto <html data-theme>. */
+  /** Theme family ("aero" | "98"), mirrored onto <html data-chrome>. */
   theme: string;
+  /** Colour scheme within the family, mirrored onto <html data-theme>. */
+  themeScheme: string;
+  /** "auto" | "rounded" | "square", resolved onto <html data-corners>. */
+  cornerStyle: string;
+  /** Custom 98 title bar gradient, or null for the scheme's own colours. */
+  titlebarColors: TitlebarColors | null;
   /** Words the user added to the Harper dictionary (app.json, spec Section 10). */
   customDictionary: string[];
   /** Grammar lint categories the user has ignored via "Ignore this rule". */
@@ -129,7 +136,10 @@ const initial: VellumState = {
   spellcheckEnabled: true,
   defaultFont: "Segoe UI",
   defaultFontSize: 14,
-  theme: "light",
+  theme: "aero",
+  themeScheme: "light",
+  cornerStyle: "auto",
+  titlebarColors: null,
   customDictionary: [],
   ignoredGrammarRules: [],
   pageTemplates: [],
@@ -216,8 +226,10 @@ export interface VellumActions {
 
   setGrammarEnabled: (enabled: boolean) => Promise<void>;
   setSpellcheckEnabled: (enabled: boolean) => Promise<void>;
-  /** Switch the UI theme ("light" | "dark") and persist it. */
-  setTheme: (theme: string) => Promise<void>;
+  /** Change any part of the appearance (theme family, colour scheme, corner
+   * style, custom title bar gradient) and persist it. Switching family carries
+   * the light/dark intent over to the nearest scheme in the new family. */
+  setAppearance: (patch: Partial<Appearance>) => Promise<void>;
   /** Set the editor default font family (Settings → Editor; persisted + applied). */
   setDefaultFont: (font: string) => Promise<void>;
   /** Set the editor default font size in px (Settings → Editor; persisted + applied). */
@@ -362,23 +374,83 @@ function applyEditorFont(font: string, size: number) {
   else root.style.removeProperty("--editor-font-size");
 }
 
-/** Themes we ship. Anything else in app.json falls back to light. */
-const THEMES = ["light", "dark", "oled"];
+/** Theme families we ship. Anything else in app.json falls back to aero. */
+const FAMILIES = ["aero", "98"];
 
-/** Themes that are dark variants, so styling can target them as a group. */
-const DARK_THEMES = new Set(["dark", "oled"]);
+/** Colour schemes per family; the first is that family's fallback. */
+const SCHEMES: Record<string, string[]> = {
+  aero: ["light", "dark", "oled"],
+  "98": ["standard", "dark", "eggplant", "spruce", "rose", "desert", "storm"],
+};
 
-/** Put the theme on the document root as `data-theme`, plus a `data-scheme` of
- * just "light"/"dark". Tokens and component rules key on the scheme so every
- * dark variant (dark, OLED) inherits them, and only the handful of surfaces
- * that actually differ are keyed on `data-theme`. Set on config load and
- * whenever the setting changes, so the whole UI — including which icon set is
- * used — switches live with no reload. */
-function applyTheme(theme: string) {
-  const value = THEMES.includes(theme) ? theme : "light";
+/** Schemes that are dark variants, so styling can target them as a group. */
+const DARK_SCHEMES = new Set(["dark", "oled"]);
+
+export interface Appearance {
+  family: string;
+  scheme: string;
+  cornerStyle: string;
+  titlebarColors: TitlebarColors | null;
+}
+
+/** Clamp a stored appearance to something we can actually render. */
+function resolveAppearance(a: Appearance): {
+  family: string;
+  scheme: string;
+  theme: string;
+  colorScheme: string;
+  corners: string;
+} {
+  const family = FAMILIES.includes(a.family) ? a.family : "aero";
+  const schemes = SCHEMES[family];
+  const scheme = schemes.includes(a.scheme) ? a.scheme : schemes[0];
+  return {
+    family,
+    scheme,
+    // Aero keeps its bare scheme names so the existing `data-theme="oled"`
+    // rules (and any app.json written by an older build) keep working.
+    theme: family === "98" ? `98-${scheme}` : scheme,
+    colorScheme: DARK_SCHEMES.has(scheme) ? "dark" : "light",
+    corners:
+      a.cornerStyle === "rounded" || a.cornerStyle === "square"
+        ? a.cornerStyle
+        : family === "98"
+          ? "square"
+          : "rounded",
+  };
+}
+
+/** Pick the closest scheme in `family` to the one the user was already on, so
+ * switching family keeps their light/dark intent instead of resetting it. */
+function carryOverScheme(family: string, scheme: string): string {
+  const schemes = SCHEMES[family] ?? SCHEMES.aero;
+  if (schemes.includes(scheme)) return scheme;
+  return DARK_SCHEMES.has(scheme) ? "dark" : schemes[0];
+}
+
+/** Mirror the appearance onto the document root: `data-chrome` (window chrome
+ * family), `data-theme` (the specific scheme's tokens), `data-scheme`
+ * (light/dark, which every dark rule and the native controls key on) and
+ * `data-corners`. Set on config load and whenever a setting changes, so the
+ * whole UI — including which icon set is used — switches live with no reload. */
+function applyAppearance(a: Appearance) {
+  const { family, theme, colorScheme, corners } = resolveAppearance(a);
   const root = document.documentElement;
-  root.dataset.theme = value;
-  root.dataset.scheme = DARK_THEMES.has(value) ? "dark" : "light";
+  root.dataset.chrome = family;
+  root.dataset.theme = theme;
+  root.dataset.scheme = colorScheme;
+  root.dataset.corners = corners;
+
+  // A custom gradient only means anything on the 98 title bar; the Aero one is
+  // real desktop glass showing whatever is behind the window.
+  const custom = family === "98" ? a.titlebarColors : null;
+  if (custom?.start && custom.end) {
+    root.style.setProperty("--titlebar-custom-start", custom.start);
+    root.style.setProperty("--titlebar-custom-end", custom.end);
+  } else {
+    root.style.removeProperty("--titlebar-custom-start");
+    root.style.removeProperty("--titlebar-custom-end");
+  }
 }
 
 export function VellumProvider({ children }: { children: ReactNode }) {
@@ -554,15 +626,25 @@ export function VellumProvider({ children }: { children: ReactNode }) {
         const defaultFont = cfg.settings.defaultFont || "Segoe UI";
         const defaultFontSize = cfg.settings.defaultFontSize || 14;
         applyEditorFont(defaultFont, defaultFontSize);
-        const theme = cfg.settings.theme || "light";
-        applyTheme(theme);
+        // The backend applied the window effect for this family at startup, so
+        // this only mirrors the appearance into the DOM.
+        const appearance: Appearance = {
+          family: cfg.settings.theme || "aero",
+          scheme: cfg.settings.themeScheme || "light",
+          cornerStyle: cfg.settings.cornerStyle || "auto",
+          titlebarColors: cfg.settings.titlebarColors ?? null,
+        };
+        applyAppearance(appearance);
         setState((s) => ({
           ...s,
           grammarEnabled: cfg.settings.grammarEnabled,
           spellcheckEnabled: cfg.settings.spellcheckEnabled,
           defaultFont,
           defaultFontSize,
-          theme,
+          theme: appearance.family,
+          themeScheme: appearance.scheme,
+          cornerStyle: appearance.cornerStyle,
+          titlebarColors: appearance.titlebarColors,
           customDictionary: cfg.settings.customDictionary ?? [],
           ignoredGrammarRules: cfg.settings.ignoredGrammarRules ?? [],
           pageTemplates: cfg.pageTemplates ?? [],
@@ -893,15 +975,50 @@ export function VellumProvider({ children }: { children: ReactNode }) {
         fail(e);
       }
     },
-    setTheme: async (theme) => {
-      // Repaint immediately (the attribute drives every token), then persist.
-      applyTheme(theme);
-      setState((s) => ({ ...s, theme }));
+    setAppearance: async (patch) => {
+      const s = ref.current;
+      const family = patch.family ?? s.theme;
+      // A family switch usually invalidates the scheme name ("oled" is not a 98
+      // scheme), so carry the light/dark intent across rather than resetting.
+      const scheme =
+        patch.scheme ??
+        (patch.family && patch.family !== s.theme
+          ? carryOverScheme(family, s.themeScheme)
+          : s.themeScheme);
+      const next: Appearance = {
+        family,
+        scheme,
+        cornerStyle: patch.cornerStyle ?? s.cornerStyle,
+        titlebarColors:
+          patch.titlebarColors !== undefined ? patch.titlebarColors : s.titlebarColors,
+      };
+
+      // Repaint immediately (the attributes drive every token), then persist.
+      applyAppearance(next);
+      setState((st) => ({
+        ...st,
+        theme: next.family,
+        themeScheme: next.scheme,
+        cornerStyle: next.cornerStyle,
+        titlebarColors: next.titlebarColors,
+      }));
+
+      // Aero is built on real desktop glass; 98 is a flat opaque window.
+      if (next.family !== s.theme) {
+        api.setWindowAcrylic(next.family !== "98").catch(() => {});
+      }
+
       try {
         const cfg = await api.getAppConfig();
         await api.saveAppConfig({
           ...cfg,
-          settings: { ...cfg.settings, theme },
+          settings: {
+            ...cfg.settings,
+            theme: next.family,
+            themeScheme: next.scheme,
+            cornerStyle: next.cornerStyle,
+            titlebarColors: next.titlebarColors,
+          },
         });
       } catch (e) {
         fail(e);

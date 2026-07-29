@@ -30,6 +30,16 @@ into Vellum's stylesheet.
 - Licensed under the MIT License —
   <https://github.com/khang-nd/7.css/blob/main/LICENSE>
 
+### 98.css
+
+The raised / sunken / field bevel geometry used by Vellum's Windows 98 theme,
+re-expressed as CSS custom properties in `src/styles/theme98.css`. No code is
+copied and the library is not a dependency.
+
+- Copyright © 2020 Jordan Scales — <https://github.com/jdan/98.css>
+- Licensed under the MIT License —
+  <https://github.com/jdan/98.css/blob/main/LICENSE>
+
 ## Bundled software
 
 ### Harper (`harper-core`)

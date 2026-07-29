@@ -30,11 +30,22 @@ pub struct AppSettings {
     pub spellcheck_enabled: bool,
     pub default_font: String,
     pub default_font_size: u32,
-    /// UI theme: "light" (default), "dark" or "oled". Applied as `data-theme` on
-    /// the document root, which every design token keys off. Left as a free-form
-    /// string rather than an enum so a future variant is a CSS-only change and an
-    /// unknown value degrades to light.
+    /// UI theme family: "aero" (default) or "98". Applied as `data-chrome` on
+    /// the document root; the 98 family swaps in Windows 98 window chrome and
+    /// bevelled controls. Left as a free-form string rather than an enum so a
+    /// future family is a CSS-only change and an unknown value degrades to aero.
+    /// Pre-98 files stored the scheme here instead — see `migrate_appearance`.
     pub theme: String,
+    /// Colour scheme within the family. Aero: "light" | "dark" | "oled".
+    /// Windows 98: "standard" | "dark" | "eggplant" | "spruce" | "rose" |
+    /// "desert" | "storm". Applied as `data-theme`, prefixed with the family.
+    pub theme_scheme: String,
+    /// Corner style for tabs, panels and controls: "auto" (rounded in aero,
+    /// square in 98), "rounded" or "square". Applied as `data-corners`.
+    pub corner_style: String,
+    /// User override for the Windows 98 title bar gradient. None = the active
+    /// scheme's own colours.
+    pub titlebar_colors: Option<TitlebarColors>,
     /// Strict (0.0) .. Liberal (1.0) global default.
     pub refine_adherence: f32,
     /// Fast | Balanced | Thorough; None until first-run detection picks one.
@@ -71,7 +82,10 @@ impl Default for AppSettings {
             // 14px = the editor's base size token (--text-size-editor); keep in
             // sync so a fresh app.json matches the default page look.
             default_font_size: 14,
-            theme: "light".into(),
+            theme: "aero".into(),
+            theme_scheme: "light".into(),
+            corner_style: "auto".into(),
+            titlebar_colors: None,
             refine_adherence: 0.5,
             refine_model_tier: None,
             grammar_language: "en-US".into(),
@@ -82,6 +96,15 @@ impl Default for AppSettings {
             ignored_grammar_rules: Vec::new(),
         }
     }
+}
+
+/// The two stops of the Windows 98 title bar gradient, as CSS colours. Windows
+/// 98's own Appearance tab exposed exactly this pair ("Color 1" / "Color 2").
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct TitlebarColors {
+    pub start: String,
+    pub end: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -214,6 +237,7 @@ pub fn load_app_config(app: &AppHandle) -> Result<AppConfig, String> {
     // Migrate + seed once; persist only if something actually changed so we
     // don't churn the file (and OneDrive) on every launch.
     let mut changed = migrate_refine_templates(&mut config);
+    changed |= migrate_appearance(&mut config);
     if !config.settings.starters_seeded {
         if config.refine_templates.is_empty() {
             config.refine_templates = crate::refine::starters::starter_templates();
@@ -243,6 +267,18 @@ fn migrate_refine_templates(config: &mut AppConfig) -> bool {
         }
     }
     changed
+}
+
+/// Split the pre-98 single-value `theme` setting ("light" / "dark" / "oled")
+/// into the family + scheme pair the appearance settings now use. Returns
+/// whether anything changed, so an already-migrated file is left alone.
+fn migrate_appearance(config: &mut AppConfig) -> bool {
+    let s = &mut config.settings;
+    if matches!(s.theme.as_str(), "light" | "dark" | "oled") {
+        s.theme_scheme = std::mem::replace(&mut s.theme, "aero".into());
+        return true;
+    }
+    false
 }
 
 pub fn save_app_config(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
@@ -280,6 +316,53 @@ mod tests {
 
         // Re-running is a no-op (idempotent).
         assert!(!migrate_refine_templates(&mut cfg));
+    }
+
+    #[test]
+    fn legacy_theme_splits_into_family_and_scheme() {
+        // A pre-98 app.json stored the scheme in `theme` and had no family.
+        let json = r#"{ "settings": { "theme": "oled" } }"#;
+        let mut cfg: AppConfig = serde_json::from_str(json).unwrap();
+
+        assert!(migrate_appearance(&mut cfg));
+        assert_eq!(cfg.settings.theme, "aero");
+        assert_eq!(cfg.settings.theme_scheme, "oled");
+
+        // Re-running is a no-op, so an already-migrated file is never rewritten.
+        assert!(!migrate_appearance(&mut cfg));
+    }
+
+    #[test]
+    fn a_98_theme_survives_the_legacy_migration() {
+        // "dark" is a valid scheme name in BOTH families, so the migration has
+        // to key on the family field, not the scheme, or picking 98 Dark would
+        // silently bounce the user back to aero on the next launch.
+        let json = r#"{ "settings": { "theme": "98", "themeScheme": "dark" } }"#;
+        let mut cfg: AppConfig = serde_json::from_str(json).unwrap();
+
+        assert!(!migrate_appearance(&mut cfg));
+        assert_eq!(cfg.settings.theme, "98");
+        assert_eq!(cfg.settings.theme_scheme, "dark");
+    }
+
+    #[test]
+    fn a_fresh_config_defaults_to_aero_light_with_auto_corners() {
+        let s = AppSettings::default();
+        assert_eq!(s.theme, "aero");
+        assert_eq!(s.theme_scheme, "light");
+        assert_eq!(s.corner_style, "auto");
+        assert_eq!(s.titlebar_colors, None);
+    }
+
+    #[test]
+    fn a_custom_titlebar_gradient_round_trips() {
+        let mut s = AppSettings::default();
+        s.titlebar_colors = Some(TitlebarColors { start: "#000080".into(), end: "#1084d0".into() });
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(json.contains("\"titlebarColors\":{\"start\":\"#000080\",\"end\":\"#1084d0\"}"));
+
+        let back: AppSettings = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.titlebar_colors, s.titlebar_colors);
     }
 
     #[test]

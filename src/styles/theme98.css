@@ -1,0 +1,1069 @@
+/*
+ * Windows 98 theme.
+ *
+ * Two attributes drive this file. `data-chrome="98"` selects the era — flat
+ * grey surfaces, 3D bevels instead of gradients and drop shadows, a solid
+ * title bar, square corners — and is scheme-independent. `data-theme="98-*"`
+ * selects one of the colour schemes, which do nothing but define the `--w98-*`
+ * primitives that the shared block below maps Vellum's real tokens onto.
+ * Adding a scheme is therefore ~12 lines and no new rules.
+ *
+ * The scheme names come from the Windows 98 Display ▸ Appearance tab. The
+ * values are adapted rather than sampled, except Windows Standard, whose
+ * palette is the well-known system one (#c0c0c0 / #dfdfdf / #808080 / #000080).
+ * Bevel geometry follows 98.css by Jordan Scales (MIT) — see
+ * THIRD-PARTY-NOTICES.md; the recipes are re-expressed here, no code copied.
+ *
+ * "Dark" is not a Windows 98 scheme — 98 had no dark mode. It reuses Vellum's
+ * own dark palette so the two families feel like one app, and because it also
+ * carries data-scheme="dark" every dark rule elsewhere in the app applies to it
+ * for free.
+ */
+
+/* ---- Colour schemes ------------------------------------------------------ */
+
+:root[data-theme="98-standard"] {
+  --w98-face: #c0c0c0;
+  --w98-face-light: #dfdfdf;
+  --w98-light: #ffffff;
+  --w98-shadow: #808080;
+  --w98-frame: #0a0a0a;
+  --w98-content: #ffffff;
+  --w98-text: #000000;
+  --w98-text-dim: #4a4a4a;
+  --w98-select: #000080;
+  --w98-title-start: #000080;
+  --w98-title-end: #1084d0;
+  --w98-title-text: #ffffff;
+}
+
+/* Vellum's dark palette (#1e1e1e chrome, #262626 page) wearing 98 bevels. */
+:root[data-theme="98-dark"] {
+  --w98-face: #3a3a3a;
+  --w98-face-light: #464646;
+  --w98-light: #5e5e5e;
+  --w98-shadow: #1c1c1c;
+  --w98-frame: #000000;
+  --w98-content: #262626;
+  --w98-text: #e8e8e8;
+  --w98-text-dim: #a8a8a8;
+  --w98-text-disabled: #707070;
+  --w98-select: #2f66b4;
+  --w98-title-start: #1f1f1f;
+  --w98-title-end: #3c3c3c;
+  --w98-title-text: #e8e8e8;
+}
+
+:root[data-theme="98-eggplant"] {
+  --w98-face: #9a8fa3;
+  --w98-face-light: #b6acbd;
+  --w98-light: #d6cfda;
+  --w98-shadow: #63596b;
+  --w98-frame: #241f29;
+  --w98-content: #ffffff;
+  --w98-text: #000000;
+  --w98-text-dim: #2b2531;
+  --w98-select: #40364c;
+  --w98-title-start: #40364c;
+  --w98-title-end: #6c5b7f;
+  --w98-title-text: #ffffff;
+}
+
+:root[data-theme="98-spruce"] {
+  --w98-face: #9fb0a6;
+  --w98-face-light: #bccdc2;
+  --w98-light: #dce8e1;
+  --w98-shadow: #63736a;
+  --w98-frame: #1c2a22;
+  --w98-content: #ffffff;
+  --w98-text: #000000;
+  --w98-text-dim: #36423b;
+  --w98-select: #0a4a3c;
+  --w98-title-start: #0a4a3c;
+  --w98-title-end: #1f8a6d;
+  --w98-title-text: #ffffff;
+}
+
+:root[data-theme="98-rose"] {
+  --w98-face: #c0a8ae;
+  --w98-face-light: #dcc6cb;
+  --w98-light: #f0e2e5;
+  --w98-shadow: #85696f;
+  --w98-frame: #2a1b1f;
+  --w98-content: #ffffff;
+  --w98-text: #000000;
+  --w98-text-dim: #4c393d;
+  --w98-select: #6b2438;
+  --w98-title-start: #6b2438;
+  --w98-title-end: #a85068;
+  --w98-title-text: #ffffff;
+}
+
+:root[data-theme="98-desert"] {
+  --w98-face: #c8bda0;
+  --w98-face-light: #e0d8c0;
+  --w98-light: #f4eedc;
+  --w98-shadow: #8a8064;
+  --w98-frame: #2b2718;
+  --w98-content: #ffffff;
+  --w98-text: #000000;
+  --w98-text-dim: #4d4736;
+  --w98-select: #6b5a2a;
+  --w98-title-start: #6b5a2a;
+  --w98-title-end: #806b38;
+  --w98-title-text: #ffffff;
+}
+
+:root[data-theme="98-storm"] {
+  --w98-face: #a8b0b8;
+  --w98-face-light: #c4ccd4;
+  --w98-light: #e4eaf0;
+  --w98-shadow: #6c747c;
+  --w98-frame: #1e2429;
+  --w98-content: #ffffff;
+  --w98-text: #000000;
+  --w98-text-dim: #3c434a;
+  --w98-select: #2c3e50;
+  --w98-title-start: #2c3e50;
+  --w98-title-end: #5a7a99;
+  --w98-title-text: #ffffff;
+}
+
+/* ---- Shared chrome: map Vellum's tokens onto the scheme ------------------ */
+
+:root[data-chrome="98"] {
+  /* MS Sans Serif is long gone from Windows; Tahoma is the closest face that
+     still ships, and it is what 98's successors actually used. */
+  --font-ui: Tahoma, "MS Sans Serif", "Segoe UI", sans-serif;
+  --text-size-ui: 11px;
+  --text-size-small: 11px;
+  /* 98's caption bar is barely taller than its 16px icon. */
+  --titlebar-height: 20px;
+  --toolbar-height: 30px;
+
+  /* The title bar gradient, with the user's override (Settings ▸ General)
+     winning over the scheme's own colours when it is set. */
+  --titlebar-start: var(--titlebar-custom-start, var(--w98-title-start));
+  --titlebar-end: var(--titlebar-custom-end, var(--w98-title-end));
+
+  /* Shared by the window and dialog close buttons. Drawn as pixel art on 98's
+     own 8x7 grid — the earlier version used half-pixel diagonals, which
+     `crispEdges` snapped unevenly. */
+  --w98-close-svg: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='7' viewBox='0 0 8 7'%3E%3Cpath fill='%23000' d='M0 0h2v1H0zM6 0h2v1H6zM1 1h2v1H1zM5 1h2v1H5zM2 2h4v1H2zM3 3h2v1H3zM2 4h4v1H2zM1 5h2v1H1zM5 5h2v1H5zM0 6h2v1H0zM6 6h2v1H6z'/%3E%3C/svg%3E");
+
+  /* Bevel recipes. 98 draws depth with two inset rings — a light top-left and a
+     dark bottom-right — rather than a border plus a gradient. `thin` is the
+     single-ring version used for toolbars and separators. */
+  --bevel-raised:
+    inset -1px -1px var(--w98-frame), inset 1px 1px var(--w98-light),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-face-light);
+  --bevel-sunken:
+    inset -1px -1px var(--w98-light), inset 1px 1px var(--w98-frame),
+    inset -2px -2px var(--w98-face-light), inset 2px 2px var(--w98-shadow);
+  /* Field (text box, list box): the dark ring is on the inside. */
+  --bevel-field:
+    inset -1px -1px var(--w98-light), inset 1px 1px var(--w98-shadow),
+    inset -2px -2px var(--w98-face-light), inset 2px 2px var(--w98-frame);
+  --bevel-thin-raised: inset -1px -1px var(--w98-shadow), inset 1px 1px var(--w98-light);
+  --bevel-thin-sunken: inset -1px -1px var(--w98-light), inset 1px 1px var(--w98-shadow);
+  /* A dialog's default action is marked with a dark ring around an otherwise
+     normal button — 98 had no "primary" fill colour. */
+  --bevel-default:
+    inset -2px -2px var(--w98-frame), inset 1px 1px var(--w98-frame),
+    inset 2px 2px var(--w98-light), inset -3px -3px var(--w98-shadow),
+    inset 3px 3px var(--w98-face-light);
+  --bevel-default-pressed:
+    inset 2px 2px var(--w98-frame), inset -1px -1px var(--w98-frame),
+    inset -2px -2px var(--w98-light), inset 3px 3px var(--w98-shadow),
+    inset -3px -3px var(--w98-face-light);
+  /* Not everything in this era was bevelled. Objects that are meant to read as
+     *things* rather than controls — the desk and the page resting on it — were
+     drawn instead: a hard outline with a faux shadow under it. Faux meaning
+     flat: a solid offset block, no blur, weighted downward. */
+  --w98-outline: var(--w98-frame);
+  --w98-drop-shadow: 2px 3px 0 rgba(0, 0, 0, 0.25);
+
+  /* How far secondary text inside a selected row is dimmed toward the highlight.
+     The dark scheme's highlight is light enough that white on it is only ~4.6:1,
+     so there is no headroom to dim into — see the override after this block. */
+  --w98-select-dim: 76%;
+  --w98-select-dim-strong: 88%;
+
+  /* The window frame flips face and highlight against the outer dark ring. */
+  --bevel-window:
+    inset -1px -1px var(--w98-frame), inset 1px 1px var(--w98-face-light),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light);
+  /* Engraved group box: a sunken outer ring with a raised one just inside it. */
+  --bevel-groove:
+    inset -1px -1px var(--w98-light), inset 1px 1px var(--w98-shadow),
+    inset -2px -2px var(--w98-shadow), inset 2px 2px var(--w98-light);
+
+  /* Surfaces */
+  --surface-window: var(--w98-face);
+  --surface-panel: var(--w98-face);
+  --surface-content: var(--w98-content);
+  --surface-raised: var(--w98-face);
+  --surface-sunken: var(--w98-content);
+  --surface-hover: var(--w98-face-light);
+  --tint-base: var(--w98-face);
+  --tint-edge: var(--w98-shadow);
+  --code-bg: var(--w98-face);
+  --code-block-bg: var(--w98-face);
+
+  /* Text */
+  --text-primary: var(--w98-text);
+  --text-secondary: var(--w98-text);
+  --text-muted: var(--w98-text-dim);
+  --text-disabled: var(--w98-text-disabled, var(--w98-shadow));
+  --text-on-accent: var(--w98-title-text);
+
+  /* Borders. 98 has no 1px borders to speak of — depth is the bevel — so these
+     collapse onto the shadow colour and most components simply stop showing a
+     visible outline once the bevel takes over. */
+  --border-strong: var(--w98-frame);
+  --border-default: var(--w98-shadow);
+  --border-soft: var(--w98-shadow);
+  --border-faint: var(--w98-shadow);
+  /* Radii are deliberately NOT pinned here. "Automatic" already resolves to
+     square for this family, so the default is right — but leaving them alone
+     means a user who explicitly picks Rounded gets rounded 98, which is the
+     whole point of the setting. */
+
+  /* Flat fills: every gradient in the app collapses to a single colour. */
+  --gradient-toolbar: var(--w98-face);
+  --gradient-panel: var(--w98-face);
+  --gradient-button: var(--w98-face);
+  --gradient-titlebar-fallback: linear-gradient(90deg, var(--titlebar-start), var(--titlebar-end));
+  --gradient-scrollbar: var(--w98-face);
+  --gradient-scrollbar-horizontal: var(--w98-face);
+
+  /* The amber Office glow has no 98 analogue: hover is the bevel, and selection
+     is the scheme's highlight colour. */
+  --hover-border: var(--w98-shadow);
+  --gradient-hover: var(--w98-face-light);
+  --active-border: var(--w98-shadow);
+  --gradient-active: var(--w98-face);
+  --selected-fill: var(--w98-select);
+  --selected-border: var(--w98-select);
+
+  --accent: var(--w98-select);
+  --accent-bright: var(--w98-select);
+  --accent-deep: var(--w98-select);
+  --accent-soft: var(--w98-select);
+  --gradient-accent: var(--w98-select);
+  --gradient-accent-hover: var(--w98-select);
+  --gradient-accent-pressed: var(--w98-select);
+  --selection-bg: var(--w98-select);
+  --selection-text: var(--w98-title-text);
+  --button-border: var(--w98-shadow);
+
+  /* 98 casts no shadows. */
+  --shadow-button: none;
+  --shadow-raised: none;
+  --shadow-toolbar: none;
+  --shadow-panel: none;
+  --shadow-popup: none;
+  --shadow-modal: none;
+
+  /* The glass tokens still feed a few Aero rules; neutralise them so nothing
+     frosted survives into this family. */
+  --aero-window-glass: none;
+  --aero-window-frost: var(--w98-face);
+  --aero-window-border: var(--w98-frame);
+  --aero-window-space: 2px;
+  --glass-tint: var(--w98-face);
+  --glass-border: var(--w98-frame);
+  --glass-inner-stroke: var(--w98-light);
+  --glass-sheen: none;
+  --glass-text-shadow: none;
+  --glass-title-text: var(--w98-title-text);
+  --glass-title-halo: none;
+}
+
+:root[data-chrome="98"][data-scheme="dark"] {
+  --w98-select-dim: 100%;
+  --w98-select-dim-strong: 100%;
+}
+
+/* ---- Window frame -------------------------------------------------------- */
+
+:root[data-chrome="98"] .app-frame {
+  background: var(--w98-face);
+  border: 0;
+  box-shadow: var(--bevel-window);
+  padding: 2px;
+}
+
+:root[data-chrome="98"] .app-frame--maximized {
+  padding: 0;
+  box-shadow: none;
+}
+
+/* ---- Title bar ----------------------------------------------------------- */
+
+:root[data-chrome="98"] .v-titlebar {
+  gap: var(--space-2);
+  padding: 2px 2px 2px 3px;
+  background: linear-gradient(90deg, var(--titlebar-start), var(--titlebar-end));
+}
+
+:root[data-chrome="98"] .v-titlebar__title {
+  font-weight: bold;
+  color: var(--w98-title-text);
+  text-shadow: none;
+}
+
+:root[data-chrome="98"] .v-titlebar__controls {
+  align-self: center;
+  gap: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+}
+
+/* Caption buttons: 16x14 face-coloured squares that press in when clicked.
+   They stay square even under "Rounded" — the bevel *is* the button, and the
+   rounded corner they would otherwise inherit belongs to Aero's button cluster. */
+:root[data-chrome="98"] .v-titlebar__btn {
+  min-width: 17px;
+  min-height: 15px;
+  border: 0;
+  border-radius: 0;
+  background: var(--w98-face);
+  box-shadow: var(--bevel-raised);
+}
+
+:root[data-chrome="98"] .v-titlebar__btn:hover {
+  background: var(--w98-face);
+}
+
+:root[data-chrome="98"] .v-titlebar__btn:active {
+  box-shadow: var(--bevel-sunken);
+}
+
+/* Glyphs are drawn as tiny crisp-edged SVGs rather than shipping new assets.
+   `inset` shifts them a pixel down-right while pressed, like the real thing. */
+:root[data-chrome="98"] .v-titlebar__btn::before {
+  box-shadow: none;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+
+:root[data-chrome="98"] .v-titlebar__btn:active::before {
+  inset: 1px -1px -1px 1px;
+}
+
+:root[data-chrome="98"] .v-titlebar__btn[aria-label="Minimize"]::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6'%3E%3Crect y='4' width='6' height='2' fill='%23000'/%3E%3C/svg%3E");
+}
+
+:root[data-chrome="98"] .v-titlebar__btn[aria-label="Maximize"]::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='9' height='9' shape-rendering='crispEdges'%3E%3Crect x='0.5' y='0.5' width='8' height='8' fill='none' stroke='%23000'/%3E%3Crect x='0' y='0' width='9' height='2' fill='%23000'/%3E%3C/svg%3E");
+}
+
+:root[data-chrome="98"] .v-titlebar__btn[aria-label="Restore"]::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' shape-rendering='crispEdges'%3E%3Crect x='3.5' y='0.5' width='6' height='6' fill='none' stroke='%23000'/%3E%3Crect x='3' y='0' width='7' height='2' fill='%23000'/%3E%3Crect x='0.5' y='3.5' width='6' height='6' fill='%23c0c0c0' stroke='%23000'/%3E%3Crect x='0' y='3' width='7' height='2' fill='%23000'/%3E%3C/svg%3E");
+}
+
+:root[data-chrome="98"] .v-titlebar__btn--close {
+  min-width: 17px;
+  margin-left: 2px;
+  border: 0;
+  border-radius: 0;
+  background: var(--w98-face);
+  box-shadow: var(--bevel-raised);
+}
+
+:root[data-chrome="98"] .v-titlebar__btn--close:hover {
+  background: var(--w98-face);
+  box-shadow: var(--bevel-raised);
+}
+
+:root[data-chrome="98"] .v-titlebar__btn--close:active {
+  box-shadow: var(--bevel-sunken);
+}
+
+:root[data-chrome="98"] .v-titlebar__btn--close::before {
+  background-image: var(--w98-close-svg);
+}
+
+/* ---- Section and notebook colours -----------------------------------------
+ *
+ * Section colours are stored per section in the database, so they cannot be
+ * swapped by a token — they have to be re-toned, the same trick dark mode uses.
+ * Vellum's palette is pastels picked for a white UI; blended into #c0c0c0 they
+ * go drab. Outlook 2000/2003's calendar labels are the reference.
+ *
+ * Both bounds were measured against that palette rather than guessed. The
+ * chroma cap matters because yellows and greens hit the edge of sRGB long
+ * before blues do — uncapped, a yellow notebook clipped to a dark mustard. The
+ * lightness floor lifts the darker pastels without dragging the already-light
+ * ones (yellow) down, which pinning a single lightness did.
+ *
+ * Scoped to the light schemes so 98 Dark keeps the existing dark re-tone, which
+ * pins a mid lightness instead because those sit on a dark surface.
+ */
+@supports (color: oklch(from red l c h)) {
+  :root[data-chrome="98"][data-scheme="light"] .v-shell {
+    --section-tone: oklch(from var(--section-color) max(l, 0.78) min(calc(c * 1.6), 0.15) h);
+  }
+
+  :root[data-chrome="98"][data-scheme="light"] .v-sectiontabs__tab {
+    --tab-tone: oklch(from var(--tab-color) max(l, 0.78) min(calc(c * 1.6), 0.15) h);
+  }
+
+  :root[data-chrome="98"][data-scheme="light"] .v-nav__group,
+  :root[data-chrome="98"][data-scheme="light"] .v-nav__rail-item {
+    --nb-tone: oklch(from var(--nb-color) max(l, 0.78) min(calc(c * 1.6), 0.15) h);
+  }
+}
+
+/* ---- Shell, panels and lists ---------------------------------------------
+ *
+ * The section tabs, page strip and page sheet are the app's filing-cabinet
+ * metaphor: a divider tab above a sheet of paper, with page tabs down the
+ * sheet's right edge. 98 does not replace that with form controls — it renders
+ * the same thing blockier. So the rules below mostly *flatten* what is already
+ * there (gradients become fills, soft shadows become hard edges) and leave the
+ * connective geometry alone.
+ */
+
+:root[data-chrome="98"] .v-shell {
+  margin: 0;
+  border: 0;
+  box-shadow: none;
+  background: var(--w98-face);
+  /* The section-tinted "desk" keeps its colour — it is how you tell sections
+     apart — but loses the fade. 98 fills; it does not shade. Mixed harder than
+     Aero's 12% because it is blending into #c0c0c0 rather than white, which
+     swallows a pastel. */
+  --desk-gradient: color-mix(in srgb, var(--section-tone) 20%, var(--tint-base));
+}
+
+/* ---- Notebook list --------------------------------------------------------
+ *
+ * A shelf of binders. Each notebook is an object, so it takes the outline and
+ * faux shadow the desk uses rather than a control's bevel, and the tree they
+ * stand in is recessed so the shelf reads as sitting behind them.
+ */
+
+:root[data-chrome="98"] .v-nav {
+  background: var(--w98-face);
+  border-right: 0;
+  box-shadow: inset -1px 0 0 var(--w98-shadow);
+}
+
+:root[data-chrome="98"] .v-nav__header {
+  border-bottom: 0;
+  box-shadow: inset 0 -1px 0 var(--w98-shadow);
+}
+
+:root[data-chrome="98"] .v-nav__tree {
+  padding: var(--space-3);
+  box-shadow: var(--bevel-thin-sunken);
+}
+
+:root[data-chrome="98"] .v-nav__group {
+  border: 1px solid var(--w98-outline);
+  background: color-mix(in srgb, var(--nb-tone) 20%, var(--tint-base));
+  box-shadow: var(--w98-drop-shadow);
+}
+
+/* The reorder indicators are drawn with box-shadow, so they have to re-state
+   the binder's own shadow or dragging would flatten it. */
+:root[data-chrome="98"] .v-nav__group--drop-before {
+  box-shadow: inset 0 3px 0 0 var(--accent), var(--w98-drop-shadow);
+}
+
+:root[data-chrome="98"] .v-nav__group--drop-after {
+  box-shadow: inset 0 -3px 0 0 var(--accent), var(--w98-drop-shadow);
+}
+
+/* The binder's spine label, ruled off from the sections below it — but only
+   when there are any: on a collapsed notebook that rule sat a pixel above the
+   binder's own border and read as a divider to nothing. */
+:root[data-chrome="98"] .v-nav__notebook {
+  background: color-mix(in srgb, var(--nb-tone) 72%, var(--tint-base));
+  box-shadow: inset 0 -1px 0 var(--w98-outline);
+}
+
+:root[data-chrome="98"] .v-nav__notebook:last-child {
+  box-shadow: none;
+}
+
+/* Tints have to survive hover, or the notebook you are pointing at is the one
+   that stops looking like a notebook. */
+:root[data-chrome="98"] .v-nav__notebook:hover {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--nb-tone) 86%, var(--tint-base));
+}
+
+:root[data-chrome="98"] .v-nav__section:hover {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--nb-tone) 40%, var(--tint-base));
+}
+
+/* A 98 tree expands with a +/- box, not a rotating triangle. The base rule
+   builds its triangle out of borders, so all four have to be reset. The outline
+   keys on the text colour, not the shadow: in the dark scheme a shadow-grey
+   border on a dark surface disappears entirely. */
+:root[data-chrome="98"] .v-nav__twisty {
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--w98-text-dim);
+  background: var(--w98-content);
+  position: relative;
+}
+
+:root[data-chrome="98"] .v-nav__twisty--open {
+  transform: none;
+}
+
+:root[data-chrome="98"] .v-nav__twisty::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 3px;
+  height: 1px;
+  background: var(--w98-text);
+}
+
+:root[data-chrome="98"] .v-nav__twisty:not(.v-nav__twisty--open)::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 3px;
+  width: 1px;
+  background: var(--w98-text);
+}
+
+:root[data-chrome="98"] .v-nav__swatch {
+  border-color: var(--w98-outline);
+}
+
+:root[data-chrome="98"] .v-nav__recyclebin {
+  border-top: 0;
+  margin: 2px;
+  padding: 3px var(--space-3);
+  box-shadow: var(--bevel-thin-sunken);
+}
+
+:root[data-chrome="98"] .v-nav__recyclebin:hover {
+  background: var(--w98-face-light);
+}
+
+/* Collapsed rail: the notebooks are still binders, the bin is still a button. */
+:root[data-chrome="98"] .v-nav__rail-item {
+  border: 1px solid var(--w98-outline);
+  box-shadow: var(--w98-drop-shadow);
+}
+
+:root[data-chrome="98"] .v-nav__chevron,
+:root[data-chrome="98"] .v-nav__rail-bin {
+  border: 0;
+  background: var(--w98-face);
+  box-shadow: var(--bevel-raised);
+}
+
+:root[data-chrome="98"] .v-nav__chevron:active,
+:root[data-chrome="98"] .v-nav__rail-bin:active {
+  box-shadow: var(--bevel-sunken);
+}
+
+:root[data-chrome="98"] .v-nav__chevron:hover,
+:root[data-chrome="98"] .v-nav__rail-bin:hover {
+  background: var(--w98-face);
+}
+
+/* ---- Section tabs ---------------------------------------------------------
+ *
+ * A divider in a binder, not a push button. The tabs and the desk are one drawn
+ * folder, so only the desk casts — a shadow under each tab would put one
+ * *inside* the folder and break the illusion. (It would also override the
+ * reorder drop indicators, which are drawn with box-shadow.)
+ */
+
+:root[data-chrome="98"] .v-sectiontabs__tabs {
+  gap: 0;
+}
+
+:root[data-chrome="98"] .v-sectiontabs__tab {
+  border: 1px solid var(--w98-outline);
+  border-bottom: 0;
+  background: color-mix(in srgb, var(--tab-tone) 58%, var(--tint-base));
+  padding: 3px 12px 4px;
+  margin-right: 3px;
+}
+
+:root[data-chrome="98"] .v-sectiontabs__tab:hover {
+  background: color-mix(in srgb, var(--tab-tone) 74%, var(--tint-base));
+}
+
+:root[data-chrome="98"] .v-sectiontabs__tab--selected,
+:root[data-chrome="98"] .v-sectiontabs__tab--selected:hover {
+  /* The desk's own colour rather than a copy of its recipe, so the divider and
+     the page can never drift apart. Overlap is exactly the desk's 1px border —
+     any more and the tab's sides visibly run on past the desk edge. */
+  background: var(--desk-gradient);
+  border-color: var(--w98-outline);
+  font-weight: bold;
+  margin-bottom: -1px;
+  padding-bottom: 6px;
+  z-index: 2;
+}
+
+:root[data-chrome="98"] .v-sectiontabs__add:hover {
+  border-color: transparent;
+  background: var(--w98-face);
+  box-shadow: var(--bevel-thin-raised);
+}
+
+/* The desk carries the folder's whole shadow. */
+:root[data-chrome="98"] .v-shell__content {
+  border: 1px solid var(--w98-outline);
+  box-shadow: var(--w98-drop-shadow);
+}
+
+/* Paper on the desk. Its right-hand offset is clipped by .v-editor, which is
+   what we want: the page tabs join along that edge. */
+:root[data-chrome="98"] .v-editor__page {
+  border-color: var(--w98-outline);
+  box-shadow: var(--w98-drop-shadow);
+}
+
+:root[data-chrome="98"] .v-pagelist__item {
+  border-color: var(--w98-outline);
+}
+
+/* ---- Attachment bar ------------------------------------------------------- */
+
+/* Grey on a grey page with a single grey hairline read as nothing at all; the
+   raised edge is what separates it from the sheet below. */
+:root[data-chrome="98"] .v-attachbar {
+  border-bottom: 0;
+  box-shadow: var(--bevel-thin-raised), inset 0 -2px 0 -1px var(--w98-shadow);
+}
+
+:root[data-chrome="98"] .v-attachbar__chip {
+  border: 0;
+  background: var(--w98-face);
+  box-shadow: var(--bevel-raised);
+}
+
+:root[data-chrome="98"] .v-attachbar__chip:hover {
+  border-color: transparent;
+  background: var(--w98-face-light);
+}
+
+:root[data-chrome="98"] .v-attachbar__chip:active {
+  box-shadow: var(--bevel-sunken);
+}
+
+:root[data-chrome="98"] .v-attachbar__label {
+  border-right-color: var(--w98-shadow);
+}
+
+/* ---- Toolbars, menus and buttons ----------------------------------------- */
+
+:root[data-chrome="98"] .v-menubar,
+:root[data-chrome="98"] .v-toolbar,
+:root[data-chrome="98"] .v-editortoolbar,
+:root[data-chrome="98"] .v-toptoolbar {
+  background: var(--w98-face);
+  border: 0;
+  box-shadow: var(--bevel-thin-raised);
+}
+
+:root[data-chrome="98"] .v-menubar__item:hover,
+:root[data-chrome="98"] .v-menubar__item.is-open {
+  background: var(--w98-select);
+  border-color: transparent;
+  color: var(--w98-title-text);
+}
+
+:root[data-chrome="98"] .v-toolbar__separator {
+  background: none;
+  width: 2px;
+  box-shadow: var(--bevel-thin-sunken);
+}
+
+:root[data-chrome="98"] .v-toolbar__button,
+:root[data-chrome="98"] .v-button {
+  border: 0;
+  background: var(--w98-face);
+  box-shadow: none;
+}
+
+:root[data-chrome="98"] .v-button {
+  box-shadow: var(--bevel-raised);
+  padding: 4px 12px;
+}
+
+/* Toolbar icons stay flat until pointed at — 98's "hot tracking" raised the
+   bevel on hover and sank it on press, with no colour change at all. */
+:root[data-chrome="98"] .v-toolbar__button:hover:not(:disabled) {
+  background: var(--w98-face);
+  box-shadow: var(--bevel-thin-raised);
+}
+
+:root[data-chrome="98"] .v-toolbar__button:active:not(:disabled),
+:root[data-chrome="98"] .v-toolbar__button--active,
+:root[data-chrome="98"] .v-button:active:not(:disabled) {
+  background: var(--w98-face);
+  box-shadow: var(--bevel-thin-sunken);
+}
+
+:root[data-chrome="98"] .v-button:active:not(:disabled) {
+  box-shadow: var(--bevel-sunken);
+}
+
+/* 98 embossed disabled labels with a highlight offset below and right. */
+:root[data-chrome="98"] :disabled {
+  text-shadow: 1px 1px 0 var(--w98-light);
+}
+
+/* ---- Popup menus --------------------------------------------------------- */
+
+:root[data-chrome="98"] .v-menu {
+  background: var(--w98-face);
+  border: 0;
+  box-shadow: var(--bevel-raised), var(--w98-drop-shadow);
+  padding: 2px;
+}
+
+:root[data-chrome="98"] .v-menu__item:hover:not(:disabled),
+:root[data-chrome="98"] .v-menu__item.is-active {
+  background: var(--w98-select);
+  border-color: transparent;
+  color: var(--w98-title-text);
+}
+
+:root[data-chrome="98"] .v-menu__separator {
+  background: none;
+  height: 2px;
+  box-shadow: var(--bevel-thin-sunken);
+}
+
+/* ---- Colour menu --------------------------------------------------------- */
+
+/* The editor's font-colour and highlight dropdowns. Swatches are sunken wells
+   rather than outlined chips, which is how 98 drew a colour sample. */
+:root[data-chrome="98"] .v-colormenu {
+  background: var(--w98-face);
+  border: 0;
+  box-shadow: var(--bevel-raised), var(--w98-drop-shadow);
+  padding: 3px;
+}
+
+:root[data-chrome="98"] .v-colormenu__row:hover {
+  border-color: transparent;
+  background: var(--w98-select);
+  color: var(--text-on-accent);
+}
+
+:root[data-chrome="98"] .v-colormenu__sep {
+  background: none;
+  height: 2px;
+  box-shadow: var(--bevel-thin-sunken);
+}
+
+:root[data-chrome="98"] .v-colormenu__chip,
+:root[data-chrome="98"] .v-colormenu__swatch {
+  border: 0;
+  box-shadow: var(--bevel-thin-sunken);
+}
+
+:root[data-chrome="98"] .v-colormenu__grid {
+  gap: 2px;
+}
+
+:root[data-chrome="98"] .v-colormenu__swatch {
+  width: 18px;
+  height: 16px;
+}
+
+/* A dotted marquee marks the chosen colour, the way the 98 palette did \u2014 a glow
+   ring would read as a modern focus state. */
+:root[data-chrome="98"] .v-colormenu__swatch:hover {
+  box-shadow: var(--bevel-thin-sunken), inset 0 0 0 1px var(--w98-light);
+}
+
+:root[data-chrome="98"] .v-colormenu__swatch.is-selected {
+  box-shadow: var(--bevel-thin-sunken);
+  outline: 1px dotted var(--w98-text);
+  outline-offset: 1px;
+}
+
+:root[data-chrome="98"] .v-colormenu__tick {
+  color: inherit;
+}
+
+/* The Settings swatch is a sunken sample well, matching the grid. */
+:root[data-chrome="98"] .v-set__color,
+:root[data-chrome="98"] .v-set__gradient-preview {
+  border: 0;
+  box-shadow: var(--bevel-field);
+}
+
+/* ---- Dialogs ------------------------------------------------------------- */
+
+/* Frosted glass is an Aero idea; a 98 dialog is an opaque box with a raised
+   frame that casts the same flat shadow as everything else. */
+:root[data-chrome="98"] .v-modal__backdrop {
+  backdrop-filter: none;
+}
+
+:root[data-chrome="98"] .v-modal {
+  background: var(--w98-face);
+  border: 0;
+  box-shadow: var(--bevel-window), var(--w98-drop-shadow);
+  padding: 4px;
+  backdrop-filter: none;
+}
+
+:root[data-chrome="98"] .v-modal__titlebar {
+  height: 20px;
+  margin: 0;
+  padding: 0 2px 0 3px;
+  background: linear-gradient(90deg, var(--titlebar-start), var(--titlebar-end));
+}
+
+:root[data-chrome="98"] .v-modal__title {
+  font-weight: bold;
+  color: var(--w98-title-text);
+  text-shadow: none;
+}
+
+/* A 98 dialog is grey all the way through; white belongs to the fields inside
+   it, not the dialog body. */
+:root[data-chrome="98"] .v-modal__body {
+  background: var(--w98-face);
+  border: 0;
+  box-shadow: none;
+}
+
+/* The close button is the same 16x14 caption square as the main window, not a
+   glassy Aero lozenge. */
+/* The dialog close button is the window caption close, exactly — same box, same
+   bevel, same glyph positioned the same way. The glyph has to be taken out of
+   the button's flex flow: as a flex item it shrank to 5x13 and clipped the 8x7
+   artwork down to a vertical sliver. */
+:root[data-chrome="98"] .v-modal__close {
+  position: relative;
+  width: 17px;
+  height: 15px;
+  border: 0;
+  background: var(--w98-face);
+  box-shadow: var(--bevel-raised);
+}
+
+:root[data-chrome="98"] .v-modal__close:hover {
+  background: var(--w98-face);
+  box-shadow: var(--bevel-raised);
+}
+
+:root[data-chrome="98"] .v-modal__close:active {
+  box-shadow: var(--bevel-sunken);
+}
+
+:root[data-chrome="98"] .v-modal__close::before {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  filter: none;
+  background-color: transparent;
+  background-image: var(--w98-close-svg);
+  background-repeat: no-repeat;
+  background-position: center;
+  -webkit-mask: none;
+  mask: none;
+}
+
+:root[data-chrome="98"] .v-modal__close:active::before {
+  transform: translate(1px, 1px);
+}
+
+/* The caption glyphs are black-inked SVGs, which vanish on the dark scheme's
+   grey buttons; flipping them is cheaper than shipping a second set. */
+:root[data-chrome="98"][data-scheme="dark"] .v-titlebar__btn::before,
+:root[data-chrome="98"][data-scheme="dark"] .v-modal__close::before {
+  filter: invert(1);
+}
+
+/* Settings panes are dialog content, so each section is a 98 group box rather
+   than a heading floating on bare grey. */
+:root[data-chrome="98"] .v-set__section {
+  padding: var(--space-4);
+  box-shadow: var(--bevel-groove);
+}
+
+/* A 98 dialog is exactly as tall as its contents. The 120px floor left ~80px of
+   dead air above the buttons, which reads worse here than in Aero because the
+   rows are shorter; the empty state carries its own height regardless. */
+:root[data-chrome="98"] .v-recyclebin {
+  min-height: 0;
+}
+
+/* The button band was lopsided: 24px above the buttons (the body's bottom
+   padding plus the footer's top padding) against 4px below, which reads as the
+   buttons sitting too low. Pulling the footer up into the body's padding
+   balances it at 8px either side without touching that padding — Settings
+   cancels it with a hard-coded negative margin. */
+:root[data-chrome="98"] .v-modal__footer {
+  margin-top: calc(-1 * var(--space-3));
+  padding: 0 2px var(--space-2);
+}
+
+/* ---- Selected rows -------------------------------------------------------
+ *
+ * `--selected-fill` is the scheme highlight here, which is dark — so every
+ * place that paints with it needs its text lifted too, or the selected row is
+ * the one you cannot read. Re-pointing the text tokens rather than chasing
+ * every child selector: descendants set their own colour from `--text-muted`
+ * and friends, and custom properties inherit, so this reaches all of them.
+ */
+
+:root[data-chrome="98"] .v-settings__tab.is-active,
+:root[data-chrome="98"] .v-nav__section--selected,
+:root[data-chrome="98"] .v-nav__section--selected:hover,
+:root[data-chrome="98"] .v-search__result:hover,
+:root[data-chrome="98"] .v-search__result:focus-visible,
+:root[data-chrome="98"] .v-tmpl__item.is-selected,
+:root[data-chrome="98"] .v-rtmpl__item.is-selected,
+:root[data-chrome="98"] .v-refine__subtab.is-active,
+:root[data-chrome="98"] .v-refine__tier.is-active {
+  border-color: transparent;
+  background: var(--w98-select);
+  color: var(--text-on-accent);
+  /* Dimmed rather than pure white, so secondary text keeps its hierarchy. */
+  --text-muted: color-mix(in srgb, var(--text-on-accent) var(--w98-select-dim), var(--w98-select));
+  --text-secondary: color-mix(in srgb, var(--text-on-accent) var(--w98-select-dim-strong), var(--w98-select));
+  --notice-ok-text: var(--text-on-accent);
+  --accent-deep: var(--text-on-accent);
+}
+
+/* Pressed-state boxes are the exception: they are buttons reading as held down,
+   so they stay face-coloured and take a sunken edge instead of the highlight. */
+:root[data-chrome="98"] .v-menu__item--checked .v-menu__icon,
+:root[data-chrome="98"] .v-proofbadge__button,
+:root[data-chrome="98"] .v-proofbadge__button:hover:not(:disabled) {
+  border-color: transparent;
+  background: var(--w98-face);
+  box-shadow: var(--bevel-thin-sunken);
+}
+
+:root[data-chrome="98"] .v-settings__nav {
+  border-right: 0;
+  box-shadow: inset -1px 0 0 var(--w98-shadow);
+}
+
+/* ---- Buttons: the default action ----------------------------------------- */
+
+/* Aero's accent button is a blue fill with white text; 98 has no primary fill,
+   so the white label ended up on a grey face. It becomes a normal button
+   wearing the default-action ring instead. */
+:root[data-chrome="98"] .v-button--accent,
+:root[data-chrome="98"] .v-button--accent:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: transparent;
+  background: var(--w98-face);
+  box-shadow: var(--bevel-default);
+}
+
+:root[data-chrome="98"] .v-button--accent:active:not(:disabled) {
+  border-color: transparent;
+  background: var(--w98-face);
+  box-shadow: var(--bevel-default-pressed);
+}
+
+/* 98 presses a button by flipping its bevel, not by nudging it down. */
+:root[data-chrome="98"] .v-button:active:not(:disabled) {
+  transform: none;
+}
+
+/* ---- Toggle -------------------------------------------------------------- */
+
+/* A toggle switch is an anachronism, but the markup is shared with Aero, so it
+   becomes the nearest 98 thing instead: a raised handle in a sunken well. */
+:root[data-chrome="98"] .v-toggle__track {
+  border: 0;
+  background: var(--w98-content);
+  box-shadow: var(--bevel-field);
+}
+
+:root[data-chrome="98"] .v-toggle.is-on .v-toggle__track {
+  background: var(--w98-select);
+}
+
+:root[data-chrome="98"] .v-toggle__thumb {
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 14px;
+  border: 0;
+  background: var(--w98-face);
+  box-shadow: var(--bevel-raised);
+}
+
+:root[data-chrome="98"] .v-toggle.is-on .v-toggle__thumb {
+  left: 20px;
+}
+
+/* ---- Fields -------------------------------------------------------------- */
+
+:root[data-chrome="98"] input[type="text"],
+:root[data-chrome="98"] input[type="search"],
+:root[data-chrome="98"] input[type="number"],
+:root[data-chrome="98"] input[type="password"],
+:root[data-chrome="98"] textarea,
+:root[data-chrome="98"] select,
+:root[data-chrome="98"] .v-editable-input {
+  border: 0;
+  background: var(--w98-content);
+  box-shadow: var(--bevel-field);
+  padding: 3px 4px;
+}
+
+:root[data-chrome="98"] input:focus,
+:root[data-chrome="98"] textarea:focus,
+:root[data-chrome="98"] select:focus {
+  outline: none;
+  box-shadow: var(--bevel-field);
+}
+
+/* ---- The page ------------------------------------------------------------ */
+
+/* .v-editor__page is styled with the section tabs above, since the tab, the
+ * desk and the sheet are one drawn folder and share an outline and a shadow.
+ */
+
+/* ---- Scrollbars ---------------------------------------------------------- */
+
+/* The track is 98's 50% dither of highlight over face, which is why it reads as
+   a texture rather than a flat fill at normal zoom. */
+:root[data-chrome="98"] ::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+
+:root[data-chrome="98"] ::-webkit-scrollbar-track,
+:root[data-chrome="98"] ::-webkit-scrollbar-corner {
+  border: 0;
+  background-color: var(--w98-face);
+  background-image: repeating-conic-gradient(
+    var(--w98-light) 0% 25%,
+    var(--w98-face) 0% 50%
+  );
+  background-size: 2px 2px;
+}
+
+:root[data-chrome="98"] ::-webkit-scrollbar-thumb,
+:root[data-chrome="98"] ::-webkit-scrollbar-thumb:hover,
+:root[data-chrome="98"] ::-webkit-scrollbar-thumb:active {
+  border: 0;
+  background: var(--w98-face);
+  box-shadow: var(--bevel-raised);
+}

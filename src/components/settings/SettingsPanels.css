@@ -167,6 +167,25 @@
   border-color: var(--accent);
 }
 
+/* Title bar gradient pickers (Windows 98 theme). */
+.v-set__color {
+  width: 56px;
+  height: 26px;
+  padding: 2px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  cursor: pointer;
+}
+
+.v-set__gradient-preview {
+  align-self: flex-end;
+  width: 160px;
+  height: 26px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+}
+
 .v-set__preview {
   margin: var(--space-2) 0 0;
   padding: var(--space-3) var(--space-4);
