@@ -4,7 +4,7 @@
   position: fixed;
   z-index: 50;
   max-width: 280px;
-  background: #fff;
+  background: var(--surface-raised);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-panel);
   box-shadow: var(--shadow-popup);

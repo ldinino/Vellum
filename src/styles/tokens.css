@@ -323,8 +323,10 @@
   --border-soft: #303030;
   --border-faint: #262626;
 
-  --gradient-toolbar: linear-gradient(#141414, #0a0a0a);
-  --gradient-panel: linear-gradient(#101010, #0a0a0a);
+  /* Chrome goes fully black too; only the controls sitting on it keep a
+     gradient, so buttons still read as raised against it. */
+  --gradient-toolbar: #000000;
+  --gradient-panel: #000000;
   --gradient-button: linear-gradient(#1c1c1c, #141414);
   --gradient-scrollbar: linear-gradient(to right, #2e2e2e, #1e1e1e);
   --gradient-scrollbar-horizontal: linear-gradient(to bottom, #2e2e2e, #1e1e1e);

@@ -54,7 +54,8 @@
   padding: 4px 8px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-control);
-  background: #fff;
+  background: var(--surface-raised);
+  color: var(--text-primary);
   font-family: var(--font-ui);
   font-size: var(--text-size-ui);
 }

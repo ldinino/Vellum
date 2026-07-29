@@ -30,7 +30,8 @@
   font-size: var(--text-size-ui);
   border: 1px solid color-mix(in srgb, var(--section-tone) 45%, var(--tint-edge));
   border-radius: var(--radius-control);
-  background: #fff;
+  background: var(--surface-raised);
+  color: var(--text-primary);
 }
 
 .v-find__input:focus {
