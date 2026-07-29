@@ -79,14 +79,14 @@
   justify-content: center;
   width: 30px;
   padding: var(--space-4) var(--space-1);
-  border: 1px solid color-mix(in srgb, var(--nb-color) 55%, var(--tint-edge));
+  border: 1px solid color-mix(in srgb, var(--nb-tone) 55%, var(--tint-edge));
   border-radius: var(--radius-control);
-  background: color-mix(in srgb, var(--nb-color) 40%, var(--tint-base));
+  background: color-mix(in srgb, var(--nb-tone) 40%, var(--tint-base));
   cursor: pointer;
 }
 
 .v-nav__rail-item:hover {
-  background: color-mix(in srgb, var(--nb-color) 55%, var(--tint-base));
+  background: color-mix(in srgb, var(--nb-tone) 55%, var(--tint-base));
 }
 
 .v-nav__rail-item--selected,
@@ -107,6 +107,19 @@
   text-overflow: ellipsis;
 }
 
+.v-nav__rail-item,
+.v-nav__group {
+  /* Themed form of the inline --nb-color (see VellumShell.css). */
+  --nb-tone: var(--nb-color);
+}
+
+@supports (color: oklch(from red l c h)) {
+  :root[data-theme="dark"] .v-nav__rail-item,
+  :root[data-theme="dark"] .v-nav__group {
+    --nb-tone: oklch(from var(--nb-color) 0.5 calc(c * 1.9) h);
+  }
+}
+
 .v-nav__tree {
   flex: 1;
   overflow-y: auto;
@@ -118,9 +131,9 @@
    lighter body holding its sections. */
 .v-nav__group {
   margin-bottom: var(--space-3);
-  border: 1px solid color-mix(in srgb, var(--nb-color) 55%, var(--tint-edge));
+  border: 1px solid color-mix(in srgb, var(--nb-tone) 55%, var(--tint-edge));
   border-radius: var(--radius-panel);
-  background: color-mix(in srgb, var(--nb-color) 12%, var(--tint-base));
+  background: color-mix(in srgb, var(--nb-tone) 12%, var(--tint-base));
   overflow: hidden;
 }
 
@@ -144,7 +157,7 @@
 .v-nav__notebook {
   font-weight: 600;
   /* Colored header bar; square so it fills the rounded box's top corners. */
-  background: color-mix(in srgb, var(--nb-color) 58%, var(--tint-base));
+  background: color-mix(in srgb, var(--nb-tone) 58%, var(--tint-base));
   border-color: transparent;
   border-radius: 0;
 }

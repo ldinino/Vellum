@@ -28,7 +28,7 @@
      blend in (see .v-pagelist__items / --selected). The right-edge shadow is
      clipped by the editor's overflow; the rounded right corners curve inward onto
      the shared desk gradient. */
-  border: 1px solid color-mix(in srgb, var(--section-color) 45%, var(--tint-edge));
+  border: 1px solid color-mix(in srgb, var(--section-tone) 45%, var(--tint-edge));
   border-radius: var(--radius-panel);
   box-shadow: var(--shadow-raised);
   /* Clip the title/content (and rounded corners); content scrolls inside. */

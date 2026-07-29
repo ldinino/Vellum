@@ -103,6 +103,8 @@
 
   /* ---- Shadows & depth --------------------------------------------------- */
   --shadow-raised: 0 1px 3px #c6c9cd;
+  /* Cast by the toolbar onto the desk below it. */
+  --shadow-toolbar: 0 1px 3px #8b9097;
   --shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.8);
   --shadow-popup: 2px 2px 6px rgba(0, 0, 0, 0.3);
   --shadow-modal: 2px 2px 10px 1px rgba(0, 0, 0, 0.55);
@@ -265,6 +267,8 @@
 
   /* ---- Shadows & depth --------------------------------------------------- */
   --shadow-raised: 0 1px 3px rgba(0, 0, 0, 0.6);
+  /* A light grey cast here read as a glowing seam above the desk. */
+  --shadow-toolbar: 0 2px 4px rgba(0, 0, 0, 0.55);
   --shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.06);
   --shadow-popup: 2px 2px 8px rgba(0, 0, 0, 0.6);
   --shadow-modal: 2px 2px 12px 1px rgba(0, 0, 0, 0.75);

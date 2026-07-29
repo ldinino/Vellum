@@ -23,13 +23,28 @@
   /* The "desk" the open section's page rests on (OneNote 2007): one section-tinted
      vertical gradient shared by the editor area and the page strip so they read
      as a single layer. Strongest near the tabs, fading down. --section-color is
-     set inline per the open section. */
+     set inline per the open section; --section-tone is its themed form (see
+     below) and is what every section-tinted surface in the shell blends with.
+     Page list, find bar and editor area all inherit it from here. */
+  --section-tone: var(--section-color);
   --desk-gradient: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--section-color) 22%, var(--tint-base)) 0,
-    color-mix(in srgb, var(--section-color) 12%, var(--tint-base)) 240px,
-    color-mix(in srgb, var(--section-color) 12%, var(--tint-base))
+    color-mix(in srgb, var(--section-tone) 22%, var(--tint-base)) 0,
+    color-mix(in srgb, var(--section-tone) 12%, var(--tint-base)) 240px,
+    color-mix(in srgb, var(--section-tone) 12%, var(--tint-base))
   );
+}
+
+/* Section colours are pastels picked for a white UI. Blended into a dark page
+   they go muddy and grey, so dark mode re-tones them instead: same hue, roughly
+   double the chroma, pinned to a mid lightness. That turns a washed-out mauve
+   into a proper colour while keeping each section recognisably "the blue one".
+   Guarded by @supports because it needs relative colour syntax; without it the
+   tone falls back to the raw colour and dark mode simply looks as it did. */
+@supports (color: oklch(from red l c h)) {
+  :root[data-theme="dark"] .v-shell {
+    --section-tone: oklch(from var(--section-color) 0.5 calc(c * 1.9) h);
+  }
 }
 
 .v-shell__body {
@@ -89,7 +104,7 @@
   min-width: 0;
   min-height: 0;
   display: flex;
-  border: 1px solid color-mix(in srgb, var(--section-color) 50%, var(--tint-edge));
+  border: 1px solid color-mix(in srgb, var(--section-tone) 50%, var(--tint-edge));
   border-radius: var(--radius-panel);
   overflow: hidden;
 }

@@ -68,24 +68,35 @@
   font-size: var(--text-size-ui);
   color: var(--text-primary);
   cursor: pointer;
+  /* Themed form of the inline --tab-color; see the @supports block below. */
+  --tab-tone: var(--tab-color);
   /* Folder tab: a section-tinted top-down gradient (glossy), rounded top corners,
      square bottom that sits on the desk edge; no bottom border (it meets the
      page). The active tab overrides the bottom corners to flare outward. */
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--tab-color) 48%, var(--tint-base)),
-    color-mix(in srgb, var(--tab-color) 34%, var(--tint-base))
+    color-mix(in srgb, var(--tab-tone) 48%, var(--tint-base)),
+    color-mix(in srgb, var(--tab-tone) 34%, var(--tint-base))
   );
-  border: 1px solid color-mix(in srgb, var(--tab-color) 55%, var(--tint-edge));
+  border: 1px solid color-mix(in srgb, var(--tab-tone) 55%, var(--tint-edge));
   border-bottom: none;
   border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+}
+
+/* Dark mode re-tones the pastel section colour into something with actual
+   chroma (see VellumShell.css for the reasoning); without relative colour
+   support the tone stays the raw colour. */
+@supports (color: oklch(from red l c h)) {
+  :root[data-theme="dark"] .v-sectiontabs__tab {
+    --tab-tone: oklch(from var(--tab-color) 0.5 calc(c * 1.9) h);
+  }
 }
 
 .v-sectiontabs__tab:hover {
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--tab-color) 58%, var(--tint-base)),
-    color-mix(in srgb, var(--tab-color) 44%, var(--tint-base))
+    color-mix(in srgb, var(--tab-tone) 58%, var(--tint-base)),
+    color-mix(in srgb, var(--tab-tone) 44%, var(--tint-base))
   );
 }
 
@@ -99,10 +110,10 @@
   z-index: 1; /* tab + its flares paint over the neighbouring tabs */
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--tab-color) 42%, var(--tint-base)) 0,
-    color-mix(in srgb, var(--tab-color) 20%, var(--tint-base)) 100%
+    color-mix(in srgb, var(--tab-tone) 42%, var(--tint-base)) 0,
+    color-mix(in srgb, var(--tab-tone) 20%, var(--tint-base)) 100%
   );
-  border-color: color-mix(in srgb, var(--tab-color) 50%, var(--tint-edge));
+  border-color: color-mix(in srgb, var(--tab-tone) 50%, var(--tint-edge));
   /* Overlap the desk's 1px top border so it's covered under the tab (no line). */
   margin-bottom: -1px;
   padding-bottom: 5px;
@@ -127,8 +138,8 @@
   background: radial-gradient(
     circle at top left,
     transparent calc(var(--radius-panel) - 1px),
-    color-mix(in srgb, var(--tab-color) 50%, var(--tint-edge)) calc(var(--radius-panel) - 1px) var(--radius-panel),
-    color-mix(in srgb, var(--tab-color) 20%, var(--tint-base)) var(--radius-panel)
+    color-mix(in srgb, var(--tab-tone) 50%, var(--tint-edge)) calc(var(--radius-panel) - 1px) var(--radius-panel),
+    color-mix(in srgb, var(--tab-tone) 20%, var(--tint-base)) var(--radius-panel)
   );
 }
 .v-sectiontabs__tab--selected::after {
@@ -136,8 +147,8 @@
   background: radial-gradient(
     circle at top right,
     transparent calc(var(--radius-panel) - 1px),
-    color-mix(in srgb, var(--tab-color) 50%, var(--tint-edge)) calc(var(--radius-panel) - 1px) var(--radius-panel),
-    color-mix(in srgb, var(--tab-color) 20%, var(--tint-base)) var(--radius-panel)
+    color-mix(in srgb, var(--tab-tone) 50%, var(--tint-edge)) calc(var(--radius-panel) - 1px) var(--radius-panel),
+    color-mix(in srgb, var(--tab-tone) 20%, var(--tint-base)) var(--radius-panel)
   );
 }
 

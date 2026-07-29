@@ -10,9 +10,9 @@
   align-items: center;
   gap: var(--space-2);
   padding: 4px 6px;
-  border: 1px solid color-mix(in srgb, var(--section-color) 55%, var(--tint-edge));
+  border: 1px solid color-mix(in srgb, var(--section-tone) 55%, var(--tint-edge));
   border-radius: var(--radius-panel);
-  background: color-mix(in srgb, var(--section-color) 28%, var(--tint-base));
+  background: color-mix(in srgb, var(--section-tone) 28%, var(--tint-base));
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   font-family: var(--font-ui);
   font-size: var(--text-size-ui);
@@ -28,7 +28,7 @@
   padding: 3px 6px;
   font-family: var(--font-ui);
   font-size: var(--text-size-ui);
-  border: 1px solid color-mix(in srgb, var(--section-color) 45%, var(--tint-edge));
+  border: 1px solid color-mix(in srgb, var(--section-tone) 45%, var(--tint-edge));
   border-radius: var(--radius-control);
   background: #fff;
 }

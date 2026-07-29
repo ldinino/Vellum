@@ -6,7 +6,7 @@
   padding: 0 var(--space-3);
   background: var(--gradient-toolbar);
   border-bottom: 1px solid var(--border-strong);
-  box-shadow: 0 1px 3px #8b9097;
+  box-shadow: var(--shadow-toolbar);
   position: relative;
   z-index: 1; /* shadow over the content below */
 }
