@@ -9,6 +9,12 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ### Changed
 
+- **Faster navigation and typing** — Vellum now keeps each notebook's database
+  open instead of reopening it for every single action. Opening a section,
+  switching pages, and auto-saving as you type were each paying about 5 ms of
+  setup before any real work happened — roughly 24 times the cost of the query
+  itself. The effect is largest where file access is slowest: ARM64 machines,
+  virtual machines, and notebooks stored in a synced OneDrive folder.
 - **Code button now works inline** — The toolbar's code button applies inline
   `code` formatting (like bold or italic) when you have text selected or your
   cursor is inside a line of text, and only creates a full code block when the

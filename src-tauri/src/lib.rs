@@ -43,6 +43,7 @@ pub fn run() {
         )
         .manage(OllamaState::default())
         .manage(applog::AppLog::default())
+        .manage(db::PoolCache::default())
         .manage(refine::logbuf::LogBuffer::default())
         .manage(refine::runtime::InstallState::default())
         .setup(|app| {

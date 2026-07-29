@@ -16,7 +16,9 @@
 
 use sqlx::sqlite::{SqlitePoolOptions, SqliteConnectOptions, SqliteJournalMode};
 use sqlx::{Pool, Sqlite};
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 /// Ordered migrations. Index + 1 == resulting `user_version`.
 /// Never edit an entry that has shipped — append a new one.
@@ -149,6 +151,89 @@ pub(crate) async fn open_pool(db_path: &Path, create: bool) -> Result<Pool<Sqlit
         .map_err(|e| format!("open {}: {e}", db_path.display()))
 }
 
+/// Cache of open notebook pools, keyed by database path (managed Tauri state).
+///
+/// Opening a SQLite connection is *not* free: the old "open a pool per command"
+/// approach cost ~5 ms of setup per call (schema check + two connections) versus
+/// ~0.2 ms for the query itself, on every section click, page load, and
+/// auto-save. That overhead is much worse on ARM64/virtualized filesystems and
+/// on the OneDrive-synced data folder, where each file open goes through a sync
+/// filter driver. Pools are cheap to clone (`Pool` is an `Arc` internally) and a
+/// cached pool keeps the same single-connection semantics the rest of the code
+/// relies on (`foreign_keys` on, deterministic transactions).
+///
+/// IMPORTANT: an open pool holds a file handle, and Windows refuses to delete or
+/// rename a file that is still open. Any code that removes a notebook folder or
+/// moves the data root MUST call [`PoolCache::evict`] / [`PoolCache::clear`]
+/// first, or the delete/move will fail.
+#[derive(Default)]
+pub struct PoolCache {
+    pools: Mutex<HashMap<PathBuf, Pool<Sqlite>>>,
+}
+
+impl PoolCache {
+    fn get(&self, db_path: &Path) -> Option<Pool<Sqlite>> {
+        let map = self.pools.lock().ok()?;
+        map.get(db_path).cloned()
+    }
+
+    /// The cached pool for `db_path`, opening (and migrating) it on first use.
+    pub async fn get_or_open(&self, db_path: &Path) -> Result<Pool<Sqlite>, String> {
+        if let Some(pool) = self.get(db_path) {
+            return Ok(pool);
+        }
+        // Migrate only on the first open of this database in the process: the
+        // schema can't change underneath us afterwards, so later calls skip it.
+        create_or_migrate(db_path).await?;
+        let pool = open_pool(db_path, false).await?;
+        // Another task may have opened the same DB while we awaited; keep
+        // whichever landed first so there is never more than one live pool per
+        // file, and close ours.
+        let existing = {
+            match self.pools.lock() {
+                Ok(mut map) => match map.get(db_path) {
+                    Some(p) => Some(p.clone()),
+                    None => {
+                        map.insert(db_path.to_path_buf(), pool.clone());
+                        None
+                    }
+                },
+                Err(_) => None,
+            }
+        };
+        match existing {
+            Some(winner) => {
+                pool.close().await;
+                Ok(winner)
+            }
+            None => Ok(pool),
+        }
+    }
+
+    /// Close and forget the pool for one database (call before deleting it).
+    pub async fn evict(&self, db_path: &Path) {
+        let pool = self
+            .pools
+            .lock()
+            .ok()
+            .and_then(|mut map| map.remove(db_path));
+        if let Some(pool) = pool {
+            pool.close().await;
+        }
+    }
+
+    /// Close and forget every pool (call before moving the whole data root).
+    pub async fn clear(&self) {
+        let pools: Vec<Pool<Sqlite>> = match self.pools.lock() {
+            Ok(mut map) => map.drain().map(|(_, p)| p).collect(),
+            Err(_) => Vec::new(),
+        };
+        for pool in pools {
+            pool.close().await;
+        }
+    }
+}
+
 /// Open (creating if missing) a notebook DB, switch it to WAL, and bring the
 /// schema up to date. Returns the final schema version.
 pub async fn create_or_migrate(db_path: &Path) -> Result<i64, String> {
@@ -216,6 +301,47 @@ mod tests {
 
         pool.close().await;
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The pool cache must reuse one pool per database, keep the
+    /// single-connection semantics the CRUD code relies on, and — critically —
+    /// release the file handle on `evict`. Windows refuses to delete a file that
+    /// is still open, so purging a notebook (or moving the data root) breaks
+    /// unless the cached pool is closed first.
+    #[tokio::test]
+    async fn pool_cache_reuses_and_releases_the_database() {
+        let dir = std::env::temp_dir().join(format!("vellum-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("notebook.db");
+
+        let cache = PoolCache::default();
+        // First call migrates a brand-new DB; later calls reuse the same pool.
+        let a = cache.get_or_open(&db_path).await.unwrap();
+        let b = cache.get_or_open(&db_path).await.unwrap();
+        assert!(!a.is_closed() && !b.is_closed());
+
+        // foreign_keys is per-connection and ON DELETE CASCADE depends on it.
+        let fk: i64 = sqlx::query_scalar("PRAGMA foreign_keys")
+            .fetch_one(&a)
+            .await
+            .unwrap();
+        assert_eq!(fk, 1, "cached pool must keep foreign_keys on");
+
+        // A write through one handle is visible through the other.
+        sqlx::query("INSERT INTO sections (id, name, sort_order) VALUES ('s1','Sec',0)")
+            .execute(&a)
+            .await
+            .unwrap();
+        let n: i64 = sqlx::query_scalar("SELECT count(*) FROM sections")
+            .fetch_one(&b)
+            .await
+            .unwrap();
+        assert_eq!(n, 1);
+
+        cache.evict(&db_path).await;
+        assert!(a.is_closed(), "evict must close the pool");
+        // The whole point: the folder is now deletable.
+        std::fs::remove_dir_all(&dir).expect("notebook folder must be removable after evict");
     }
 }
 

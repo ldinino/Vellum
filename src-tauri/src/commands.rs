@@ -118,8 +118,12 @@ async fn unindex_page(app: &AppHandle, page_id: &str) {
     }
 }
 
-/// Resolve a notebook id to an open pool on its `notebook.db`. Opened per call
-/// (SQLite open is cheap); Phase 2's hot auto-save path may add caching.
+/// Resolve a notebook id to an open pool on its `notebook.db`. Pools are cached
+/// per database for the life of the process ([`db::PoolCache`]) — re-opening one
+/// per command cost far more than the queries themselves. The cache migrates the
+/// schema on first open, so a newly-shipped migration still applies even on the
+/// startup restore path (list_sections / list_pages), which reads notebooks
+/// directly without going through open_notebook.
 async fn pool_for(app: &AppHandle, notebook_id: &str) -> Result<Pool<Sqlite>, String> {
     let registry = config::load_registry(app)?;
     let meta = registry
@@ -131,13 +135,7 @@ async fn pool_for(app: &AppHandle, notebook_id: &str) -> Result<Pool<Sqlite>, St
     if !path.is_file() {
         return Err(format!("Notebook database missing: {}", path.display()));
     }
-    // Bring the schema up to date before any read/write. The startup restore
-    // path (list_sections / list_pages) reads notebooks directly, bypassing
-    // open_notebook, so without this a newly-shipped migration would never apply
-    // (e.g. the page_sort_mode column → "no such column" on list_sections).
-    // create_or_migrate is idempotent and cheap when already current.
-    db::create_or_migrate(&path).await?;
-    db::open_pool(&path, false).await
+    app.state::<db::PoolCache>().get_or_open(&path).await
 }
 
 /// Resolve a notebook id to its on-disk folder under `Documents\Vellum`.
@@ -694,7 +692,7 @@ pub fn reveal_data_dir(app: AppHandle) -> Result<(), String> {
 /// OneDrive makes of the live SQLite files. Returns the new data-root path; the
 /// caller restarts the app so everything reloads from the new location.
 #[tauri::command]
-pub fn set_data_dir(app: AppHandle, new_parent: String) -> Result<String, String> {
+pub async fn set_data_dir(app: AppHandle, new_parent: String) -> Result<String, String> {
     let current = paths::data_dir(&app)?;
     let parent = std::path::PathBuf::from(new_parent.trim());
     if !parent.is_dir() {
@@ -732,6 +730,9 @@ pub fn set_data_dir(app: AppHandle, new_parent: String) -> Result<String, String
     }
 
     if current.is_dir() {
+        // Release every open notebook handle first, or the move fails on
+        // Windows (and would leave the data root half-copied).
+        app.state::<db::PoolCache>().clear().await;
         move_dir(&current, &new_root)?;
     } else {
         std::fs::create_dir_all(&new_root)
@@ -969,6 +970,11 @@ async fn purge_notebook(app: &AppHandle, notebook_id: &str) -> Result<(), String
 
     let dir = paths::notebook_dir(app, &meta.folder)?;
     if dir.is_dir() {
+        // Close this notebook's cached pool first — Windows will not delete a
+        // file that still has an open handle.
+        app.state::<db::PoolCache>()
+            .evict(&dir.join("notebook.db"))
+            .await;
         std::fs::remove_dir_all(&dir)
             .map_err(|e| format!("remove {}: {e}", dir.display()))?;
     }
