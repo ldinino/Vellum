@@ -166,15 +166,30 @@ pub(crate) async fn open_pool(db_path: &Path, create: bool) -> Result<Pool<Sqlit
 /// rename a file that is still open. Any code that removes a notebook folder or
 /// moves the data root MUST call [`PoolCache::evict`] / [`PoolCache::clear`]
 /// first, or the delete/move will fail.
+///
+/// IMPORTANT: callers must **not** call `close()` on a pool from this cache — it
+/// is shared, and closing it breaks every later command with "attempted to
+/// acquire a connection on a closed pool". `get_or_open` defends against that by
+/// discarding a closed pool and reopening, so a stray close costs performance
+/// rather than breaking the app.
 #[derive(Default)]
 pub struct PoolCache {
     pools: Mutex<HashMap<PathBuf, Pool<Sqlite>>>,
 }
 
 impl PoolCache {
+    /// The cached pool for `db_path`, if one is present and still usable. A pool
+    /// someone closed is dropped from the cache so the caller reopens it.
     fn get(&self, db_path: &Path) -> Option<Pool<Sqlite>> {
-        let map = self.pools.lock().ok()?;
-        map.get(db_path).cloned()
+        let mut map = self.pools.lock().ok()?;
+        match map.get(db_path) {
+            Some(pool) if !pool.is_closed() => Some(pool.clone()),
+            Some(_) => {
+                map.remove(db_path);
+                None
+            }
+            None => None,
+        }
     }
 
     /// The cached pool for `db_path`, opening (and migrating) it on first use.
@@ -192,8 +207,8 @@ impl PoolCache {
         let existing = {
             match self.pools.lock() {
                 Ok(mut map) => match map.get(db_path) {
-                    Some(p) => Some(p.clone()),
-                    None => {
+                    Some(p) if !p.is_closed() => Some(p.clone()),
+                    _ => {
                         map.insert(db_path.to_path_buf(), pool.clone());
                         None
                     }
@@ -342,6 +357,31 @@ mod tests {
         assert!(a.is_closed(), "evict must close the pool");
         // The whole point: the folder is now deletable.
         std::fs::remove_dir_all(&dir).expect("notebook folder must be removable after evict");
+    }
+
+    /// A caller that wrongly closes a shared pool must not poison the cache for
+    /// every later command ("attempted to acquire a connection on a closed
+    /// pool"). The cache notices and reopens instead.
+    #[tokio::test]
+    async fn pool_cache_recovers_from_a_closed_pool() {
+        let dir = std::env::temp_dir().join(format!("vellum-test-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db_path = dir.join("notebook.db");
+
+        let cache = PoolCache::default();
+        let first = cache.get_or_open(&db_path).await.unwrap();
+        first.close().await; // simulate a stray close somewhere in the codebase
+
+        let second = cache.get_or_open(&db_path).await.unwrap();
+        assert!(!second.is_closed(), "cache must hand back a usable pool");
+        let n: i64 = sqlx::query_scalar("SELECT count(*) FROM sections")
+            .fetch_one(&second)
+            .await
+            .expect("queries must work again after a stray close");
+        assert_eq!(n, 0);
+
+        cache.evict(&db_path).await;
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 

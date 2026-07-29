@@ -43,7 +43,6 @@ async fn index_page(app: &AppHandle, notebook_id: &str, page_id: &str) {
 async fn index_page_inner(app: &AppHandle, notebook_id: &str, page_id: &str) -> Result<(), String> {
     let pool = pool_for(app, notebook_id).await?;
     let data = notebook::reindex_page(&pool, page_id).await;
-    pool.close().await;
 
     let master = search::open_master(&master_index_path(app)?, true).await?;
     let r = match data? {
@@ -75,7 +74,6 @@ async fn reindex_section(app: &AppHandle, notebook_id: &str, section_id: &str) {
     let ids = match pool_for(app, notebook_id).await {
         Ok(pool) => {
             let r = notebook::section_page_ids(&pool, section_id).await;
-            pool.close().await;
             r
         }
         Err(e) => Err(e),
@@ -92,7 +90,6 @@ async fn reindex_notebook(app: &AppHandle, notebook_id: &str) {
     let ids = match pool_for(app, notebook_id).await {
         Ok(pool) => {
             let r = notebook::all_page_ids(&pool).await;
-            pool.close().await;
             r
         }
         Err(e) => Err(e),
@@ -927,7 +924,6 @@ pub async fn set_notebook_proofing(
 
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::clear_all_proofing_prefs(&pool).await;
-    pool.close().await;
     r
 }
 
@@ -1009,7 +1005,6 @@ pub fn reorder_notebooks(app: AppHandle, ordered_ids: Vec<String>) -> Result<(),
 pub async fn list_sections(app: AppHandle, notebook_id: String) -> Result<Vec<Section>, String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::list_sections(&pool).await;
-    pool.close().await;
     r
 }
 
@@ -1021,7 +1016,6 @@ pub async fn create_section(
 ) -> Result<Section, String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::create_section(&pool, &name).await;
-    pool.close().await;
     r
 }
 
@@ -1034,7 +1028,6 @@ pub async fn rename_section(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::rename_section(&pool, &section_id, &name).await;
-    pool.close().await;
     r?;
     // The section name is denormalized into search breadcrumbs — refresh them.
     reindex_section(&app, &notebook_id, &section_id).await;
@@ -1052,7 +1045,6 @@ pub async fn update_section(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::update_section(&pool, &section_id, &name, color, page_template_id).await;
-    pool.close().await;
     r?;
     // A rename via Properties changes the denormalized search breadcrumb.
     reindex_section(&app, &notebook_id, &section_id).await;
@@ -1070,7 +1062,6 @@ pub async fn soft_delete_section(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::soft_delete_section(&pool, &section_id).await;
-    pool.close().await;
     let page_ids = r?;
     let master = search::open_master(&master_index_path(&app)?, true).await?;
     for pid in &page_ids {
@@ -1090,7 +1081,6 @@ async fn purge_section(
 ) -> Result<(), String> {
     let pool = pool_for(app, notebook_id).await?;
     let r = notebook::delete_section(&pool, section_id).await;
-    pool.close().await;
     let page_ids = r?;
     let master = search::open_master(&master_index_path(app)?, true).await?;
     for pid in &page_ids {
@@ -1122,7 +1112,6 @@ pub async fn reorder_sections(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::reorder_sections(&pool, &ordered_ids).await;
-    pool.close().await;
     r
 }
 
@@ -1136,7 +1125,6 @@ pub async fn set_section_sort(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::set_section_sort(&pool, &section_id, &mode, &dir).await;
-    pool.close().await;
     r
 }
 
@@ -1151,7 +1139,6 @@ pub async fn set_section_proofing(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::set_section_proofing(&pool, &section_id, grammar_pref, spell_pref).await;
-    pool.close().await;
     r
 }
 
@@ -1167,7 +1154,6 @@ pub async fn list_pages(
 ) -> Result<Vec<Page>, String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::list_pages(&pool, &section_id).await;
-    pool.close().await;
     r
 }
 
@@ -1274,10 +1260,7 @@ pub async fn create_page(
     let pool = pool_for(&app, &notebook_id).await?;
     let page = match notebook::create_page(&pool, &section_id, &title).await {
         Ok(p) => p,
-        Err(e) => {
-            pool.close().await;
-            return Err(e);
-        }
+        Err(e) => return Err(e),
     };
 
     // If the section has a page template, seed the new page with its content,
@@ -1305,7 +1288,6 @@ pub async fn create_page(
     } else {
         false
     };
-    pool.close().await;
 
     if applied {
         index_page(&app, &notebook_id, &page.id).await;
@@ -1322,7 +1304,6 @@ pub async fn set_page_title(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::set_page_title(&pool, &page_id, &title).await;
-    pool.close().await;
     r?;
     index_page(&app, &notebook_id, &page_id).await;
     Ok(())
@@ -1339,7 +1320,6 @@ pub async fn set_page_proofing(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::set_page_proofing(&pool, &page_id, grammar_pref, spell_pref).await;
-    pool.close().await;
     r
 }
 
@@ -1353,7 +1333,6 @@ pub async fn soft_delete_page(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::soft_delete_page(&pool, &page_id).await;
-    pool.close().await;
     r?;
     unindex_page(&app, &page_id).await;
     Ok(())
@@ -1363,7 +1342,6 @@ pub async fn soft_delete_page(
 async fn purge_page(app: &AppHandle, notebook_id: &str, page_id: &str) -> Result<(), String> {
     let pool = pool_for(app, notebook_id).await?;
     let r = notebook::delete_page(&pool, page_id).await;
-    pool.close().await;
     r?;
     unindex_page(app, page_id).await;
     // Remove the page's attachment files (the DB rows cascade, the files don't).
@@ -1386,7 +1364,6 @@ pub async fn duplicate_page(
 ) -> Result<Page, String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::duplicate_page(&pool, &page_id).await;
-    pool.close().await;
     let page = r?;
     index_page(&app, &notebook_id, &page.id).await;
     Ok(page)
@@ -1401,7 +1378,6 @@ pub async fn move_page(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::move_page(&pool, &page_id, &to_section_id).await;
-    pool.close().await;
     r?;
     // Section changed → refresh the indexed breadcrumb.
     index_page(&app, &notebook_id, &page_id).await;
@@ -1416,7 +1392,6 @@ pub async fn reorder_pages(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::reorder_pages(&pool, &ordered_ids).await;
-    pool.close().await;
     r
 }
 
@@ -1587,10 +1562,7 @@ pub async fn list_attachments(
     let pool = pool_for(&app, &notebook_id).await?;
     let mut attachments = match notebook::list_attachments(&pool, &page_id).await {
         Ok(a) => a,
-        Err(e) => {
-            pool.close().await;
-            return Err(e);
-        }
+        Err(e) => return Err(e),
     };
     // Backfill sizes for rows written before the `size` column existed (they
     // default to 0): stat the file and persist its length so the UI stops
@@ -1606,7 +1578,6 @@ pub async fn list_attachments(
             }
         }
     }
-    pool.close().await;
     Ok(attachments)
 }
 
@@ -1636,7 +1607,6 @@ pub async fn add_attachment(
     let mime = mime_type.filter(|m| !m.is_empty());
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::add_attachment(&pool, &page_id, &safe, &rel, mime.as_deref(), size).await;
-    pool.close().await;
     let att = r?;
 
     index_page(&app, &notebook_id, &page_id).await;
@@ -1654,7 +1624,6 @@ pub async fn soft_delete_attachment(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::soft_delete_attachment(&pool, &attachment_id).await;
-    pool.close().await;
     if let Some(page_id) = r? {
         index_page(&app, &notebook_id, &page_id).await;
     }
@@ -1670,7 +1639,6 @@ async fn purge_attachment(
 ) -> Result<(), String> {
     let pool = pool_for(app, notebook_id).await?;
     let r = notebook::remove_attachment(&pool, attachment_id).await;
-    pool.close().await;
 
     if let Some((page_id, rel)) = r? {
         let abs = notebook_folder(app, notebook_id)?.join(&rel);
@@ -1755,7 +1723,6 @@ pub async fn list_recycle_bin(app: AppHandle) -> Result<Vec<RecycleItem>, String
         let sections = notebook::deleted_sections(&pool).await;
         let pages = notebook::deleted_pages(&pool).await;
         let attachments = notebook::deleted_attachments(&pool).await;
-        pool.close().await;
 
         for s in sections.unwrap_or_default() {
             items.push(RecycleItem {
@@ -1822,7 +1789,6 @@ pub async fn count_recycle_bin(app: AppHandle) -> Result<i64, String> {
         let s = notebook::deleted_sections(&pool).await.map(|v| v.len()).unwrap_or(0);
         let p = notebook::deleted_pages(&pool).await.map(|v| v.len()).unwrap_or(0);
         let a = notebook::deleted_attachments(&pool).await.map(|v| v.len()).unwrap_or(0);
-        pool.close().await;
         count += (s + p + a) as i64;
     }
     Ok(count)
@@ -1854,7 +1820,6 @@ pub async fn restore_item(
         "section" => {
             let pool = pool_for(&app, &notebook_id).await?;
             let r = notebook::restore_section(&pool, &id).await;
-            pool.close().await;
             let page_ids = r?;
             reindex_pages(&app, &notebook_id, &page_ids).await;
             Ok(())
@@ -1862,7 +1827,6 @@ pub async fn restore_item(
         "page" => {
             let pool = pool_for(&app, &notebook_id).await?;
             let r = notebook::restore_page(&pool, &id).await;
-            pool.close().await;
             r?;
             index_page(&app, &notebook_id, &id).await;
             Ok(())
@@ -1870,7 +1834,6 @@ pub async fn restore_item(
         "attachment" => {
             let pool = pool_for(&app, &notebook_id).await?;
             let r = notebook::restore_attachment(&pool, &id).await;
-            pool.close().await;
             if let Some(page_id) = r? {
                 index_page(&app, &notebook_id, &page_id).await;
             }
@@ -1925,7 +1888,6 @@ pub async fn empty_recycle_bin(app: AppHandle) -> Result<(), String> {
         let sections = notebook::deleted_sections(&pool).await.unwrap_or_default();
         let pages = notebook::deleted_pages(&pool).await.unwrap_or_default();
         let attachments = notebook::deleted_attachments(&pool).await.unwrap_or_default();
-        pool.close().await;
 
         for s in sections {
             if let Err(e) = purge_section(&app, &nb.id, &s.id).await {
@@ -1958,7 +1920,6 @@ pub async fn load_page_content(
 ) -> Result<Option<String>, String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::load_page_content(&pool, &page_id).await;
-    pool.close().await;
     r
 }
 
@@ -1971,7 +1932,6 @@ pub async fn append_page_op(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::append_page_op(&pool, &page_id, &op_json).await;
-    pool.close().await;
     r
 }
 
@@ -1985,7 +1945,6 @@ pub async fn save_page_snapshot(
 ) -> Result<(), String> {
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::save_page_snapshot(&pool, &page_id, &content_json, &preview).await;
-    pool.close().await;
     r?;
     // Re-index on every durable snapshot (spec Section 11).
     index_page(&app, &notebook_id, &page_id).await;
