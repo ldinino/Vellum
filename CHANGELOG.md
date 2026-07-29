@@ -7,6 +7,8 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-07-29
+
 ### Changed
 
 - **Faster navigation and typing** — Vellum now keeps each notebook's database

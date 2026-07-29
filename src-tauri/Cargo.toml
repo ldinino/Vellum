@@ -1,6 +1,6 @@
 [package]
 name = "vellum"
-version = "0.2.6"
+version = "0.2.7"
 description = "A desktop note-taking application with a OneNote 2007-inspired UX"
 authors = ["Luciano"]
 edition = "2021"
