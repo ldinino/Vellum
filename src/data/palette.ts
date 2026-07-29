@@ -22,6 +22,36 @@ export const DEFAULT_NOTEBOOK_COLOR = PALETTE[0].value;
 export const DEFAULT_SECTION_COLOR = PALETTE[1].value;
 
 /**
+ * Text colours offered in the toolbar's font-colour dropdown, laid out as a
+ * grid (greys, then warm, then cool). Deliberately the familiar Office set
+ * rather than the pastel notebook palette above: these are ink colours, and a
+ * pastel reads as illegible body text.
+ *
+ * These are absolute colours and are stored on the text, so they look the same
+ * in both themes — "Automatic" (no colour at all) is what follows the theme.
+ */
+export const TEXT_SWATCHES: string[] = [
+  "#000000", "#404040", "#808080", "#bfbfbf", "#ffffff",
+  "#c00000", "#ff0000", "#ff6600", "#ffc000", "#ffff00",
+  "#00b050", "#00b0f0", "#0070c0", "#002060", "#7030a0",
+];
+
+/**
+ * Highlight colours — a smaller set, and deliberately all *light*. Highlights
+ * are marker pens: the editor pins dark ink on top of them (see
+ * `--text-on-highlight`) so a highlight stays readable in dark mode, which only
+ * holds if the highlight itself is light. Offering a navy or black marker here
+ * would render dark-on-dark.
+ */
+export const HIGHLIGHT_SWATCHES: string[] = [
+  "#ffff00", "#a8ff60", "#7bf1ff", "#ff9ce8", "#a0c8ff",
+  "#ffd08a", "#ffb3b3", "#d0b0ff", "#c8f0c8", "#d9d9d9",
+];
+
+/** Columns used to lay the swatch grids out. */
+export const SWATCH_COLUMNS = 5;
+
+/**
  * A pseudo-random palette color, assigned to newly created notebooks/sections
  * so they don't all default to the same swatch. The choice is persisted at
  * creation (picking at render time would reshuffle on every re-render).

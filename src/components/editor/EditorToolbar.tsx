@@ -9,6 +9,12 @@ import { FONTS, SIZES } from "../../data/fonts";
 import { LinkDialog } from "./LinkDialog";
 import { ProofingBadge } from "./ProofingBadge";
 import { ContextMenu, type MenuItem } from "../ui/ContextMenu";
+import { ColorMenu } from "./ColorMenu";
+import {
+  HIGHLIGHT_SWATCHES,
+  SWATCH_COLUMNS,
+  TEXT_SWATCHES,
+} from "../../data/palette";
 import {
   DYNAMIC_FIELD_PRESETS,
   formatDynamicField,
@@ -107,41 +113,6 @@ function FormattingGroups({
       { label: "Live date & time", icon: "calendar", submenu: liveSub("datetime") },
     ];
   };
-
-  // Text colour / highlight menus. "Automatic" is the important one: it removes
-  // the colour mark entirely rather than setting a colour, so the text follows
-  // the theme (black on the light page, light on the dark one). Text with an
-  // explicit colour keeps it in both themes, matching Word — which is why the
-  // reset needs to be reachable at all.
-  const textColorItems = (): MenuItem[] => [
-    {
-      label: "Automatic",
-      icon: "edit-color",
-      checked: !s?.color,
-      onSelect: () => editor?.chain().focus().unsetColor().run(),
-      separatorAfter: true,
-    },
-    {
-      label: "More colors…",
-      icon: "highlighter-color",
-      onSelect: () => textColorRef.current?.click(),
-    },
-  ];
-
-  const highlightItems = (): MenuItem[] => [
-    {
-      label: "No highlight",
-      icon: "eraser",
-      checked: !s?.highlight,
-      onSelect: () => editor?.chain().focus().unsetHighlight().run(),
-      separatorAfter: true,
-    },
-    {
-      label: "More colors…",
-      icon: "highlighter-color",
-      onSelect: () => highlightRef.current?.click(),
-    },
-  ];
 
   // Tiptap v3's `useEditor` no longer re-renders on every transaction, so the
   // toolbar must subscribe explicitly to keep active states / select values in
@@ -493,11 +464,34 @@ function FormattingGroups({
           onClose={() => setPhMenu(null)}
         />
       )}
-      {colorMenu && (
-        <ContextMenu
-          items={colorMenu.kind === "text" ? textColorItems() : highlightItems()}
+      {colorMenu && colorMenu.kind === "text" && (
+        <ColorMenu
           x={colorMenu.x}
           y={colorMenu.y}
+          current={s?.color ?? null}
+          resetLabel="Automatic"
+          // Previews the colour "no mark" actually renders as in this theme.
+          resetColor={automaticTextColor}
+          swatches={TEXT_SWATCHES}
+          columns={SWATCH_COLUMNS}
+          onPick={(c) => editor?.chain().focus().setColor(c).run()}
+          onReset={() => editor?.chain().focus().unsetColor().run()}
+          onMore={() => textColorRef.current?.click()}
+          onClose={() => setColorMenu(null)}
+        />
+      )}
+      {colorMenu && colorMenu.kind === "highlight" && (
+        <ColorMenu
+          x={colorMenu.x}
+          y={colorMenu.y}
+          current={s?.highlight ?? null}
+          resetLabel="No highlight"
+          resetColor={null}
+          swatches={HIGHLIGHT_SWATCHES}
+          columns={SWATCH_COLUMNS}
+          onPick={(c) => editor?.chain().focus().setHighlight({ color: c }).run()}
+          onReset={() => editor?.chain().focus().unsetHighlight().run()}
+          onMore={() => highlightRef.current?.click()}
           onClose={() => setColorMenu(null)}
         />
       )}
