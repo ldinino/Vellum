@@ -12,6 +12,9 @@
 # lighter than $MaxLightness are skipped so white highlights inside a coloured
 # icon don't turn black. Alpha is always preserved.
 #
+# A few icons look better untouched on dark and are listed in $NoInvert below;
+# they are copied straight from the shadowless original.
+#
 # Usage (from the repo root):
 #   powershell -File scripts/build-dark-icons.ps1          # generate
 #   powershell -File scripts/build-dark-icons.ps1 -Check   # verify, write nothing
@@ -30,6 +33,16 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
+
+# Icons that read fine on a dark background already, and look worse flipped
+# (their dark parts are shading/detail rather than linework). These are copied
+# straight from the shadowless original so dark mode still drops the shadow.
+$NoInvert = @(
+    'exclamation',
+    'printer',
+    'wand',
+    'wand-hat'
+)
 
 $repo = Split-Path -Parent $PSScriptRoot
 $lightDir = Join-Path $repo 'src/assets/icons'
@@ -54,10 +67,11 @@ foreach ($icon in $icons) {
     try {
         $out = New-Object System.Drawing.Bitmap $bmp.Width, $bmp.Height
         try {
+            $keepAsIs = $NoInvert -contains $icon.BaseName
             for ($y = 0; $y -lt $bmp.Height; $y++) {
                 for ($x = 0; $x -lt $bmp.Width; $x++) {
                     $p = $bmp.GetPixel($x, $y)
-                    if ($p.A -eq 0) { $out.SetPixel($x, $y, $p); continue }
+                    if ($keepAsIs -or $p.A -eq 0) { $out.SetPixel($x, $y, $p); continue }
 
                     $lightness = $p.GetBrightness()
                     $saturation = $p.GetSaturation()
