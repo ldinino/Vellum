@@ -179,7 +179,7 @@ export async function printCurrentPage(opts: {
       const src = (el.getAttribute("data-source") ?? el.textContent ?? "").trim();
       if (!src) continue;
       try {
-        el.innerHTML = await renderMermaid(src);
+        el.innerHTML = await renderMermaid(src, false);
       } catch {
         /* leave the source text as a fallback */
       }

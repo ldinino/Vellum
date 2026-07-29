@@ -26,6 +26,7 @@ import {
 } from "@tiptap/react";
 import mermaid from "mermaid";
 import { useEffect, useRef, useState } from "react";
+import { useIsDarkTheme } from "../ui/Icon";
 
 /** Starter diagram inserted by Insert ▸ Mermaid Diagram. */
 export const DEFAULT_MERMAID_SOURCE = `graph TD
@@ -34,27 +35,46 @@ export const DEFAULT_MERMAID_SOURCE = `graph TD
   B -->|No| D[Refine]
   D --> B`;
 
-let mermaidReady = false;
-function ensureMermaidInit(): void {
-  if (mermaidReady) return;
+// mermaid bakes its palette in at render time, so switching theme means
+// re-initialising and re-rendering rather than restyling the emitted SVG.
+let mermaidTheme: string | null = null;
+function ensureMermaidInit(dark: boolean): void {
+  const theme = dark ? "dark" : "default";
+  if (mermaidTheme === theme) return;
   mermaid.initialize({
     startOnLoad: false,
     // The source is the user's own content, but "strict" also keeps a malformed
     // diagram from injecting anything unexpected into the rendered SVG.
     securityLevel: "strict",
-    theme: "default",
+    theme,
     fontFamily: "inherit",
+    // Line up mermaid's stock dark palette with the app's: node fills use the
+    // raised surface so shapes separate from the page, and edge labels sit
+    // directly on the page colour instead of mermaid's default grey chip, which
+    // is too close to its own label text to read comfortably.
+    ...(dark
+      ? {
+          themeVariables: {
+            background: "#262626",
+            mainBkg: "#333333",
+            edgeLabelBackground: "#262626",
+          },
+        }
+      : {}),
   });
-  mermaidReady = true;
+  mermaidTheme = theme;
 }
 
 let renderSeq = 0;
 /**
  * Render mermaid source to an SVG string. Rejects on invalid syntax. Shared by
  * the NodeView and the print path so both render diagrams identically.
+ *
+ * `dark` defaults to the app's current theme; the print path passes `false`
+ * explicitly because printed output is always on white paper.
  */
-export async function renderMermaid(source: string): Promise<string> {
-  ensureMermaidInit();
+export async function renderMermaid(source: string, dark?: boolean): Promise<string> {
+  ensureMermaidInit(dark ?? document.documentElement.dataset.theme === "dark");
   const id = `v-mermaid-${(renderSeq += 1)}`;
   try {
     const { svg } = await mermaid.render(id, source.trim());
@@ -79,8 +99,10 @@ function MermaidNodeView({ node, updateAttributes, editor, selected }: NodeViewP
   const [svg, setSvg] = useState("");
   const [error, setError] = useState<string | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const isDark = useIsDarkTheme();
 
-  // Re-render whenever the committed source changes (not while editing the draft).
+  // Re-render whenever the committed source changes (not while editing the
+  // draft), and when the theme flips — mermaid's palette is baked into the SVG.
   useEffect(() => {
     let cancelled = false;
     const text = source.trim();
@@ -89,7 +111,7 @@ function MermaidNodeView({ node, updateAttributes, editor, selected }: NodeViewP
       setError(null);
       return;
     }
-    renderMermaid(text).then(
+    renderMermaid(text, isDark).then(
       (out) => {
         if (!cancelled) {
           setSvg(out);
@@ -106,7 +128,7 @@ function MermaidNodeView({ node, updateAttributes, editor, selected }: NodeViewP
     return () => {
       cancelled = true;
     };
-  }, [source]);
+  }, [source, isDark]);
 
   useEffect(() => {
     if (editing) taRef.current?.focus();

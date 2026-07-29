@@ -33,8 +33,8 @@ img {
 }
 
 ::selection {
-  background: var(--accent-bright);
-  color: var(--text-on-accent);
+  background: var(--selection-bg);
+  color: var(--selection-text);
 }
 
 /* ---- Retro scrollbars (Office 2007 style) ------------------------------ */
@@ -50,7 +50,7 @@ img {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: linear-gradient(to right, #fdfdfe, #d8dde3);
+  background: var(--gradient-scrollbar);
   border: 1px solid var(--border-default);
   border-radius: 2px;
 }
@@ -61,7 +61,7 @@ img {
    hover/active states are all `to bottom`). Kept before :hover/:active — equal
    specificity, so those later rules still win while pointing/pressing. */
 ::-webkit-scrollbar-thumb:horizontal {
-  background: linear-gradient(to bottom, #fdfdfe, #d8dde3);
+  background: var(--gradient-scrollbar-horizontal);
 }
 
 ::-webkit-scrollbar-thumb:hover {

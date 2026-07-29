@@ -48,6 +48,14 @@
   --code-bg: #f0f0f3;                 /* inline `code` chip */
   --code-block-bg: #f5f5f7;           /* fenced code block */
 
+  /* ---- Scrollbars & selection ---------------------------------------------- */
+  /* Vertical thumbs light across their width, horizontal ones down their height,
+     so both read as the same top-lit reflection as the buttons. */
+  --gradient-scrollbar: linear-gradient(to right, #fdfdfe, #d8dde3);
+  --gradient-scrollbar-horizontal: linear-gradient(to bottom, #fdfdfe, #d8dde3);
+  --selection-bg: var(--accent-bright);
+  --selection-text: var(--text-on-accent);
+
   /* ---- Status notices ----------------------------------------------------- */
   --notice-warn-bg: #fdf3d6;
   --notice-warn-border: #e6cf8a;
@@ -192,6 +200,14 @@
   /* ---- Code ------------------------------------------------------------- */
   --code-bg: #1c1c1c;
   --code-block-bg: #1a1a1a;
+
+  /* ---- Scrollbars & selection ---------------------------------------------- */
+  --gradient-scrollbar: linear-gradient(to right, #4a4a4a, #3a3a3a);
+  --gradient-scrollbar-horizontal: linear-gradient(to bottom, #4a4a4a, #3a3a3a);
+  /* The light theme's --accent-bright is too pale here: white text on it sits
+     near 2:1. A deeper blue keeps the selection obvious while staying legible. */
+  --selection-bg: #2f66b4;
+  --selection-text: #ffffff;
 
   /* ---- Status notices ----------------------------------------------------- */
   --notice-warn-bg: #3a2f14;
