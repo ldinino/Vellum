@@ -26,6 +26,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 - **Hyperlinks are no longer proofed** — Spell check and grammar check now skip
   the text of hyperlinks, so link labels and pasted URLs aren't underlined as
   misspellings or grammar mistakes.
+- **Grammar underlines on code** — Text formatted as inline code or a code block
+  no longer keeps a grammar or spelling underline. Turning already-flagged text
+  into code now clears the underline immediately instead of leaving it until the
+  next check.
 
 ## [0.2.6] - 2026-07-27
 

@@ -12,9 +12,30 @@ import { Extension } from "@tiptap/core";
 import { Editor } from "@tiptap/react";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import type { Node as PMNode } from "@tiptap/pm/model";
 import type { MappedLint } from "./grammar";
 
 export const grammarKey = new PluginKey<DecorationSet>("grammarError");
+
+/**
+ * Remove underlines that now sit on code — an inline `code` mark or text inside
+ * a `codeBlock`. Code is never proofed (`extractText` omits it), so when the
+ * user turns already-underlined text into code the lint must disappear at once
+ * rather than linger until Harper next runs.
+ */
+function dropDecorationsOnCode(set: DecorationSet, doc: PMNode): DecorationSet {
+  if (set === DecorationSet.empty) return set;
+  const codeType = doc.type.schema.marks.code;
+  const onCode = set.find().filter((deco) => {
+    const { from, to } = deco as Decoration & { from: number; to: number };
+    const $from = doc.resolve(from);
+    for (let depth = $from.depth; depth > 0; depth--) {
+      if ($from.node(depth).type.name === "codeBlock") return true;
+    }
+    return codeType ? doc.rangeHasMark(from, to, codeType) : false;
+  });
+  return onCode.length ? set.remove(onCode) : set;
+}
 
 export interface GrammarHit {
   from: number;
@@ -55,8 +76,11 @@ export const GrammarError = Extension.create({
               );
               return DecorationSet.create(tr.doc, decos);
             }
-            // No new lints this tx: map existing underlines through the edit.
-            return value.map(tr.mapping, tr.doc);
+            // No new lints this tx: map existing underlines through the edit,
+            // then drop any that the edit pushed onto code (inline `code` or a
+            // `codeBlock`) so a lint never lingers on code between re-checks.
+            const mapped = value.map(tr.mapping, tr.doc);
+            return tr.docChanged ? dropDecorationsOnCode(mapped, tr.doc) : mapped;
           },
         },
         props: {
