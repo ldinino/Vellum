@@ -176,6 +176,20 @@ pub async fn open_master(db_path: &Path, create: bool) -> Result<Pool<Sqlite>, S
     Ok(pool)
 }
 
+/// `(page_id, updated_at)` already in the master index for one notebook. Lets
+/// the startup rebuild diff against the notebook's live pages and re-index only
+/// what changed while the app was closed.
+pub async fn notebook_stamps(
+    pool: &Pool<Sqlite>,
+    notebook_id: &str,
+) -> Result<Vec<(String, String)>, String> {
+    sqlx::query_as("SELECT page_id, updated_at FROM search_index WHERE notebook_id = ?1")
+        .bind(notebook_id)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("master stamps: {e}"))
+}
+
 /// Replace a page's master-index row (delete-then-insert; FTS5 has no upsert).
 pub async fn upsert_master(
     pool: &Pool<Sqlite>,

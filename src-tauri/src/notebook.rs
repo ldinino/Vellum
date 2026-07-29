@@ -972,6 +972,19 @@ pub async fn all_page_ids(pool: &Pool<Sqlite>) -> Result<Vec<String>, String> {
         .map_err(|e| format!("all page ids: {e}"))
 }
 
+/// `(page_id, updated_at)` for every live (not recycled) page, so the startup
+/// rebuild can tell which pages actually changed while the app was closed and
+/// skip re-indexing the rest.
+pub async fn live_page_stamps(pool: &Pool<Sqlite>) -> Result<Vec<(String, String)>, String> {
+    sqlx::query_as(
+        "SELECT p.id, p.updated_at FROM pages p JOIN sections s ON s.id = p.section_id \
+         WHERE p.deleted_at IS NULL AND s.deleted_at IS NULL",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| format!("live page stamps: {e}"))
+}
+
 /// Page ids in one section (for reindexing after a section rename, whose name is
 /// denormalized into every page's search row).
 pub async fn section_page_ids(pool: &Pool<Sqlite>, section_id: &str) -> Result<Vec<String>, String> {

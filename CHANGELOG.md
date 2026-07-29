@@ -15,6 +15,11 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   setup before any real work happened — roughly 24 times the cost of the query
   itself. The effect is largest where file access is slowest: ARM64 machines,
   virtual machines, and notebooks stored in a synced OneDrive folder.
+- **Faster startup** — Vellum rebuilt the entire search index on every launch,
+  rewriting every page of every notebook even when nothing had changed (over a
+  second of work before the app settled, for a few hundred pages). It now
+  re-indexes only pages that were actually added, edited, or removed since the
+  last run, so a normal launch does no index writing at all.
 - **Code button now works inline** — The toolbar's code button applies inline
   `code` formatting (like bold or italic) when you have text selected or your
   cursor is inside a line of text, and only creates a full code block when the

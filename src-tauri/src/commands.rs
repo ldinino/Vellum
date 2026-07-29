@@ -2014,6 +2014,30 @@ pub async fn search(
 /// Rebuild the master index from every notebook. Called on startup (in the
 /// background) so global search is complete and self-heals after out-of-band
 /// edits; also refreshes each notebook's own `fts_index`.
+/// Work out what the startup rebuild actually has to touch: which pages need
+/// re-indexing (new, or edited while the app was closed) and which master rows
+/// are stale (the page was deleted or recycled). Pure so it can be tested
+/// without an app handle; `live` is `(page_id, updated_at)` for the notebook's
+/// live pages and `indexed` is the same for its existing master rows.
+fn plan_reindex(
+    live: &[(String, String)],
+    indexed: &std::collections::HashMap<String, String>,
+) -> (Vec<String>, Vec<String>) {
+    let to_index: Vec<String> = live
+        .iter()
+        .filter(|(id, updated)| indexed.get(id).map(|seen| seen != updated).unwrap_or(true))
+        .map(|(id, _)| id.clone())
+        .collect();
+    let live_ids: std::collections::HashSet<&str> =
+        live.iter().map(|(id, _)| id.as_str()).collect();
+    let to_remove: Vec<String> = indexed
+        .keys()
+        .filter(|id| !live_ids.contains(id.as_str()))
+        .cloned()
+        .collect();
+    (to_index, to_remove)
+}
+
 #[tauri::command]
 pub async fn reindex_all(app: AppHandle) -> Result<(), String> {
     let registry = config::load_registry(&app)?;
@@ -2037,37 +2061,62 @@ pub async fn reindex_all(app: AppHandle) -> Result<(), String> {
         if !path.is_file() {
             continue;
         }
-        let pool = match db::open_pool(&path, false).await {
+        // Reuse the shared pool (the UI is about to open these notebooks
+        // anyway), so this never opens — or leaks — a connection of its own.
+        let pool = match app.state::<db::PoolCache>().get_or_open(&path).await {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("reindex_all: open {}: {e}", nb.id);
                 continue;
             }
         };
-        // Drop the notebook's master rows, then re-add every current page so
-        // deletions made while closed don't linger.
-        if let Err(e) = search::remove_notebook(&master, &nb.id).await {
-            eprintln!("reindex_all: clear {}: {e}", nb.id);
+        // Re-index only what actually changed while the app was closed. A full
+        // rebuild re-wrote every page of every notebook on every launch, and
+        // each page was its own transaction (one WAL commit apiece) — over a
+        // second of startup work for a few hundred pages, before the UI could
+        // settle. Comparing `updated_at` against the master index turns the
+        // common launch (nothing changed) into two cheap reads and no writes.
+        let live = match notebook::live_page_stamps(&pool).await {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("reindex_all: page stamps {}: {e}", nb.id);
+                continue;
+            }
+        };
+        let indexed: std::collections::HashMap<String, String> =
+            match search::notebook_stamps(&master, &nb.id).await {
+                Ok(v) => v.into_iter().collect(),
+                Err(e) => {
+                    eprintln!("reindex_all: master stamps {}: {e}", nb.id);
+                    continue;
+                }
+            };
+
+        let (to_index, to_remove) = plan_reindex(&live, &indexed);
+
+        // Pages that are gone (or were recycled) while the app was closed.
+        for stale in &to_remove {
+            if let Err(e) = search::remove_page(&master, stale).await {
+                eprintln!("reindex_all: remove {stale}: {e}");
+            }
         }
-        match notebook::all_page_ids(&pool).await {
-            Ok(ids) => {
-                for pid in ids {
-                    match notebook::reindex_page(&pool, &pid).await {
-                        Ok(Some(data)) => {
-                            if let Err(e) =
-                                search::upsert_master(&master, &nb.id, &nb.name, &data).await
-                            {
-                                eprintln!("reindex_all: upsert {pid}: {e}");
-                            }
-                        }
-                        Ok(None) => {}
-                        Err(e) => eprintln!("reindex_all: reindex {pid}: {e}"),
+
+        // New or edited pages only.
+        for pid in &to_index {
+            match notebook::reindex_page(&pool, pid).await {
+                Ok(Some(data)) => {
+                    if let Err(e) = search::upsert_master(&master, &nb.id, &nb.name, &data).await {
+                        eprintln!("reindex_all: upsert {pid}: {e}");
                     }
                 }
+                Ok(None) => {
+                    if let Err(e) = search::remove_page(&master, pid).await {
+                        eprintln!("reindex_all: remove {pid}: {e}");
+                    }
+                }
+                Err(e) => eprintln!("reindex_all: reindex {pid}: {e}"),
             }
-            Err(e) => eprintln!("reindex_all: page ids {}: {e}", nb.id),
         }
-        pool.close().await;
     }
 
     master.close().await;
@@ -2320,6 +2369,57 @@ pub async fn refine_detect_hardware(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The startup rebuild must re-index only what changed while the app was
+    /// closed: unchanged pages are skipped (the common launch does no writes at
+    /// all), edited and brand-new pages are re-indexed, and master rows whose
+    /// page was deleted or recycled are dropped.
+    #[test]
+    fn plan_reindex_touches_only_changed_pages() {
+        let live = vec![
+            ("same".to_string(), "2026-07-28T10:00:00Z".to_string()),
+            ("edited".to_string(), "2026-07-28T12:00:00Z".to_string()),
+            ("new".to_string(), "2026-07-28T13:00:00Z".to_string()),
+        ];
+        let indexed: std::collections::HashMap<String, String> = [
+            ("same", "2026-07-28T10:00:00Z"),
+            ("edited", "2026-07-28T09:00:00Z"),
+            ("deleted", "2026-07-28T08:00:00Z"),
+        ]
+        .iter()
+        .map(|(a, b)| (a.to_string(), b.to_string()))
+        .collect();
+
+        let (mut to_index, to_remove) = plan_reindex(&live, &indexed);
+        to_index.sort();
+        assert_eq!(to_index, vec!["edited".to_string(), "new".to_string()]);
+        assert_eq!(to_remove, vec!["deleted".to_string()]);
+    }
+
+    /// Nothing changed since the last run → no work at all.
+    #[test]
+    fn plan_reindex_is_a_no_op_when_nothing_changed() {
+        let live = vec![
+            ("a".to_string(), "t1".to_string()),
+            ("b".to_string(), "t2".to_string()),
+        ];
+        let indexed: std::collections::HashMap<String, String> = live.iter().cloned().collect();
+        let (to_index, to_remove) = plan_reindex(&live, &indexed);
+        assert!(to_index.is_empty(), "unchanged pages must not be re-indexed");
+        assert!(to_remove.is_empty());
+    }
+
+    /// A first run (empty master index) must index every page.
+    #[test]
+    fn plan_reindex_indexes_everything_on_a_cold_index() {
+        let live = vec![
+            ("a".to_string(), "t1".to_string()),
+            ("b".to_string(), "t2".to_string()),
+        ];
+        let (to_index, to_remove) = plan_reindex(&live, &std::collections::HashMap::new());
+        assert_eq!(to_index.len(), 2);
+        assert!(to_remove.is_empty());
+    }
 
     /// A throwaway unique temp directory for filesystem tests, removed on drop.
     struct TmpDir(std::path::PathBuf);
