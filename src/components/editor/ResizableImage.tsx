@@ -10,6 +10,7 @@
 import Image from "@tiptap/extension-image";
 import { ReactNodeViewRenderer, NodeViewWrapper, NodeViewProps } from "@tiptap/react";
 import type { Attributes } from "@tiptap/react";
+import { useState } from "react";
 
 let resolveSrc: (src: string) => string = (src) => src;
 export function setImageSrcResolver(fn: (src: string) => string) {
@@ -45,6 +46,8 @@ function ImageNodeView({ node, updateAttributes, selected, editor }: NodeViewPro
     width?: number | null;
   };
 
+  const [resizing, setResizing] = useState(false);
+
   const startResize = (e: React.MouseEvent) => {
     e.preventDefault();
     const startX = e.clientX;
@@ -52,11 +55,13 @@ function ImageNodeView({ node, updateAttributes, selected, editor }: NodeViewPro
       .closest(".v-img-wrap")
       ?.querySelector("img");
     const startWidth = img?.getBoundingClientRect().width ?? 0;
+    setResizing(true);
     const onMove = (ev: MouseEvent) => {
       const next = Math.max(40, Math.round(startWidth + (ev.clientX - startX)));
       updateAttributes({ width: next });
     };
     const onUp = () => {
+      setResizing(false);
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
@@ -66,7 +71,7 @@ function ImageNodeView({ node, updateAttributes, selected, editor }: NodeViewPro
 
   return (
     <NodeViewWrapper
-      className={`v-img-wrap ${selected ? "v-img-wrap--selected" : ""}`}
+      className={`v-img-wrap ${selected ? "v-img-wrap--selected" : ""} ${resizing ? "v-img-wrap--resizing" : ""}`}
       data-drag-handle
     >
       <img

@@ -7,6 +7,11 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Fixed
+
+- **Image resize handle** — The small resize grip on a picture now appears only
+  when you hover over the picture or select it, instead of always being visible.
+
 ## [0.2.6] - 2026-07-27
 
 ### Fixed
