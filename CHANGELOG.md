@@ -20,6 +20,10 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
   second of work before the app settled, for a few hundred pages). It now
   re-indexes only pages that were actually added, edited, or removed since the
   last run, so a normal launch does no index writing at all.
+- **No more flicker when switching sections** — Switching sections or notebooks
+  briefly emptied the page list and flashed "No pages yet" before the pages
+  appeared. The list now keeps what it has until the new pages arrive, and that
+  message only shows when a section really is empty.
 - **Code button now works inline** — The toolbar's code button applies inline
   `code` formatting (like bold or italic) when you have text selected or your
   cursor is inside a line of text, and only creates a full code block when the

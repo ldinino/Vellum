@@ -20,6 +20,7 @@ export function PageList() {
   const {
     notebooks,
     pages,
+    pagesLoading,
     selectedNotebookId,
     selectedSectionId,
     selectedPageId,
@@ -183,7 +184,7 @@ export function PageList() {
             />
           </div>
         ))}
-        {pages.length === 0 && (
+        {pages.length === 0 && !pagesLoading && (
           <div className="v-pagelist__placeholder">
             No pages yet. Click <b>New Page</b>.
           </div>

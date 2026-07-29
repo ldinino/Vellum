@@ -67,6 +67,11 @@ export interface ProofingState {
 interface VellumState {
   notebooks: TreeNotebook[];
   pages: Page[];
+  /** True while a section's pages are being fetched. The page list keeps showing
+   * what it had (rather than collapsing to an empty list) and withholds its
+   * "No pages yet" message until we actually know the section is empty — a
+   * section switch used to flash that message for a frame. */
+  pagesLoading: boolean;
   selectedNotebookId: string | null;
   selectedSectionId: string | null;
   selectedPageId: string | null;
@@ -113,6 +118,7 @@ interface VellumState {
 const initial: VellumState = {
   notebooks: [],
   pages: [],
+  pagesLoading: false,
   selectedNotebookId: null,
   selectedSectionId: null,
   selectedPageId: null,
@@ -387,10 +393,11 @@ export function VellumProvider({ children }: { children: ReactNode }) {
     async (notebookId: string, sectionId: string): Promise<Page[]> => {
       try {
         const pages = await api.listPages(notebookId, sectionId);
-        setState((s) => ({ ...s, pages }));
+        setState((s) => ({ ...s, pages, pagesLoading: false }));
         return pages;
       } catch (e) {
         fail(e);
+        setState((s) => ({ ...s, pagesLoading: false }));
         return [];
       }
     },
@@ -682,13 +689,17 @@ export function VellumProvider({ children }: { children: ReactNode }) {
 
   const selectSection = useCallback(
     async (notebookId: string, sectionId: string) => {
+      // Mark the new section straight away so the click feels instant, but keep
+      // the current page list on screen while the new one loads. Clearing it
+      // here painted an empty list (and a "No pages yet" placeholder) for a
+      // frame before the pages arrived — a visible flicker on every section and
+      // notebook switch, and a misleading one.
       setState((s) => ({
         ...s,
         selectedNotebookId: notebookId,
         selectedSectionId: sectionId,
-        selectedPageId: null,
         searchHighlight: "",
-        pages: [],
+        pagesLoading: true,
       }));
       const pages = await reloadPages(notebookId, sectionId);
       // Jump to the last page viewed in this section (if it still exists),
@@ -743,6 +754,7 @@ export function VellumProvider({ children }: { children: ReactNode }) {
           selectedSectionId: null,
           selectedPageId: null,
           pages: [],
+          pagesLoading: false,
         }));
       }
     },
@@ -764,17 +776,18 @@ export function VellumProvider({ children }: { children: ReactNode }) {
           n.id === notebookId ? { ...n, expanded: true } : n,
         ),
       }));
-      // Select the section (loads its pages), then the page, then the highlight.
+      // Select the section and the target page together, keeping the current
+      // list on screen while the new section's pages load (see selectSection),
+      // so arriving from a search result doesn't flash an empty page list.
       setState((s) => ({
         ...s,
         selectedNotebookId: notebookId,
         selectedSectionId: sectionId,
-        selectedPageId: null,
-        searchHighlight: "",
-        pages: [],
+        selectedPageId: pageId,
+        searchHighlight: query,
+        pagesLoading: true,
       }));
       await reloadPages(notebookId, sectionId);
-      setState((s) => ({ ...s, selectedPageId: pageId, searchHighlight: query }));
     },
     [reloadSections, reloadPages],
   );
@@ -1069,6 +1082,7 @@ export function VellumProvider({ children }: { children: ReactNode }) {
               selectedSectionId: null,
               selectedPageId: null,
               pages: [],
+              pagesLoading: false,
             }));
           }
         }
@@ -1145,6 +1159,7 @@ export function VellumProvider({ children }: { children: ReactNode }) {
               selectedSectionId: null,
               selectedPageId: null,
               pages: [],
+              pagesLoading: false,
             }));
           }
         }
