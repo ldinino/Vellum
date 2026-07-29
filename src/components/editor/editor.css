@@ -68,7 +68,7 @@
 }
 
 .v-prose pre {
-  background: #f5f5f7;
+  background: var(--code-block-bg);
   border: 1px solid var(--border-faint);
   border-radius: var(--radius-control);
   padding: var(--space-3) var(--space-4);
@@ -100,7 +100,7 @@
 .v-prose code {
   font-family: var(--font-mono);
   font-size: 0.9em;
-  background: #f0f0f3;
+  background: var(--code-bg);
   padding: 0 3px;
   border-radius: 2px;
 }
@@ -122,15 +122,20 @@
   cursor: pointer;
 }
 
+/* Highlight/marker colours are always light (they mimic marker pens), and the
+ * user's own colour is set inline — so pin the text on top of them to a dark
+ * ink in both themes, or dark mode's light text becomes unreadable on yellow. */
 .v-prose mark {
   border-radius: 2px;
   padding: 0 1px;
+  color: var(--text-on-highlight);
 }
 
 /* Search-result highlight (spec Section 11) — distinct from the user's own
  * Highlight mark; an orange wash echoing the Office 2007 selection. */
 .v-search-hit {
   background: #ffd86b;
+  color: var(--text-on-highlight);
   box-shadow: 0 0 0 1px rgba(194, 138, 48, 0.6);
   border-radius: 2px;
 }
@@ -139,11 +144,13 @@
  * stands out as you step through with Enter / the arrows. */
 .v-find-hit {
   background: #ffe9a8;
+  color: var(--text-on-highlight);
   border-radius: 2px;
 }
 
 .v-find-hit--current {
   background: #ffb03a;
+  color: var(--text-on-highlight);
   box-shadow: 0 0 0 1px rgba(180, 110, 20, 0.85);
 }
 
@@ -264,12 +271,12 @@
 
 .v-mermaid__view:hover {
   border-color: var(--border-faint);
-  background: #fafafb;
+  background: var(--surface-hover);
 }
 
 .v-mermaid--selected .v-mermaid__view {
   border-color: var(--accent-bright);
-  background: #fafafb;
+  background: var(--surface-hover);
 }
 
 .v-mermaid__svg {
@@ -297,7 +304,7 @@
   font: inherit;
   font-size: 12px;
   color: var(--text-primary);
-  background: #fff;
+  background: var(--surface-raised);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-control);
   cursor: pointer;
@@ -310,7 +317,7 @@
 }
 
 .v-mermaid__edit:hover {
-  background: #f0f0f3;
+  background: var(--surface-hover);
 }
 
 .v-mermaid__error {
@@ -319,25 +326,25 @@
   gap: 4px;
   text-align: left;
   padding: var(--space-3) var(--space-4);
-  background: #fdf2f2;
-  border: 1px solid #e6b3b3;
+  background: var(--notice-error-bg);
+  border: 1px solid var(--notice-error-border);
   border-radius: var(--radius-control);
 }
 
 .v-mermaid__error-title {
   font-weight: 600;
-  color: #a12a2a;
+  color: var(--notice-error-text);
 }
 
 .v-mermaid__error-msg {
-  color: #7a2020;
+  color: var(--notice-error-text);
   font-size: 0.9em;
 }
 
 .v-mermaid__error-src {
   margin: 4px 0 0;
   padding: var(--space-3);
-  background: #fff;
+  background: var(--code-block-bg);
   border: 1px solid var(--border-faint);
   border-radius: var(--radius-control);
   font-family: var(--font-mono);
@@ -353,7 +360,7 @@
   border: 1px solid var(--border-default);
   border-radius: var(--radius-control);
   padding: var(--space-3) var(--space-4);
-  background: #fafafb;
+  background: var(--surface-hover);
 }
 
 .v-mermaid__source {
@@ -363,7 +370,7 @@
   font-size: 13px;
   line-height: 1.5;
   color: var(--text-primary);
-  background: #fff;
+  background: var(--surface-sunken);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-control);
   padding: var(--space-3);
@@ -385,18 +392,18 @@
   font: inherit;
   font-size: 13px;
   color: var(--text-primary);
-  background: #fff;
+  background: var(--surface-raised);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-control);
   cursor: pointer;
 }
 
 .v-mermaid__btn:hover {
-  background: #f0f0f3;
+  background: var(--surface-hover);
 }
 
 .v-mermaid__btn--primary {
-  color: #fff;
+  color: var(--text-on-accent);
   background: var(--accent);
   border-color: var(--accent);
 }

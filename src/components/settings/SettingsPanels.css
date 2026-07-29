@@ -89,7 +89,7 @@
 }
 
 .v-set__loglevel--warn {
-  color: #9a6700;
+  color: var(--notice-warn-text);
 }
 
 .v-set__loglevel--info {
@@ -151,7 +151,8 @@
   padding: 4px 8px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-control);
-  background: #fff;
+  background: var(--surface-raised);
+  color: var(--text-primary);
   font-family: var(--font-ui);
   font-size: var(--text-size-ui);
   min-width: 170px;
@@ -171,7 +172,7 @@
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border-faint);
   border-radius: var(--radius-control);
-  background: #fff;
+  background: var(--surface-content);
   color: var(--text-primary);
   line-height: 1.5;
 }

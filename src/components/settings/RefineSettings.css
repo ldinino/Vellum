@@ -95,9 +95,9 @@
 
 .v-refine__warn {
   font-size: var(--text-size-ui);
-  color: #8a5a00;
-  background: #fdf3d6;
-  border: 1px solid #e6cf8a;
+  color: var(--notice-warn-text);
+  background: var(--notice-warn-bg);
+  border: 1px solid var(--notice-warn-border);
   border-radius: var(--radius-control);
   padding: var(--space-2) var(--space-3);
 }
@@ -150,7 +150,7 @@
 
 .v-refine__tier-check {
   margin-left: 6px;
-  color: #2e7d32;
+  color: var(--notice-ok-text);
   font-weight: 700;
 }
 
@@ -236,9 +236,9 @@
 }
 
 .v-refine__model-del:not(:disabled):hover {
-  border-color: #d9a0a0;
-  background: #fbeaea;
-  color: #8a2b2b;
+  border-color: var(--notice-error-border);
+  background: var(--notice-error-bg);
+  color: var(--notice-error-text);
 }
 
 .v-refine__model-del:disabled {
@@ -257,7 +257,7 @@
 
 .v-refine__ok {
   font-size: var(--text-size-ui);
-  color: #2e7d32;
+  color: var(--notice-ok-text);
 }
 
 .v-refine__progress {
@@ -273,9 +273,9 @@
 
 .v-refine__error {
   padding: var(--space-2) var(--space-3);
-  border: 1px solid #d9a0a0;
+  border: 1px solid var(--notice-error-border);
   border-radius: var(--radius-control);
-  background: #fbeaea;
-  color: #8a2b2b;
+  background: var(--notice-error-bg);
+  color: var(--notice-error-text);
   font-size: var(--text-size-ui);
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useEditorState, getMarkRange } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
 import { Toolbar, ToolbarButton, ToolbarGroup, ToolbarSeparator } from "../ui/Toolbar";
+import { useIsDarkTheme } from "../ui/Icon";
 import { useActiveEditor } from "../../state/activeEditor";
 import { useVellum } from "../../state/vellum";
 import { FONTS, SIZES } from "../../data/fonts";
@@ -62,6 +63,10 @@ function FormattingGroups({
   // placeholder — and stay accurate when the user changes the default.
   const { defaultFont, defaultFontSize } = useVellum();
   const [phMenu, setPhMenu] = useState<{ x: number; y: number } | null>(null);
+  // Text with no colour mark follows the theme, so the colour picker's fallback
+  // has to as well — otherwise dark mode shows a black swatch for text that is
+  // actually rendering light.
+  const automaticTextColor = useIsDarkTheme() ? "#e8e8e8" : "#000000";
 
   // "Insert placeholder" dropdown (template editor only): one-shot tokens go in
   // as literal text (the backend substitutes them when a page is created from the
@@ -244,10 +249,14 @@ function FormattingGroups({
           ))}
         </select>
         <label className={colorClass} title="Text color">
-          <span style={{ color: s?.color ?? "#000000" }}>A</span>
+          {/* No colour mark means "automatic": the letter inherits the theme's
+              text colour rather than being pinned to black, so the swatch shows
+              what the text will actually look like. The native colour input
+              still needs a concrete hex, so fall back to the theme default. */}
+          <span style={s?.color ? { color: s.color } : undefined}>A</span>
           <input
             type="color"
-            value={s?.color ?? "#000000"}
+            value={s?.color ?? automaticTextColor}
             disabled={disabled}
             onChange={(e) => editor?.chain().focus().setColor(e.target.value).run()}
           />

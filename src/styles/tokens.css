@@ -10,6 +10,12 @@
  */
 
 :root {
+  /* Tells the engine to render native widgets — <select>, <input>, <textarea>,
+     scrollbars, the caret — for this theme. Without it those controls stay
+     white with black text no matter what our CSS says, because they are painted
+     by the browser, not by us. */
+  color-scheme: light;
+
   /* ---- Typography ------------------------------------------------------ */
   --font-ui: "Segoe UI", "Segoe UI Variable", Tahoma, Arial, sans-serif;
   --font-mono: Consolas, "Courier New", monospace;
@@ -36,6 +42,23 @@
      literal white/grey) is what lets the same percentages work in dark mode. */
   --tint-base: #ffffff;               /* what colour tints blend toward */
   --tint-edge: #9a9a9a;               /* what colour tint borders blend toward */
+  --surface-hover: #fafafb;           /* subtle row/box hover wash */
+
+  /* ---- Code ------------------------------------------------------------- */
+  --code-bg: #f0f0f3;                 /* inline `code` chip */
+  --code-block-bg: #f5f5f7;           /* fenced code block */
+
+  /* ---- Status notices ----------------------------------------------------- */
+  --notice-warn-bg: #fdf3d6;
+  --notice-warn-border: #e6cf8a;
+  --notice-warn-text: #8a5a00;
+  --notice-error-bg: #fbeaea;
+  --notice-error-border: #d9a0a0;
+  --notice-error-text: #8a2b2b;
+  --notice-ok-text: #2e7d32;
+  /* Text drawn on top of a highlight/marker colour. Highlights are always light
+     (the palette is a set of marker pens), so this stays dark in both themes. */
+  --text-on-highlight: #1a1a1a;
   --gradient-toolbar: linear-gradient(#ffffff, #eaedf1);
   --gradient-panel: linear-gradient(#fdfdfe, #f1f3f4);
   --gradient-titlebar-fallback: linear-gradient(#dde6f1, #b6c8de);
@@ -96,6 +119,11 @@
     linear-gradient(transparent 20%, rgba(255, 255, 255, 0.7) 40%, transparent 41%),
     linear-gradient(to right, rgba(255, 255, 255, 0.4), rgba(0, 0, 0, 0.1), rgba(255, 255, 255, 0.2));
   --glass-text-shadow: 0 0 3px rgba(255, 255, 255, 0.9), 0 1px 0 rgba(255, 255, 255, 0.8);
+  /* Title sitting directly on frosted glass (modals): ink plus a halo strong
+     enough to read over whatever the glass picks up behind it. */
+  --glass-title-text: #000000;
+  --glass-title-halo: 0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff,
+    0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff;
 
   /* ---- Spacing ----------------------------------------------------------- */
   --space-1: 2px;
@@ -144,6 +172,8 @@
  * can override just that block (surfaces to true black) and inherit the rest.
  */
 :root[data-theme="dark"] {
+  color-scheme: dark;
+
   /* ---- Surfaces --------------------------------------------------------- */
   /* Chrome sits darker than the page so the writing area is the brightest
      thing on screen, the same hierarchy the light theme has. */
@@ -157,6 +187,21 @@
      dark ones here. */
   --tint-base: #262626;
   --tint-edge: #5a5a5a;
+  --surface-hover: #303030;
+
+  /* ---- Code ------------------------------------------------------------- */
+  --code-bg: #1c1c1c;
+  --code-block-bg: #1a1a1a;
+
+  /* ---- Status notices ----------------------------------------------------- */
+  --notice-warn-bg: #3a2f14;
+  --notice-warn-border: #6b5626;
+  --notice-warn-text: #e8c877;
+  --notice-error-bg: #3a1f1f;
+  --notice-error-border: #7a3a3a;
+  --notice-error-text: #f0a0a0;
+  --notice-ok-text: #6bcf7a;
+  /* --text-on-highlight is inherited from :root on purpose. */
 
   /* ---- Text ------------------------------------------------------------- */
   /* Not pure white: #e8e8e8 on #262626 is ~11:1, comfortably past WCAG AAA
@@ -223,6 +268,9 @@
     linear-gradient(transparent 20%, rgba(255, 255, 255, 0.12) 40%, transparent 41%),
     linear-gradient(to right, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.2), rgba(255, 255, 255, 0.04));
   --glass-text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  --glass-title-text: #f0f0f0;
+  --glass-title-halo: 0 0 10px #000, 0 0 10px #000, 0 0 10px #000, 0 0 10px #000,
+    0 0 10px #000, 0 0 10px #000, 0 0 10px #000, 0 0 10px #000;
 
   /* ---- Feature underlines ------------------------------------------------- */
   /* Brightened so the squiggles stay visible over #262626. */

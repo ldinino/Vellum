@@ -38,6 +38,11 @@ Add-Type -AssemblyName System.Drawing
 # (their dark parts are shading/detail rather than linework). These are copied
 # straight from the shadowless original so dark mode still drops the shadow.
 $NoInvert = @(
+    'blog--pencil',
+    'book',
+    'book--plus',
+    'book-open',
+    'card--pencil',
     'exclamation',
     'printer',
     'wand',

@@ -41,10 +41,9 @@
 .v-modal__title {
   flex: 1;
   font-size: var(--text-size-ui);
-  /* Black text + white halo so it reads on the frosted glass (7.css). */
-  color: #000;
-  text-shadow: 0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff,
-    0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff, 0 0 10px #fff;
+  /* Ink + halo so it reads on the frosted glass (7.css), in either theme. */
+  color: var(--glass-title-text);
+  text-shadow: var(--glass-title-halo);
 }
 
 /* Mini Aero close (Win7 MDI / child-window convention): a compact glassy red
