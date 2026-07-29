@@ -42,7 +42,7 @@
    Guarded by @supports because it needs relative colour syntax; without it the
    tone falls back to the raw colour and dark mode simply looks as it did. */
 @supports (color: oklch(from red l c h)) {
-  :root[data-theme="dark"] .v-shell {
+  :root[data-scheme="dark"] .v-shell {
     --section-tone: oklch(from var(--section-color) 0.5 calc(c * 1.9) h);
   }
 }

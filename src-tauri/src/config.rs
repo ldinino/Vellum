@@ -30,10 +30,10 @@ pub struct AppSettings {
     pub spellcheck_enabled: bool,
     pub default_font: String,
     pub default_font_size: u32,
-    /// UI theme: "light" (default) or "dark". Applied as `data-theme` on the
-    /// document root, which every design token keys off. Left as a free-form
-    /// string rather than an enum so a future variant (e.g. an OLED black) is a
-    /// CSS-only change and an unknown value degrades to light.
+    /// UI theme: "light" (default), "dark" or "oled". Applied as `data-theme` on
+    /// the document root, which every design token keys off. Left as a free-form
+    /// string rather than an enum so a future variant is a CSS-only change and an
+    /// unknown value degrades to light.
     pub theme: String,
     /// Strict (0.0) .. Liberal (1.0) global default.
     pub refine_adherence: f32,

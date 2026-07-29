@@ -34,25 +34,36 @@ const icons = index(modules);
 const darkIcons = index(darkModules);
 
 /**
- * Track the theme straight off `<html data-theme>` rather than through app
+ * Track the theme straight off `<html data-scheme>` rather than through app
  * state: icons render in menus, popups and portals, and this keeps them working
  * anywhere in the tree while still repainting the instant the theme changes.
+ * Keying on the scheme means every dark variant gets the dark icon set.
  */
 function subscribeToTheme(onChange: () => void): () => void {
   const observer = new MutationObserver(onChange);
   observer.observe(document.documentElement, {
     attributes: true,
-    attributeFilter: ["data-theme"],
+    attributeFilter: ["data-theme", "data-scheme"],
   });
   return () => observer.disconnect();
 }
 
 function currentTheme(): string {
+  return document.documentElement.dataset.scheme ?? "light";
+}
+
+function currentThemeName(): string {
   return document.documentElement.dataset.theme ?? "light";
 }
 
 export function useIsDarkTheme(): boolean {
   return useSyncExternalStore(subscribeToTheme, currentTheme, () => "light") === "dark";
+}
+
+/** The exact theme ("light" | "dark" | "oled"), for the few places that must
+ * tell the dark variants apart rather than just light from dark. */
+export function useThemeName(): string {
+  return useSyncExternalStore(subscribeToTheme, currentThemeName, () => "light");
 }
 
 export type IconName = string;

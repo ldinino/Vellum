@@ -7,6 +7,22 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Added
+
+- **Dark mode** — Vellum can now be dark throughout, chosen under
+  **Settings ▸ General ▸ Appearance**. There are two dark themes: **Dark**, built
+  around the same page colour Word uses, and **Dark (OLED black)**, which uses
+  pure black so the pixels switch off entirely on an OLED screen. Toolbar icons
+  swap to a set drawn for dark backgrounds, section and notebook colours are
+  deepened so they stay colourful instead of turning grey, and diagrams,
+  highlights, code blocks and text selection all follow the theme. Printing and
+  exported documents stay light regardless.
+- **Automatic text colour** — The font colour and highlight buttons now open a
+  palette of colours, with **Automatic** at the top for text (it follows the
+  theme, so the same note reads correctly in light and dark) and **No highlight**
+  for the highlighter — previously a highlight could not be removed at all.
+  **More colors…** still opens the full colour picker.
+
 ## [0.2.7] - 2026-07-29
 
 ### Changed

@@ -114,8 +114,8 @@
 }
 
 @supports (color: oklch(from red l c h)) {
-  :root[data-theme="dark"] .v-nav__rail-item,
-  :root[data-theme="dark"] .v-nav__group {
+  :root[data-scheme="dark"] .v-nav__rail-item,
+  :root[data-scheme="dark"] .v-nav__group {
     --nb-tone: oklch(from var(--nb-color) 0.5 calc(c * 1.9) h);
   }
 }

@@ -21,6 +21,7 @@ import "./SettingsPanels.css";
 const THEME_OPTIONS = [
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
+  { value: "oled", label: "Dark (OLED black)" },
 ];
 
 export function GeneralSettings() {
@@ -80,8 +81,9 @@ export function GeneralSettings() {
       <section className="v-set__section">
         <h3 className="v-set__heading">Appearance</h3>
         <p className="v-set__hint">
-          Dark mode uses a dark page and toolbars throughout the app. Printing and exported
-          documents stay light.
+          Dark mode uses a dark page and toolbars throughout the app. OLED black uses pure black,
+          which switches the pixels off on an OLED screen. Printing and exported documents stay
+          light.
         </p>
         <div className="v-set__row">
           <label className="v-set__field">

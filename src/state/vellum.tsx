@@ -86,7 +86,7 @@ interface VellumState {
    * on the document root, so unstyled page text uses them). */
   defaultFont: string;
   defaultFontSize: number;
-  /** UI theme ("light" | "dark"), mirrored onto <html data-theme>. */
+  /** UI theme ("light" | "dark" | "oled"), mirrored onto <html data-theme>. */
   theme: string;
   /** Words the user added to the Harper dictionary (app.json, spec Section 10). */
   customDictionary: string[];
@@ -363,15 +363,22 @@ function applyEditorFont(font: string, size: number) {
 }
 
 /** Themes we ship. Anything else in app.json falls back to light. */
-const THEMES = ["light", "dark"];
+const THEMES = ["light", "dark", "oled"];
 
-/** Put the theme on the document root as `data-theme`, which every design token
- * keys off (see tokens.css). Set on config load and whenever the setting
- * changes, so the whole UI — including which icon set is used — switches live
- * with no reload. */
+/** Themes that are dark variants, so styling can target them as a group. */
+const DARK_THEMES = new Set(["dark", "oled"]);
+
+/** Put the theme on the document root as `data-theme`, plus a `data-scheme` of
+ * just "light"/"dark". Tokens and component rules key on the scheme so every
+ * dark variant (dark, OLED) inherits them, and only the handful of surfaces
+ * that actually differ are keyed on `data-theme`. Set on config load and
+ * whenever the setting changes, so the whole UI — including which icon set is
+ * used — switches live with no reload. */
 function applyTheme(theme: string) {
   const value = THEMES.includes(theme) ? theme : "light";
-  document.documentElement.dataset.theme = value;
+  const root = document.documentElement;
+  root.dataset.theme = value;
+  root.dataset.scheme = DARK_THEMES.has(value) ? "dark" : "light";
 }
 
 export function VellumProvider({ children }: { children: ReactNode }) {

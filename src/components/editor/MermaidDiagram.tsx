@@ -26,7 +26,7 @@ import {
 } from "@tiptap/react";
 import mermaid from "mermaid";
 import { useEffect, useRef, useState } from "react";
-import { useIsDarkTheme } from "../ui/Icon";
+import { useThemeName } from "../ui/Icon";
 
 /** Starter diagram inserted by Insert ▸ Mermaid Diagram. */
 export const DEFAULT_MERMAID_SOURCE = `graph TD
@@ -37,32 +37,41 @@ export const DEFAULT_MERMAID_SOURCE = `graph TD
 
 // mermaid bakes its palette in at render time, so switching theme means
 // re-initialising and re-rendering rather than restyling the emitted SVG.
-let mermaidTheme: string | null = null;
+let mermaidKey: string | null = null;
+
+/** Mermaid's dark palette, taken from the live tokens so each dark variant
+ * (dark, OLED) gets diagrams on its own page colour. */
+function darkThemeVariables() {
+  const cs = getComputedStyle(document.documentElement);
+  const token = (name: string, fallback: string) =>
+    cs.getPropertyValue(name).trim() || fallback;
+  const page = token("--surface-content", "#262626");
+  return {
+    background: page,
+    // Node fills use the raised surface so shapes separate from the page, and
+    // edge labels sit on the page colour rather than mermaid's default grey
+    // chip, which is too close to its own label text to read comfortably.
+    mainBkg: token("--surface-raised", "#333333"),
+    edgeLabelBackground: page,
+  };
+}
+
 function ensureMermaidInit(dark: boolean): void {
-  const theme = dark ? "dark" : "default";
-  if (mermaidTheme === theme) return;
+  const themeVariables = dark ? darkThemeVariables() : null;
+  const key = themeVariables
+    ? `dark:${themeVariables.background}:${themeVariables.mainBkg}`
+    : "default";
+  if (mermaidKey === key) return;
   mermaid.initialize({
     startOnLoad: false,
     // The source is the user's own content, but "strict" also keeps a malformed
     // diagram from injecting anything unexpected into the rendered SVG.
     securityLevel: "strict",
-    theme,
+    theme: dark ? "dark" : "default",
     fontFamily: "inherit",
-    // Line up mermaid's stock dark palette with the app's: node fills use the
-    // raised surface so shapes separate from the page, and edge labels sit
-    // directly on the page colour instead of mermaid's default grey chip, which
-    // is too close to its own label text to read comfortably.
-    ...(dark
-      ? {
-          themeVariables: {
-            background: "#262626",
-            mainBkg: "#333333",
-            edgeLabelBackground: "#262626",
-          },
-        }
-      : {}),
+    ...(themeVariables ? { themeVariables } : {}),
   });
-  mermaidTheme = theme;
+  mermaidKey = key;
 }
 
 let renderSeq = 0;
@@ -74,7 +83,7 @@ let renderSeq = 0;
  * explicitly because printed output is always on white paper.
  */
 export async function renderMermaid(source: string, dark?: boolean): Promise<string> {
-  ensureMermaidInit(dark ?? document.documentElement.dataset.theme === "dark");
+  ensureMermaidInit(dark ?? document.documentElement.dataset.scheme === "dark");
   const id = `v-mermaid-${(renderSeq += 1)}`;
   try {
     const { svg } = await mermaid.render(id, source.trim());
@@ -99,7 +108,7 @@ function MermaidNodeView({ node, updateAttributes, editor, selected }: NodeViewP
   const [svg, setSvg] = useState("");
   const [error, setError] = useState<string | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
-  const isDark = useIsDarkTheme();
+  const themeName = useThemeName();
 
   // Re-render whenever the committed source changes (not while editing the
   // draft), and when the theme flips — mermaid's palette is baked into the SVG.
@@ -111,7 +120,7 @@ function MermaidNodeView({ node, updateAttributes, editor, selected }: NodeViewP
       setError(null);
       return;
     }
-    renderMermaid(text, isDark).then(
+    renderMermaid(text, themeName !== "light").then(
       (out) => {
         if (!cancelled) {
           setSvg(out);
@@ -128,7 +137,7 @@ function MermaidNodeView({ node, updateAttributes, editor, selected }: NodeViewP
     return () => {
       cancelled = true;
     };
-  }, [source, isDark]);
+  }, [source, themeName]);
 
   useEffect(() => {
     if (editing) taRef.current?.focus();

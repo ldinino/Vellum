@@ -87,7 +87,7 @@
    chroma (see VellumShell.css for the reasoning); without relative colour
    support the tone stays the raw colour. */
 @supports (color: oklch(from red l c h)) {
-  :root[data-theme="dark"] .v-sectiontabs__tab {
+  :root[data-scheme="dark"] .v-sectiontabs__tab {
     --tab-tone: oklch(from var(--tab-color) 0.5 calc(c * 1.9) h);
   }
 }
