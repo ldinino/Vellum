@@ -25,6 +25,27 @@ interface FormattingGroupsProps {
 }
 
 /**
+ * The "Code" button is context-sensitive so it reads like the other inline
+ * marks: apply the inline `code` mark when there's a selection, or when the
+ * caret sits in a line that already has text (a stored mark, like clicking bold
+ * or italic mid-sentence); only make a full `codeBlock` when the caret is on an
+ * otherwise empty line. Either is toggled back off when already active.
+ */
+function applyCode(editor: Editor) {
+  if (editor.isActive("codeBlock")) {
+    editor.chain().focus().toggleCodeBlock().run();
+    return;
+  }
+  const { selection } = editor.state;
+  const onEmptyLine = selection.empty && selection.$from.parent.content.size === 0;
+  if (onEmptyLine) {
+    editor.chain().focus().toggleCodeBlock().run();
+  } else {
+    editor.chain().focus().toggleCode().run();
+  }
+}
+
+/**
  * The formatting controls themselves, rendered as flex children of a toolbar
  * bar. Tolerates a null editor (renders everything disabled) so the shell-level
  * TopToolbar stays visible when no page is open.
@@ -115,6 +136,7 @@ function FormattingGroups({
         taskList: editor.isActive("taskList"),
         blockquote: editor.isActive("blockquote"),
         codeBlock: editor.isActive("codeBlock"),
+        code: editor.isActive("code"),
         link: editor.isActive("link"),
       };
     },
@@ -332,10 +354,10 @@ function FormattingGroups({
         />
         <ToolbarButton
           icon="edit-code"
-          label="Code block"
-          active={s?.codeBlock}
+          label="Code"
+          active={s?.codeBlock || s?.code}
           disabled={disabled}
-          onClick={() => editor?.chain().focus().toggleCodeBlock().run()}
+          onClick={() => editor && applyCode(editor)}
         />
         <ToolbarButton
           icon="sitemap"

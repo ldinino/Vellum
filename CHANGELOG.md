@@ -7,6 +7,14 @@ and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2
 
 ## [Unreleased]
 
+### Changed
+
+- **Code button now works inline** — The toolbar's code button applies inline
+  `code` formatting (like bold or italic) when you have text selected or your
+  cursor is inside a line of text, and only creates a full code block when the
+  cursor is on an empty line. This makes it easy to mark a single word or phrase
+  as code without breaking your sentence onto its own block.
+
 ### Fixed
 
 - **Image resize handle** — The small resize grip on a picture now appears only

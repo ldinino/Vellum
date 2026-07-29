@@ -26,7 +26,7 @@ _None logged yet._
 ### UX
 
 - [x] Don't spell-check or grammar-check hyperlinks.
-- [ ] Make code blocks more dynamic. Sometimes a code block should behave more
+- [x] Make code blocks more dynamic. Sometimes a code block should behave more
   like an inline `code` insert mid-sentence. If the code block is on its own
   line, keep today's behavior. If I highlight a word within a sentence (or invoke
   the code block while working inside a sentence), it should behave like bold or
