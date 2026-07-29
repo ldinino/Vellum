@@ -137,8 +137,13 @@ function FormattingGroups({
         } as Record<1 | 2 | 3 | 4 | 5 | 6, boolean>,
         fontFamily: (style.fontFamily as string | undefined) ?? "",
         fontSize: ((style.fontSize as string | undefined) ?? "").replace("px", ""),
-        color: (style.color as string | undefined) ?? "#000000",
-        highlight: (editor.getAttributes("highlight").color as string | undefined) ?? "#ffe600",
+        // Null when no colour/highlight mark is set, rather than a stand-in
+        // default: the dropdowns tick "Automatic" / "No highlight" on null, and
+        // defaulting here made them tick the black and yellow swatches instead.
+        // Consumers that need a concrete value (the native pickers) fall back
+        // at the point of use.
+        color: (style.color as string | undefined) ?? null,
+        highlight: (editor.getAttributes("highlight").color as string | undefined) ?? null,
         alignLeft: editor.isActive({ textAlign: "left" }),
         alignCenter: editor.isActive({ textAlign: "center" }),
         alignRight: editor.isActive({ textAlign: "right" }),
