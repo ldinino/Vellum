@@ -388,6 +388,66 @@ fn upsert(list: &mut SatchelList, entry: KnownSatchel) -> KnownSatchel {
     }
 }
 
+/// True when two paths point at the same folder, tolerating case and separator
+/// differences by asking the filesystem where it can.
+fn same_folder(a: &Path, b: &Path) -> bool {
+    match (std::fs::canonicalize(a), std::fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
+}
+
+/// Record a folder being opened, telling a *moved* Satchel apart from a *copied*
+/// one.
+///
+/// Copying a Satchel duplicates its marker, so two folders claim the same id.
+/// Treating that as a move would repoint the original entry at the copy, and if
+/// it were the Satchel in use the app would keep writing through pools opened on
+/// the old files while new work landed in the copy. The distinguishing question
+/// is simply whether the folder we already know about is still there: if it is,
+/// this is a second Satchel and gets its own identity.
+fn adopt_or_update(
+    list: &mut SatchelList,
+    dir: &Path,
+    marker: Marker,
+) -> Result<KnownSatchel, String> {
+    let clash = list
+        .known
+        .iter()
+        .find(|s| s.id == marker.id)
+        .map(|s| PathBuf::from(&s.path));
+
+    if let Some(existing_path) = clash {
+        if !same_folder(&existing_path, dir) && existing_path.is_dir() {
+            let fresh = Marker {
+                id: uuid::Uuid::new_v4().to_string(),
+                // Two identically named rows would be unreadable in the picker.
+                name: format!("{} (copy)", marker.name),
+                format_version: FORMAT_VERSION,
+            };
+            write_marker(dir, &fresh)?;
+            let entry = KnownSatchel {
+                id: fresh.id,
+                name: fresh.name,
+                path: dir.to_string_lossy().to_string(),
+                sync: None,
+            };
+            list.known.push(entry.clone());
+            return Ok(entry);
+        }
+    }
+
+    Ok(upsert(
+        list,
+        KnownSatchel {
+            id: marker.id,
+            name: marker.name,
+            path: dir.to_string_lossy().to_string(),
+            sync: None,
+        },
+    ))
+}
+
 pub fn create(
     app: &AppHandle,
     parent: &Path,
@@ -503,15 +563,7 @@ pub fn open(app: &AppHandle, dir: &Path, adopt: bool) -> Result<KnownSatchel, St
     }
 
     let mut list = load_list(app)?;
-    let stored = upsert(
-        &mut list,
-        KnownSatchel {
-            id: marker.id,
-            name: marker.name,
-            path: dir.to_string_lossy().to_string(),
-            sync: None,
-        },
-    );
+    let stored = adopt_or_update(&mut list, dir, marker)?;
     save_list(app, &list)?;
     Ok(stored)
 }
@@ -665,6 +717,61 @@ mod tests {
         assert_eq!(list.known.len(), 1);
         assert_eq!(moved.path, "D:\\new");
         assert_eq!(list.known[0].path, "D:\\new");
+    }
+
+    /// Copying a Satchel folder duplicates its marker, so two live folders claim
+    /// the same id. Treating that as a move would repoint the original entry at
+    /// the copy — and if it were the Satchel in use, the app would keep writing
+    /// through pools opened on the old files while new work landed in the copy.
+    #[test]
+    fn a_copied_satchel_becomes_its_own_satchel_rather_than_stealing_the_original() {
+        let tmp = TmpDir::new();
+        let original = tmp.0.join("Vellum");
+        let copy = tmp.0.join("Vellum - Copy");
+        let first = ensure_satchel_at(&original, "Work").unwrap();
+        std::fs::create_dir_all(&copy).unwrap();
+        std::fs::copy(marker_path(&original), marker_path(&copy)).unwrap();
+
+        let mut list = SatchelList::default();
+        list.known.push(first.clone());
+        list.active_id = first.id.clone();
+
+        let opened = adopt_or_update(&mut list, &copy, read_marker(&copy).unwrap()).unwrap();
+
+        assert_ne!(opened.id, first.id, "the copy kept the original's identity");
+        assert_eq!(list.known.len(), 2, "the copy should be its own entry");
+        let still = list.known.iter().find(|s| s.id == first.id).unwrap();
+        assert_eq!(
+            still.path,
+            original.to_string_lossy(),
+            "the original entry was repointed at the copy"
+        );
+        // The copy's marker is rewritten so it stops claiming the original's id.
+        assert_eq!(read_marker(&copy).unwrap().id, opened.id);
+
+        let _ = std::fs::remove_dir_all(&tmp.0);
+    }
+
+    /// The move case still has to work: same id, but the old folder is gone.
+    #[test]
+    fn a_relocated_satchel_still_updates_in_place() {
+        let tmp = TmpDir::new();
+        let moved_to = tmp.0.join("Moved");
+        let entry = ensure_satchel_at(&moved_to, "Work").unwrap();
+
+        let mut list = SatchelList::default();
+        list.known.push(KnownSatchel {
+            path: tmp.0.join("Gone").to_string_lossy().into_owned(),
+            ..entry.clone()
+        });
+        list.active_id = entry.id.clone();
+
+        let opened =
+            adopt_or_update(&mut list, &moved_to, read_marker(&moved_to).unwrap()).unwrap();
+        assert_eq!(opened.id, entry.id, "a move must keep its identity");
+        assert_eq!(list.known.len(), 1);
+
+        let _ = std::fs::remove_dir_all(&tmp.0);
     }
 
     #[test]

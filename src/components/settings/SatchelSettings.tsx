@@ -50,6 +50,10 @@ export function SatchelSettings() {
       kind: "info",
     });
     if (!ok) return;
+    await activate(satchel);
+  }
+
+  async function activate(satchel: SatchelInfo) {
     setBusy(true);
     setError(null);
     try {
@@ -68,8 +72,7 @@ export function SatchelSettings() {
     if (typeof dir !== "string") return;
     setError(null);
     try {
-      await api.openSatchel(dir);
-      await refresh();
+      await finishOpen(await api.openSatchel(dir));
     } catch (e) {
       if (!String(e).includes(NOT_A_SATCHEL)) {
         setError(String(e));
@@ -81,12 +84,23 @@ export function SatchelSettings() {
       );
       if (!adopt) return;
       try {
-        await api.openSatchel(dir, true);
-        await refresh();
+        await finishOpen(await api.openSatchel(dir, true));
       } catch (e2) {
         setError(String(e2));
       }
     }
+  }
+
+  /** Opening means opening: switch to it, restarting as usual. The list is
+   *  refreshed first so the new row is there if the restart is declined. */
+  async function finishOpen(opened: SatchelInfo) {
+    await refresh();
+    const ok = await ask(`Vellum will restart to open "${opened.name}".`, {
+      title: "Open Satchel",
+      kind: "info",
+    });
+    if (!ok) return;
+    await activate(opened);
   }
 
   async function pickParentForNew() {
