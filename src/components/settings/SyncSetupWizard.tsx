@@ -201,6 +201,13 @@ export function SyncSetupWizard({
       {step === "form" && provider && (
         <>
           <p className="v-set__hint">{provider.label}</p>
+          {provider.oauth && (
+            <p className="v-set__hint">
+              Choosing Connect opens {provider.label} in your browser to sign in. Vellum never
+              sees your password, and your notebooks are still encrypted before they are uploaded
+              — {provider.label} only ever holds scrambled files.
+            </p>
+          )}
           {provider.fields.map((f) => (
             <label key={f.key} className="v-sync__field">
               <span className="v-set__label">{f.label}</span>
@@ -223,13 +230,18 @@ export function SyncSetupWizard({
             />
             <span className="v-sync__hint">{provider.pathHint}</span>
           </label>
+          {busy && provider.oauth && (
+            <p className="v-set__hint">
+              Waiting for you to finish signing in… Complete it in your browser, then come back.
+            </p>
+          )}
           {error && <p className="v-set__hint v-set__hint--error">{error}</p>}
           <div className="v-sync__actions">
             <Button onClick={() => setStep("provider")} disabled={busy}>
               Back
             </Button>
             <Button accent onClick={() => void testAndSave()} disabled={busy || !path.trim()}>
-              {busy ? "Testing…" : "Test and continue"}
+              {busy ? (provider.oauth ? "Signing in…" : "Testing…") : provider.oauth ? "Connect" : "Test and continue"}
             </Button>
           </div>
         </>

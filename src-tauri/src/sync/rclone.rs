@@ -193,6 +193,76 @@ pub fn run_with_stdin(
     })
 }
 
+/// Run the browser OAuth flow for `backend` and return the resulting token JSON.
+///
+/// rclone runs a callback server on 127.0.0.1:53682, opens the provider's
+/// consent page in the default browser, and prints the token to stdout when the
+/// user finishes. Nothing is written to disk: the token comes back to us and
+/// goes into the sealed remote definition like any other credential.
+///
+/// Blocks for as long as the person takes, up to `timeout`. The caller must run
+/// this off the main thread.
+pub fn authorize(backend: &str, timeout: std::time::Duration) -> Result<String, String> {
+    use std::io::Read;
+    use std::process::Stdio;
+
+    let bin = binary_path()?;
+    log_invocation(&["authorize", backend]);
+    let mut command = Command::new(&bin);
+    // Deliberately without COMMON_ARGS: `--config ""` makes rclone refuse to
+    // look anything up, and authorize needs no config anyway.
+    command
+        .arg("authorize")
+        .arg(backend)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("could not start the sign-in helper: {e}"))?;
+
+    // Read on a worker so a person who wanders off doesn't block us forever.
+    let mut stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "could not read from the sign-in helper".to_string())?;
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let mut buf = String::new();
+        let _ = stdout.read_to_string(&mut buf);
+        let _ = tx.send(buf);
+    });
+
+    let output = match rx.recv_timeout(timeout) {
+        Ok(text) => text,
+        Err(_) => {
+            let _ = child.kill();
+            return Err("Sign-in timed out. Try again and complete it in the browser.".into());
+        }
+    };
+    let _ = child.wait();
+
+    extract_token(&output)
+        .ok_or_else(|| "Sign-in didn't complete. Nothing has been changed.".to_string())
+}
+
+/// rclone brackets the token with "Paste the following into your remote machine"
+/// banners; the payload is the single JSON object between them.
+fn extract_token(stdout: &str) -> Option<String> {
+    let token = stdout
+        .lines()
+        .map(str::trim)
+        .find(|l| l.starts_with('{') && l.ends_with('}') && l.contains("access_token"))?;
+    Some(token.to_string())
+}
+
 /// Names directly under `target`.
 ///
 /// A folder that isn't there reads as empty rather than as a failure: rclone
@@ -363,6 +433,24 @@ mod tests {
         // Only in the subcommand position — a file literally named "obscure"
         // further along must not swallow the next argument.
         assert_eq!(redact(&["lsf", "obscure", "x"]), "lsf obscure x");
+    }
+
+    /// The token is the one thing the sign-in flow has to yield, and rclone
+    /// wraps it in banner lines that must not be mistaken for it.
+    #[test]
+    fn extracts_the_token_from_the_authorize_banner() {
+        let out = "Paste the following into your remote machine --->\n\
+                   {\"access_token\":\"abc\",\"token_type\":\"bearer\",\"refresh_token\":\"r\"}\n\
+                   <---End paste\n";
+        let token = extract_token(out).expect("token should be found");
+        assert!(token.starts_with('{') && token.ends_with('}'));
+        assert!(token.contains("access_token"));
+
+        // A cancelled or failed sign-in yields no token rather than junk.
+        assert_eq!(extract_token("Waiting for code...\n"), None);
+        assert_eq!(extract_token(""), None);
+        // A JSON line that isn't a token must not be mistaken for one.
+        assert_eq!(extract_token("{\"error\":\"denied\"}"), None);
     }
 
     #[test]

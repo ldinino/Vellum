@@ -36,6 +36,9 @@ pub struct Provider {
     /// What the "where to put it" box is called for this backend.
     pub path_label: String,
     pub path_hint: String,
+    /// Signed in through the browser rather than by typing credentials, so the
+    /// form is a Connect button instead of a set of fields.
+    pub oauth: bool,
 }
 
 fn field(key: &str, label: &str, hint: &str, secret: bool) -> Field {
@@ -51,6 +54,28 @@ fn field(key: &str, label: &str, hint: &str, secret: bool) -> Field {
 pub fn all() -> Vec<Provider> {
     vec![
         Provider {
+            id: "drive".into(),
+            label: "Google Drive".into(),
+            backend: "drive".into(),
+            fields: Vec::new(),
+            // Confine Vellum to files it created. A note-sync tool has no
+            // business holding read/write access to someone's whole Drive.
+            fixed: BTreeMap::from([("scope".to_string(), "drive.file".to_string())]),
+            path_label: "Folder".into(),
+            path_hint: "A folder in your Drive, e.g. Vellum. It is created if missing.".into(),
+            oauth: true,
+        },
+        Provider {
+            id: "dropbox".into(),
+            label: "Dropbox".into(),
+            backend: "dropbox".into(),
+            fields: Vec::new(),
+            fixed: BTreeMap::new(),
+            path_label: "Folder".into(),
+            path_hint: "A folder in your Dropbox, e.g. Vellum. It is created if missing.".into(),
+            oauth: true,
+        },
+        Provider {
             id: "local".into(),
             label: "Folder or network drive".into(),
             backend: "local".into(),
@@ -60,6 +85,7 @@ pub fn all() -> Vec<Provider> {
             fixed: BTreeMap::new(),
             path_label: "Folder".into(),
             path_hint: "A mapped drive, NAS share or removable disk, e.g. \\\\nas\\vellum. Contents are still encrypted.".into(),
+            oauth: false,
         },
         Provider {
             id: "b2".into(),
@@ -72,6 +98,7 @@ pub fn all() -> Vec<Provider> {
             fixed: BTreeMap::new(),
             path_label: "Bucket".into(),
             path_hint: "An existing bucket, optionally with a folder: my-bucket/vellum".into(),
+            oauth: false,
         },
         Provider {
             id: "s3".into(),
@@ -86,6 +113,7 @@ pub fn all() -> Vec<Provider> {
             fixed: BTreeMap::from([("provider".to_string(), "Other".to_string())]),
             path_label: "Bucket".into(),
             path_hint: "An existing bucket, optionally with a folder: my-bucket/vellum".into(),
+            oauth: false,
         },
         Provider {
             id: "sftp".into(),
@@ -100,6 +128,7 @@ pub fn all() -> Vec<Provider> {
             fixed: BTreeMap::new(),
             path_label: "Folder".into(),
             path_hint: "Path on the server, e.g. /home/me/vellum".into(),
+            oauth: false,
         },
         Provider {
             id: "webdav".into(),
@@ -113,6 +142,7 @@ pub fn all() -> Vec<Provider> {
             fixed: BTreeMap::from([("vendor".to_string(), "other".to_string())]),
             path_label: "Folder".into(),
             path_hint: "Folder on the server, e.g. vellum".into(),
+            oauth: false,
         },
     ]
 }

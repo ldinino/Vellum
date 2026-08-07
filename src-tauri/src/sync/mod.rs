@@ -135,6 +135,11 @@ pub fn status(app: &AppHandle) -> Result<SyncStatus, String> {
     })
 }
 
+/// How long to wait for someone to finish signing in before giving up. Long
+/// enough to find a password and pick an account; short enough that a forgotten
+/// browser tab doesn't leave a helper process running all day.
+const SIGN_IN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+
 /// Build a remote from a provider form, prove it works, then save it.
 ///
 /// The probe is not optional: a credential that merely authenticates is not
@@ -153,6 +158,13 @@ pub fn configure(
     }
 
     let mut options = provider.fixed.clone();
+    if provider.oauth {
+        // Opens the browser and blocks until the person finishes; the token
+        // comes back to us and is sealed like any other credential, never
+        // written to an rclone config.
+        let token = rclone::authorize(&provider.backend, SIGN_IN_TIMEOUT)?;
+        options.insert("token".to_string(), token);
+    }
     let secret_keys = providers::obscured_keys(&provider);
     for field in &provider.fields {
         let value = values.get(&field.key).map(String::as_str).unwrap_or("").trim();

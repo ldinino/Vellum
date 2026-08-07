@@ -174,6 +174,8 @@ export interface SyncProvider {
   fields: SyncField[];
   pathLabel: string;
   pathHint: string;
+  /** Signed in through the browser instead of by typing credentials. */
+  oauth: boolean;
 }
 
 export interface SyncStatus {
