@@ -10,6 +10,7 @@ mod process;
 mod refine;
 mod satchel;
 mod search;
+mod sync;
 
 use process::ollama::{self, OllamaState};
 use tauri::Manager;

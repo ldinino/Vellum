@@ -39,6 +39,21 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # tauri-build validates `externalBin` in its build script, so the rclone
+      # sidecar has to exist before `cargo check` — not just before bundling.
+      # Keyed on the script's hash, not a literal version: the sidecar filename
+      # carries no version, so a stale cache would otherwise satisfy the
+      # "already present" check and silently pin an old rclone after a bump.
+      - name: Cache sync sidecar
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/binaries
+          key: rclone-${{ matrix.os }}-${{ hashFiles('scripts/fetch-binaries.ps1') }}
+
+      - name: Fetch sync sidecar
+        shell: pwsh
+        run: ./scripts/fetch-binaries.ps1 -RcloneOnly
+
       - name: Install frontend dependencies
         run: npm ci
 

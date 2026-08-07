@@ -49,6 +49,15 @@ The grammar and spelling engine, embedded directly in the application.
 - <https://crates.io/crates/harper-core>
 - Licensed under the Apache License, Version 2.0.
 
+### rclone
+
+The transfer engine behind Vellum's optional sync, shipped as a sidecar
+executable alongside the app. Vellum invokes it as a child process; it is
+redistributed unmodified.
+
+- <https://github.com/rclone/rclone>
+- Licensed under the MIT License.
+
 ## Downloaded at runtime (not bundled)
 
 ### Ollama

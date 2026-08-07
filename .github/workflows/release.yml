@@ -60,6 +60,22 @@ jobs:
           workspaces: src-tauri
           key: ${{ matrix.target }}
 
+      # rclone is bundled as a sidecar, and tauri-build validates its presence
+      # in the build script — fetch for the cross-compilation target, not the
+      # host, or the ARM64 installer would ship the x64 binary.
+      # Keyed on the script's hash, not a literal version: the sidecar filename
+      # carries no version, so a stale cache would otherwise satisfy the
+      # "already present" check and silently ship an old rclone after a bump.
+      - name: Cache sync sidecar
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/binaries
+          key: rclone-${{ matrix.target }}-${{ hashFiles('scripts/fetch-binaries.ps1') }}
+
+      - name: Fetch sync sidecar
+        shell: pwsh
+        run: ./scripts/fetch-binaries.ps1 -RcloneOnly -Targets ${{ matrix.target }}
+
       - name: Install frontend dependencies
         run: npm ci
 

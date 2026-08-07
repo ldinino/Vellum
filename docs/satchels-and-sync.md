@@ -185,10 +185,19 @@ Explicitly *not* concurrent multi-device editing — that's SYNC-B.
 
 - MIT-licensed single static binary; covers S3, B2, SFTP, WebDAV, Google Drive,
   Dropbox, OneDrive.
-- **Downloaded on demand**, not bundled — reuse the Ollama pattern exactly:
-  `%LOCALAPPDATA%\Vellum\runtime\rclone\<version>\`, pinned version + SHA-256 in
-  [resources/models.json](../src-tauri/resources/models.json) (or a sibling
-  `runtime.json`). Installer size is unaffected.
+- **Bundled in the installer as a Tauri sidecar**, not downloaded. rclone's
+  Windows zip is ~30 MB (v1.75.0: 30 MB amd64, 27 MB arm64) — two Vellum
+  installers, not the 1.4 GB that forces Ollama to be downloaded. Paying ~30 MB
+  deletes the entire acquisition subsystem: no download UI, progress, cancel,
+  retry or resume; no SHA-256 pin to re-verify on every rclone release; no
+  "failed behind a corporate proxy" support burden. Sync works on first launch,
+  offline. Given that *stupidly easy* is this feature's hard requirement, that
+  trade is the whole point. **Reverses the initial "download on demand"
+  decision, which had been reasoned by false analogy to Ollama.**
+- The binary lives at `src-tauri/binaries/rclone-<target-triple>.exe`, fetched
+  by [fetch-binaries.ps1](../scripts/fetch-binaries.ps1) for dev and by CI
+  before bundling. `src-tauri/binaries/` is gitignored — we do not commit a
+  30 MB third-party binary.
 - Invoked as a child process through the existing
   [process/](../src-tauri/src/process/) machinery (hidden console window,
   tree-kill on exit).
@@ -348,9 +357,6 @@ New **Settings ▸ Sync** panel, scoped to the active Satchel:
 - Synced → provider name, last-synced time, **Sync now**, lease status ("In use
   by LAPTOP since 09:12"), **Copy connection code**, and **Stop syncing** (which
   leaves the local Satchel and the remote copy both intact, and says so).
-- First-run download of the rclone component reuses the Ollama download UI
-  pattern — progress, size, cancellable — with no mention of what it is beyond
-  "sync support".
 
 ### Exit criteria
 
@@ -462,3 +468,4 @@ Flip only once §3's exit criteria are met.
 | 2026-08-06 | Second-device pairing is a single **connection code** (remote config + crypt key, encrypted under a user passphrase) — paste, passphrase, done. |
 | 2026-08-06 | Setup **cannot be finished** until the connection code is copied or saved to a file. Copy button shows a checkmark + "Copied" for ~2s; manual text selection does not satisfy the gate. |
 | 2026-08-06 | Ship phase A, shadow-write the oplog in the same release, flip to phase B only after replay-and-diff is sustained-clean. |
+| 2026-08-06 | **rclone is bundled as a Tauri sidecar, not downloaded** (reverses the earlier call). At ~30 MB it is nothing like Ollama's 1.4 GB, and bundling removes the whole download/verify/retry/offline subsystem — which is what "stupidly easy" actually requires. Installer grows ~12 MB → ~42 MB. |
