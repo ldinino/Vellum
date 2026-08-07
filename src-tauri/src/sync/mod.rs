@@ -17,6 +17,9 @@ pub mod rclone;
 pub mod remote;
 pub mod secrets;
 
+#[cfg(test)]
+mod lifecycle_tests;
+
 use serde::Serialize;
 use std::collections::BTreeMap;
 use tauri::{AppHandle, Manager};

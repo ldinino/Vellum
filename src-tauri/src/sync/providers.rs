@@ -51,6 +51,17 @@ fn field(key: &str, label: &str, hint: &str, secret: bool) -> Field {
 pub fn all() -> Vec<Provider> {
     vec![
         Provider {
+            id: "local".into(),
+            label: "Folder or network drive".into(),
+            backend: "local".into(),
+            // A path is all the local backend needs; there is nothing to
+            // authenticate against.
+            fields: Vec::new(),
+            fixed: BTreeMap::new(),
+            path_label: "Folder".into(),
+            path_hint: "A mapped drive, NAS share or removable disk, e.g. \\\\nas\\vellum. Contents are still encrypted.".into(),
+        },
+        Provider {
             id: "b2".into(),
             label: "Backblaze B2".into(),
             backend: "b2".into(),
@@ -134,7 +145,6 @@ mod tests {
             assert!(ids.insert(p.id.clone()), "duplicate provider id {}", p.id);
             assert!(!p.label.is_empty());
             assert!(!p.backend.is_empty());
-            assert!(!p.fields.is_empty(), "{} has no fields", p.id);
             assert!(!p.path_label.is_empty());
             for f in &p.fields {
                 assert!(!f.key.is_empty());
@@ -143,16 +153,21 @@ mod tests {
         }
     }
 
+    /// A credential rendered in a plain text box is also a credential written to
+    /// the log, so anything that looks like one must be marked secret. Providers
+    /// with nothing to authenticate against (a local folder) are exempt.
     #[test]
-    fn every_provider_has_at_least_one_secret_field() {
-        // A provider with no secret would mean credentials rendered in plain
-        // text boxes and written to the log.
+    fn credential_fields_are_always_marked_secret() {
         for p in all() {
-            assert!(
-                p.fields.iter().any(|f| f.secret),
-                "{} exposes all fields as plain text",
-                p.id
-            );
+            for f in &p.fields {
+                let looks_secret = ["pass", "secret", "key", "token"]
+                    .iter()
+                    .any(|needle| f.key.contains(needle));
+                // "access_key_id" is a public identifier, not a credential.
+                if looks_secret && f.key != "access_key_id" {
+                    assert!(f.secret, "{}.{} carries a credential in plain text", p.id, f.key);
+                }
+            }
         }
     }
 
