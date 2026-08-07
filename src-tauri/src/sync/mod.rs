@@ -7,6 +7,10 @@
 // The wrapper lands before the config/setup layers that call it; the allow comes
 // off once phase A is wired to commands.
 #[allow(dead_code)]
+pub mod device;
+#[allow(dead_code)]
+pub mod lease;
+#[allow(dead_code)]
 pub mod rclone;
 #[allow(dead_code)]
 pub mod remote;

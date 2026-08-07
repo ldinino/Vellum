@@ -123,6 +123,55 @@ pub fn version() -> Result<String, String> {
         .ok_or_else(|| "sync support did not report a usable version".to_string())
 }
 
+/// Like [`run`], but feeds `body` to rclone on stdin — used by `rcat` so small
+/// files (the lease) can be written straight to the remote without staging them
+/// on local disk or passing their contents through argv.
+pub fn run_with_stdin(
+    env: &[(String, String)],
+    args: &[&str],
+    body: &str,
+) -> Result<RcloneOutput, String> {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let bin = binary_path()?;
+    let mut command = Command::new(&bin);
+    command
+        .args(COMMON_ARGS)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    for (key, value) in env {
+        command.env(key, value);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("could not start sync support: {e}"))?;
+    child
+        .stdin
+        .take()
+        .ok_or_else(|| "could not write to sync support".to_string())?
+        .write_all(body.as_bytes())
+        .map_err(|e| format!("could not write to sync support: {e}"))?;
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("sync support did not finish: {e}"))?;
+    if !output.status.success() {
+        return Err(translate_error(&String::from_utf8_lossy(&output.stderr)));
+    }
+    Ok(RcloneOutput {
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+    })
+}
+
 /// Name of the throwaway object written by `probe`.
 const PROBE_FILE: &str = ".vellum-probe";
 
