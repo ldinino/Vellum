@@ -25,10 +25,14 @@ export function SyncSetupWizard({
   open,
   onClose,
   onConfigured,
+  onedriveConflict,
 }: {
   open: boolean;
   onClose: () => void;
   onConfigured: () => void;
+  /** The Satchel lives inside OneDrive; setting up sync needs an explicit
+   *  acknowledgement first. */
+  onedriveConflict: boolean;
 }) {
   const [providers, setProviders] = useState<SyncProvider[]>([]);
   const [step, setStep] = useState<Step>("provider");
@@ -40,6 +44,7 @@ export function SyncSetupWizard({
   const [code, setCode] = useState("");
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [acknowledged, setAcknowledged] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -59,6 +64,7 @@ export function SyncSetupWizard({
       setCode("");
       setSaved(false);
       setCopied(false);
+      setAcknowledged(false);
       setError(null);
     }
   }, [open]);
@@ -138,12 +144,34 @@ export function SyncSetupWizard({
             Vellum encrypts your notebooks before they leave this device, so the storage provider
             only ever sees scrambled files. Choose where to keep them.
           </p>
+          {onedriveConflict && (
+            <>
+              <p className="v-set__hint v-set__hint--warn">
+                This Satchel is inside a OneDrive folder. OneDrive and Vellum would both be
+                syncing the same open notebooks, and OneDrive tends to resolve that by leaving
+                duplicate &ldquo;copy&rdquo; files behind. Vellum&apos;s sync is meant to replace
+                OneDrive for this folder, not run alongside it.
+              </p>
+              <label className="v-satchels__check">
+                <input
+                  type="checkbox"
+                  checked={acknowledged}
+                  onChange={(e) => setAcknowledged(e.target.checked)}
+                />
+                <span>
+                  I understand, and I&apos;ll move this Satchel out of OneDrive or accept the
+                  duplicates.
+                </span>
+              </label>
+            </>
+          )}
           <ul className="v-sync__tiles">
             {providers.map((p) => (
               <li key={p.id}>
                 <button
                   type="button"
                   className="v-sync__tile"
+                  disabled={onedriveConflict && !acknowledged}
                   onClick={() => {
                     setProvider(p);
                     setValues({});
@@ -158,7 +186,12 @@ export function SyncSetupWizard({
           </ul>
           <p className="v-set__hint">
             Already set this up on another device?{" "}
-            <button type="button" className="v-sync__link" onClick={() => setStep("paste")}>
+            <button
+              type="button"
+              className="v-sync__link"
+              disabled={onedriveConflict && !acknowledged}
+              onClick={() => setStep("paste")}
+            >
               Use a connection code
             </button>
           </p>

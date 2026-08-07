@@ -185,6 +185,9 @@ export interface SyncStatus {
   heldSince: string | null;
   /** Credentials exist but can't be read on this machine. */
   error: string | null;
+  /** The Satchel lives inside OneDrive, which would sync the same live
+   * databases Vellum is syncing. */
+  onedriveConflict: boolean;
 }
 
 export interface SyncReport {

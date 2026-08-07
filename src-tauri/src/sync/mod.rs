@@ -40,6 +40,9 @@ pub struct SyncStatus {
     pub held_since: Option<String>,
     /// Set when sealed credentials exist but can't be read on this machine.
     pub error: Option<String>,
+    /// This Satchel lives inside a OneDrive folder, so OneDrive and Vellum would
+    /// both be syncing the same live databases.
+    pub onedrive_conflict: bool,
 }
 
 /// Outcome of a sync the user asked for.
@@ -90,6 +93,9 @@ fn set_binding(app: &AppHandle, value: Option<satchel::SyncBinding>) -> Result<(
 }
 
 pub fn status(app: &AppHandle) -> Result<SyncStatus, String> {
+    let onedrive_conflict = paths::data_dir(app)
+        .map(|d| satchel::is_onedrive_path(&d))
+        .unwrap_or(false);
     let blank = SyncStatus {
         configured: false,
         label: None,
@@ -97,6 +103,7 @@ pub fn status(app: &AppHandle) -> Result<SyncStatus, String> {
         held_by: None,
         held_since: None,
         error: None,
+        onedrive_conflict,
     };
     let config = match load_remote(app) {
         Ok(Some(c)) => c,
@@ -124,6 +131,7 @@ pub fn status(app: &AppHandle) -> Result<SyncStatus, String> {
         held_by,
         held_since,
         error: None,
+        onedrive_conflict,
     })
 }
 

@@ -33,7 +33,18 @@
 }
 
 .v-set__hint--error {
-  color: var(--danger, #b00020);
+  color: var(--notice-error-text);
+}
+
+/* A caution the user can proceed past, so it reads as a notice rather than a
+   failure: tinted panel instead of red text. */
+.v-set__hint--warn {
+  margin-top: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--notice-warn-border);
+  border-radius: var(--radius-control);
+  background: var(--notice-warn-bg);
+  color: var(--notice-warn-text);
 }
 
 /* Diagnostics log viewer (About, Phase 11). */

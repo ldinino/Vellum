@@ -116,6 +116,29 @@ pub struct StartupStatus(pub Mutex<Option<SatchelProblem>>);
 // Paths
 // ---------------------------------------------------------------------------
 
+/// True if `dir` sits inside a OneDrive-managed folder.
+///
+/// Vellum's sync and OneDrive both want to own the same live SQLite files, and
+/// OneDrive answers that by making "-Copy" duplicates of a database mid-write.
+/// The two are alternatives, not layers.
+///
+/// Checked by path segment rather than only the `OneDrive*` environment
+/// variables: a redirected Documents folder lands under a business-branded name
+/// like `OneDrive - Contoso`, which those variables don't always cover.
+pub fn is_onedrive_path(dir: &Path) -> bool {
+    if dir.components().any(|c| {
+        let name = c.as_os_str().to_string_lossy();
+        name.eq_ignore_ascii_case("OneDrive") || name.to_lowercase().starts_with("onedrive - ")
+    }) {
+        return true;
+    }
+    ["OneDrive", "OneDriveCommercial", "OneDriveConsumer"]
+        .iter()
+        .filter_map(|k| std::env::var(k).ok())
+        .filter(|v| !v.trim().is_empty())
+        .any(|root| dir.starts_with(Path::new(&root)))
+}
+
 fn local_vellum_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let local = app
         .path()
@@ -567,6 +590,22 @@ mod tests {
         assert_eq!(sanitize_folder_name("  trailing.  "), "trailing");
         assert_eq!(sanitize_folder_name("***"), "___");
         assert_eq!(sanitize_folder_name("   "), "Vellum");
+    }
+
+    #[test]
+    fn detects_satchels_living_inside_onedrive() {
+        // The business form is what a redirected Documents folder actually
+        // looks like, and it is the case that prompted this check.
+        assert!(is_onedrive_path(Path::new(
+            r"C:\Users\me\OneDrive - Microsoft\Documents\Dev_Vellum\Vellum"
+        )));
+        assert!(is_onedrive_path(Path::new(r"C:\Users\me\OneDrive\Documents\Vellum")));
+        assert!(is_onedrive_path(Path::new(r"C:\Users\me\onedrive\Vellum")));
+
+        assert!(!is_onedrive_path(Path::new(r"C:\Vellum")));
+        assert!(!is_onedrive_path(Path::new(r"D:\Notes\Vellum")));
+        // A folder that merely mentions the word is not a OneDrive folder.
+        assert!(!is_onedrive_path(Path::new(r"C:\Backups\OneDriveExport\Vellum")));
     }
 
     #[test]

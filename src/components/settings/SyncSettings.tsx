@@ -111,6 +111,16 @@ export function SyncSettings() {
           files. Vellum syncs when you open and close the Satchel, and whenever you ask.
         </p>
 
+        {status?.onedriveConflict && (
+          <p className="v-set__hint v-set__hint--warn">
+            This Satchel is inside a OneDrive folder. OneDrive and Vellum would both be syncing
+            the same open notebooks, and OneDrive tends to resolve that by leaving duplicate
+            “copy” files behind. Vellum&apos;s sync is meant to replace OneDrive for this folder,
+            not run alongside it — move the Satchel somewhere outside OneDrive (close Vellum, move
+            the folder, then reopen it from Settings ▸ General).
+          </p>
+        )}
+
         {status?.error && (
           <p className="v-set__hint v-set__hint--error">
             This Satchel has sync settings that can't be read on this machine or user account.
@@ -172,6 +182,7 @@ export function SyncSettings() {
         open={wizardOpen}
         onClose={() => setWizardOpen(false)}
         onConfigured={() => void refresh()}
+        onedriveConflict={status?.onedriveConflict ?? false}
       />
 
       <Modal
