@@ -9,6 +9,8 @@
 #[allow(dead_code)]
 pub mod device;
 #[allow(dead_code)]
+pub mod engine;
+#[allow(dead_code)]
 pub mod lease;
 #[allow(dead_code)]
 pub mod rclone;

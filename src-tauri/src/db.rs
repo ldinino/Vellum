@@ -236,6 +236,19 @@ impl PoolCache {
             pool.close().await;
         }
     }
+
+    /// Close and forget every pool. Sync must do this before transferring a
+    /// Satchel: an open pool keeps the WAL alive, so a checkpoint can't fully
+    /// fold it back into the database file and the copy would be torn.
+    pub async fn clear(&self) {
+        let pools: Vec<Pool<Sqlite>> = match self.pools.lock() {
+            Ok(mut map) => map.drain().map(|(_, p)| p).collect(),
+            Err(_) => Vec::new(),
+        };
+        for pool in pools {
+            pool.close().await;
+        }
+    }
 }
 
 /// Open (creating if missing) a notebook DB, switch it to WAL, and bring the
