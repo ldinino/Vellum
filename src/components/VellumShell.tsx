@@ -15,6 +15,7 @@ import { FindBar } from "./editor/FindBar";
 import { OPEN_FIND_EVENT } from "./editor/find";
 import { SettingsModal } from "./settings/SettingsModal";
 import { FirstRunModal } from "./settings/FirstRunModal";
+import { SatchelProblemModal } from "./settings/SatchelProblemModal";
 import { AppContextMenus } from "./AppContextMenus";
 import { UpdateNotice } from "./UpdateNotice";
 import { useVellum } from "../state/vellum";
@@ -235,6 +236,7 @@ export function VellumShell() {
       <ExportWizard open={exportOpen} onClose={() => setExportOpen(false)} />
       <ImportWizard open={importOpen} onClose={() => setImportOpen(false)} />
       <FirstRunModal />
+      <SatchelProblemModal />
       <AppContextMenus />
       <UpdateNotice />
     </div>

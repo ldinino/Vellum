@@ -25,6 +25,8 @@ import type {
   RefineRequest,
   RefineResult,
   RuntimeStatus,
+  SatchelInfo,
+  SatchelProblem,
   Section,
   SearchFilters,
   SearchHit,
@@ -69,14 +71,35 @@ export const logFrontendEvent = (
   message: string,
 ) => invoke<void>("log_frontend_event", { level, area, message });
 
-/** Reveal Documents\Vellum in the system file manager (Settings → General). */
+/** Reveal the active Satchel's folder in the system file manager. */
 export const revealDataDir = () => invoke<void>("reveal_data_dir");
 
-/** Change where Vellum stores its data: moves the current data root into
- * `<newParent>\Vellum` and persists the choice. Returns the new data-root path.
- * The app should be restarted afterwards so everything reloads from it. */
-export const setDataDir = (newParent: string) =>
-  invoke<string>("set_data_dir", { newParent });
+// --- Satchels ---------------------------------------------------------------
+
+/** Satchels known to this machine, in list order. */
+export const listSatchels = () => invoke<SatchelInfo[]>("list_satchels");
+
+/** Why the active Satchel couldn't be opened at startup, if anything. */
+export const getSatchelProblem = () => invoke<SatchelProblem | null>("get_satchel_problem");
+
+/** Create `<parent>\<name>` as a new Satchel, optionally seeding it with a copy
+ * of the current Satchel's settings. Does not switch to it. */
+export const createSatchel = (parent: string, name: string, copySettings: boolean) =>
+  invoke<SatchelInfo>("create_satchel", { parent, name, copySettings });
+
+/** Add an existing folder to this machine's list. Without `adopt`, a folder
+ * with no `satchel.json` is rejected with `NOT_A_SATCHEL`. */
+export const openSatchel = (path: string, adopt = false) =>
+  invoke<SatchelInfo>("open_satchel", { path, adopt });
+
+/** Record which Satchel to use — the caller then relaunches. */
+export const setActiveSatchel = (id: string) => invoke<void>("set_active_satchel", { id });
+
+/** Remove a Satchel from this machine's list. Deletes nothing on disk. */
+export const forgetSatchel = (id: string) => invoke<void>("forget_satchel", { id });
+
+export const renameSatchel = (id: string, name: string) =>
+  invoke<void>("rename_satchel", { id, name });
 
 /** Write a page's Markdown to `mdPath` and copy its images/attachments into a
  * sibling `<filesDirName>/` folder next to it (spec Section 14). */

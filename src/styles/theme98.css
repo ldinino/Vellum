@@ -936,6 +936,7 @@
 :root[data-chrome="98"] .v-search__result:focus-visible,
 :root[data-chrome="98"] .v-tmpl__item.is-selected,
 :root[data-chrome="98"] .v-rtmpl__item.is-selected,
+:root[data-chrome="98"] .v-satchels__row--active,
 :root[data-chrome="98"] .v-refine__subtab.is-active,
 :root[data-chrome="98"] .v-refine__tier.is-active {
   border-color: transparent;
@@ -956,6 +957,38 @@
   border-color: transparent;
   background: var(--w98-face);
   box-shadow: var(--bevel-thin-sunken);
+}
+
+/* ---- Satchel list -------------------------------------------------------- */
+
+/* 98's list view (98.css "TableView"): a sunken white panel of flush rows with
+   no separators, no rounding, and selection as a full-width navy band. */
+:root[data-chrome="98"] .v-satchels {
+  border: 0;
+  border-radius: 0;
+  background: var(--w98-content);
+  box-shadow: var(--bevel-field);
+  padding: 2px;
+}
+
+:root[data-chrome="98"] .v-satchels__row {
+  border-bottom: 0;
+}
+
+:root[data-chrome="98"] .v-satchels__pick {
+  padding: 1px 4px;
+}
+
+/* List views of the era had no hover state — selection was the only feedback. */
+:root[data-chrome="98"] .v-satchels__pick:not(:disabled):hover {
+  background: none;
+}
+
+/* A rounded, outlined pill is not a 98 shape; here the badge is just text. */
+:root[data-chrome="98"] .v-satchels__badge {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
 }
 
 :root[data-chrome="98"] .v-settings__nav {
@@ -1035,6 +1068,49 @@
 :root[data-chrome="98"] select:focus {
   outline: none;
   box-shadow: var(--bevel-field);
+}
+
+/* 98's check box: a sunken white well with a black tick, not the platform
+   control (which draws a rounded, accent-filled box the era never had).
+   Windows drew the tick at 13×13 regardless of font size, so it is fixed. */
+:root[data-chrome="98"] input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: var(--w98-content);
+  box-shadow: var(--bevel-field);
+}
+
+:root[data-chrome="98"] input[type="checkbox"]:checked {
+  /* The tick is a mask so it takes the scheme's text colour — on the dark
+     schemes the well is dark and a black tick would disappear. */
+  background-color: var(--w98-content);
+  background-image: none;
+}
+
+:root[data-chrome="98"] input[type="checkbox"]:checked::before {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-color: var(--text-primary);
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 13'><path d='M3 6.5 5.5 9 10 4' fill='none' stroke='black' stroke-width='2'/></svg>")
+    no-repeat center / contain;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 13 13'><path d='M3 6.5 5.5 9 10 4' fill='none' stroke='black' stroke-width='2'/></svg>")
+    no-repeat center / contain;
+}
+
+:root[data-chrome="98"] input[type="checkbox"]:disabled {
+  background: var(--w98-face);
+}
+
+:root[data-chrome="98"] input[type="checkbox"]:disabled::before {
+  background-color: var(--w98-shadow);
 }
 
 /* ---- The page ------------------------------------------------------------ */

@@ -236,17 +236,6 @@ impl PoolCache {
             pool.close().await;
         }
     }
-
-    /// Close and forget every pool (call before moving the whole data root).
-    pub async fn clear(&self) {
-        let pools: Vec<Pool<Sqlite>> = match self.pools.lock() {
-            Ok(mut map) => map.drain().map(|(_, p)| p).collect(),
-            Err(_) => Vec::new(),
-        };
-        for pool in pools {
-            pool.close().await;
-        }
-    }
 }
 
 /// Open (creating if missing) a notebook DB, switch it to WAL, and bring the

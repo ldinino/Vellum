@@ -170,6 +170,32 @@ export interface AppPaths {
   runtimeDir: string;
 }
 
+/** A Satchel's sync binding. Credentials never cross this boundary — this is
+ * only what the picker needs to show the cloud badge. `null` = local-only. */
+export interface SyncBinding {
+  remote: string;
+  label: string;
+  lastSyncedAt: string | null;
+}
+
+/** One row of the Satchel picker (Settings → General). */
+export interface SatchelInfo {
+  id: string;
+  name: string;
+  path: string;
+  active: boolean;
+  /** Folder isn't there — disconnected drive, or a cloud folder not yet synced. */
+  missing: boolean;
+  sync: SyncBinding | null;
+}
+
+/** Why the active Satchel couldn't be opened at startup. */
+export interface SatchelProblem {
+  kind: "missing" | "tooNew";
+  name: string;
+  path: string;
+}
+
 /** One file copied next to an exported page (an inline image or an attachment). */
 export interface ExportCopy {
   /** Notebook-relative source path. */

@@ -136,6 +136,158 @@
   margin-top: var(--space-1);
 }
 
+/* Satchel picker (Settings ▸ General) */
+.v-satchels {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+
+.v-satchels__row {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border-faint);
+}
+
+.v-satchels__row:last-child {
+  border-bottom: none;
+}
+
+.v-satchels__row--active {
+  background: var(--selected-fill);
+}
+
+.v-satchels__pick {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  border: none;
+  background: none;
+  font: inherit;
+  /* Inherited, not --text-primary: the selected row repaints itself with the
+     scheme highlight and lifts its text, which an explicit colour would beat. */
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.v-satchels__pick:disabled {
+  cursor: default;
+}
+
+/* The current Satchel is marked current, not disabled: `disabled` picks up the
+   98 theme's embossed-label text-shadow, which doubles the selected row's text. */
+.v-satchels__row--active .v-satchels__pick {
+  cursor: default;
+}
+
+.v-satchels__pick:not(:disabled):hover {
+  background: var(--gradient-hover);
+}
+
+.v-satchels__row--active .v-satchels__pick:hover {
+  background: none;
+}
+
+.v-satchels__name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.v-satchels__badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-faint);
+  font-size: var(--text-size-small);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.v-satchels__path {
+  flex: 1;
+  min-width: 0;
+  padding-left: var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-size-small);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl; /* keep the tail of a long path visible */
+  text-align: left;
+}
+
+.v-satchels__forget {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 4px;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+/* Drawn via mask rather than a raster icon so it takes the scheme's colour —
+   the Fugue cross carries its own dark red, which vanishes on a dark row. */
+.v-satchels__forget::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  background-color: var(--text-muted);
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 2 8 8 M8 2 2 8' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'/></svg>")
+    no-repeat center / contain;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 2 8 8 M8 2 2 8' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round'/></svg>")
+    no-repeat center / contain;
+}
+
+.v-satchels__forget:not(:disabled):hover::before {
+  background-color: var(--notice-error-text);
+}
+
+.v-satchels__forget:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* Hidden rather than dimmed on the current row: it does nothing there, and a
+   35%-opacity glyph on the selection band is just a smudge. */
+.v-satchels__row--active .v-satchels__forget {
+  visibility: hidden;
+}
+
+.v-satchels__input {
+  padding: 4px 8px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--text-size-ui);
+}
+
+.v-satchels__input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.v-satchels__check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  font-size: var(--text-size-ui);
+  color: var(--text-secondary);
+}
+
 .v-set__field {
   display: flex;
   flex-direction: column;

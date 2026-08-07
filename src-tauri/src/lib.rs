@@ -8,6 +8,7 @@ mod notebook;
 mod paths;
 mod process;
 mod refine;
+mod satchel;
 mod search;
 
 use process::ollama::{self, OllamaState};
@@ -46,8 +47,18 @@ pub fn run() {
         .manage(db::PoolCache::default())
         .manage(refine::logbuf::LogBuffer::default())
         .manage(refine::runtime::InstallState::default())
+        .manage(satchel::StartupStatus::default())
         .setup(|app| {
-            paths::ensure_data_layout(&app.handle().clone())?;
+            // Resolve the active Satchel before anything touches the data root.
+            // A missing or too-new Satchel is recorded rather than replaced with
+            // a fresh empty one, and the frontend shows a chooser.
+            let handle = app.handle().clone();
+            match satchel::resolve_at_startup(&handle) {
+                Ok(problem) => {
+                    *app.state::<satchel::StartupStatus>().0.lock().unwrap() = problem;
+                }
+                Err(e) => return Err(e.into()),
+            }
 
             // Diagnostic log (Phase 11): open the on-disk file, record a startup
             // line, and route panics into the log so an export captures crashes.
@@ -131,7 +142,13 @@ pub fn run() {
             commands::import_copy_external_image,
             commands::get_version_info,
             commands::reveal_data_dir,
-            commands::set_data_dir,
+            commands::list_satchels,
+            commands::get_satchel_problem,
+            commands::create_satchel,
+            commands::open_satchel,
+            commands::set_active_satchel,
+            commands::forget_satchel,
+            commands::rename_satchel,
             commands::get_app_config,
             commands::save_app_config,
             commands::list_notebooks,

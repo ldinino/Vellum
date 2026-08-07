@@ -13,7 +13,7 @@ use crate::process::ollama::{self, OllamaState};
 use crate::process::ProcessStatus;
 use crate::grammar::{self, GrammarSpan};
 use crate::search::{self, SearchFilters, SearchHit};
-use crate::{db, paths};
+use crate::{db, paths, satchel};
 
 /// Path to the master cross-notebook search index in the Vellum root.
 fn master_index_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
@@ -161,39 +161,6 @@ fn sanitize_attachment_name(name: &str) -> String {
     } else {
         cleaned.chars().take(150).collect()
     }
-}
-
-/// Recursively copy a directory tree (used by `move_dir` when a plain rename
-/// can't cross a volume boundary).
-fn copy_dir_all(src: &std::path::Path, dest: &std::path::Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(dest)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let from = entry.path();
-        let to = dest.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
-            copy_dir_all(&from, &to)?;
-        } else {
-            std::fs::copy(&from, &to)?;
-        }
-    }
-    Ok(())
-}
-
-/// Move a directory `src` -> `dest`: a fast rename when both sides share a
-/// volume, else copy the whole tree and remove the original (a rename fails
-/// across drives on Windows). `dest` must not already exist. On a copy that
-/// partially fails, the original is left intact (the caller only records the new
-/// location after this returns Ok), so the notebook is never lost.
-fn move_dir(src: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
-    if std::fs::rename(src, dest).is_ok() {
-        return Ok(());
-    }
-    copy_dir_all(src, dest)
-        .map_err(|e| format!("copy {} -> {}: {e}", src.display(), dest.display()))?;
-    std::fs::remove_dir_all(src)
-        .map_err(|e| format!("remove original {}: {e}", src.display()))?;
-    Ok(())
 }
 
 #[derive(Serialize)]
@@ -702,7 +669,7 @@ pub fn get_version_info(app: AppHandle) -> Result<VersionInfo, String> {
     })
 }
 
-/// Reveal the app data folder (`Documents\Vellum`) in the system file manager
+/// Reveal the active Satchel's folder in the system file manager
 /// (Settings → General "Open folder").
 #[tauri::command]
 pub fn reveal_data_dir(app: AppHandle) -> Result<(), String> {
@@ -712,71 +679,89 @@ pub fn reveal_data_dir(app: AppHandle) -> Result<(), String> {
         .map_err(|e| format!("open data dir: {e}"))
 }
 
-/// Change where Vellum stores all its data (Settings → General). Moves the
-/// current data root — `app.json`, `notebooks.json`, the master search index,
-/// and every notebook folder — into `<new_parent>\Vellum`, then records that
-/// location so it persists across launches. This lets the user keep their data
-/// out of a OneDrive-synced folder, avoiding the sync-conflict duplicate copies
-/// OneDrive makes of the live SQLite files. Returns the new data-root path; the
-/// caller restarts the app so everything reloads from the new location.
+// ---------------------------------------------------------------------------
+// Satchels (Settings → General)
+// ---------------------------------------------------------------------------
+
+/// One row of the Satchel picker. `missing` drives the "can't be found" styling
+/// for a Satchel on a disconnected drive or an unsynced cloud folder.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SatchelInfo {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub active: bool,
+    pub missing: bool,
+    pub sync: Option<satchel::SyncBinding>,
+}
+
+fn to_info(entry: &satchel::KnownSatchel, active_id: &str) -> SatchelInfo {
+    SatchelInfo {
+        id: entry.id.clone(),
+        name: entry.name.clone(),
+        path: entry.path.clone(),
+        active: entry.id == active_id,
+        missing: !std::path::Path::new(&entry.path).is_dir(),
+        sync: entry.sync.clone(),
+    }
+}
+
 #[tauri::command]
-pub async fn set_data_dir(app: AppHandle, new_parent: String) -> Result<String, String> {
-    let current = paths::data_dir(&app)?;
-    let parent = std::path::PathBuf::from(new_parent.trim());
-    if !parent.is_dir() {
-        return Err(format!("Destination is not a folder: {}", parent.display()));
-    }
-    let new_root = parent.join("Vellum");
+pub fn list_satchels(app: AppHandle) -> Result<Vec<SatchelInfo>, String> {
+    let list = satchel::load_list(&app)?;
+    Ok(list.known.iter().map(|s| to_info(s, &list.active_id)).collect())
+}
 
-    // Already storing data there → nothing to do.
-    let same = match (std::fs::canonicalize(&current), std::fs::canonicalize(&new_root)) {
-        (Ok(a), Ok(b)) => a == b,
-        _ => current == new_root,
-    };
-    if same {
-        return Ok(current.to_string_lossy().to_string());
-    }
+/// The startup problem with the active Satchel, if any — the frontend shows a
+/// chooser rather than letting the app run against a folder that isn't there.
+#[tauri::command]
+pub fn get_satchel_problem(app: AppHandle) -> Option<satchel::SatchelProblem> {
+    app.state::<satchel::StartupStatus>().0.lock().ok()?.clone()
+}
 
-    // Can't move the data root into a subfolder of itself.
-    if new_root.starts_with(&current) {
-        return Err("Choose a location outside the current Vellum data folder.".into());
-    }
-
-    // Don't overwrite an existing, non-empty "Vellum" folder at the destination.
-    if new_root.exists() {
-        let empty = std::fs::read_dir(&new_root)
-            .map(|mut d| d.next().is_none())
-            .unwrap_or(false);
-        if !empty {
-            return Err(format!(
-                "A \"Vellum\" folder already exists in {} and isn't empty. Choose a different location.",
-                parent.display()
-            ));
-        }
-        // Remove the empty folder so the move can create it fresh.
-        let _ = std::fs::remove_dir(&new_root);
-    }
-
-    if current.is_dir() {
-        // Release every open notebook handle first, or the move fails on
-        // Windows (and would leave the data root half-copied).
-        app.state::<db::PoolCache>().clear().await;
-        move_dir(&current, &new_root)?;
-    } else {
-        std::fs::create_dir_all(&new_root)
-            .map_err(|e| format!("create {}: {e}", new_root.display()))?;
-    }
-
-    paths::set_data_root(&app, &new_root)?;
-    // The asset protocol is scoped to the old root until the app restarts; grant
-    // the new one now so inline images keep loading in the meantime.
-    if let Err(e) = app.asset_protocol_scope().allow_directory(&new_root, true) {
-        app.state::<AppLog>()
-            .warn("data", format!("asset scope {}: {e}", new_root.display()));
-    }
+#[tauri::command]
+pub fn create_satchel(
+    app: AppHandle,
+    parent: String,
+    name: String,
+    copy_settings: bool,
+) -> Result<SatchelInfo, String> {
+    let entry = satchel::create(&app, std::path::Path::new(parent.trim()), &name, copy_settings)?;
+    let active_id = satchel::load_list(&app)?.active_id;
     app.state::<AppLog>()
-        .info("data", format!("Data location changed to {}", new_root.display()));
-    Ok(new_root.to_string_lossy().to_string())
+        .info("satchel", format!("Created Satchel at {}", entry.path));
+    Ok(to_info(&entry, &active_id))
+}
+
+/// Add an existing folder to this machine's list. `adopt` writes a marker into a
+/// folder that doesn't have one; without it, such a folder is rejected with
+/// `NOT_A_SATCHEL` so the UI can offer to create one there.
+#[tauri::command]
+pub fn open_satchel(app: AppHandle, path: String, adopt: bool) -> Result<SatchelInfo, String> {
+    let entry = satchel::open(&app, std::path::Path::new(path.trim()), adopt)?;
+    let active_id = satchel::load_list(&app)?.active_id;
+    Ok(to_info(&entry, &active_id))
+}
+
+/// Record which Satchel to use. The caller relaunches; nothing is hot-swapped.
+#[tauri::command]
+pub fn set_active_satchel(app: AppHandle, id: String) -> Result<(), String> {
+    satchel::set_active(&app, &id)?;
+    app.state::<AppLog>()
+        .info("satchel", format!("Active Satchel set to {id}"));
+    Ok(())
+}
+
+/// Remove a Satchel from this machine's list. Deletes nothing on disk.
+#[tauri::command]
+pub fn forget_satchel(app: AppHandle, id: String) -> Result<(), String> {
+    satchel::forget(&app, &id)
+}
+
+#[tauri::command]
+pub fn rename_satchel(app: AppHandle, id: String, name: String) -> Result<(), String> {
+    satchel::rename(&app, &id, &name)
 }
 
 // ---------------------------------------------------------------------------
@@ -2424,25 +2409,6 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
-    }
-
-    #[test]
-    fn move_dir_relocates_tree_and_removes_source() {
-        let tmp = TmpDir::new();
-        let src = tmp.0.join("nb");
-        std::fs::create_dir_all(src.join("attachments").join("p1")).unwrap();
-        std::fs::write(src.join("notebook.db"), b"db").unwrap();
-        std::fs::write(src.join("attachments").join("p1").join("a.png"), b"img").unwrap();
-
-        let dest = tmp.0.join("moved");
-        move_dir(&src, &dest).unwrap();
-
-        assert!(!src.exists(), "source folder is removed after the move");
-        assert_eq!(std::fs::read(dest.join("notebook.db")).unwrap(), b"db");
-        assert_eq!(
-            std::fs::read(dest.join("attachments").join("p1").join("a.png")).unwrap(),
-            b"img"
-        );
     }
 
     fn tokens() -> TemplateTokens {

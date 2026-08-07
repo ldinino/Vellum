@@ -1,22 +1,14 @@
 /**
- * Settings → General (spec Section 15): appearance and the app data location.
+ * Settings → General (spec Section 15): appearance, and the Satchel picker.
  * Appearance writes `data-chrome`, `data-theme`, `data-scheme` and
  * `data-corners` on the document root, which every design token keys off (see
- * tokens.css and theme98.css). The data location shows where Vellum stores its
- * data (default `Documents\Vellum`, which OneDrive syncs) and lets the user
- * move it to a folder of their choice — e.g. a local, non-synced folder so
- * OneDrive stops making duplicate copies of the live databases and search
- * index. Changing it moves the data, then restarts the app so everything
- * reloads from the new location.
+ * tokens.css and theme98.css). Satchels — the data roots themselves — live in
+ * SatchelSettings.
  */
 
-import { useEffect, useState } from "react";
-import { ask, open } from "@tauri-apps/plugin-dialog";
-import { relaunch } from "@tauri-apps/plugin-process";
 import { Button } from "../ui/Button";
-import { useActiveEditor } from "../../state/activeEditor";
 import { useVellum } from "../../state/vellum";
-import * as api from "../../data/api";
+import { SatchelSettings } from "./SatchelSettings";
 import "./SettingsPanels.css";
 
 const FAMILY_OPTIONS = [
@@ -61,10 +53,6 @@ const SCHEME_TITLEBARS: Record<string, [string, string]> = {
 };
 
 export function GeneralSettings() {
-  const [currentPath, setCurrentPath] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const { active } = useActiveEditor();
   const { theme, themeScheme, cornerStyle, titlebarColors, actions } = useVellum();
 
   const family = FAMILY_OPTIONS.some((f) => f.value === theme) ? theme : "aero";
@@ -74,59 +62,12 @@ export function GeneralSettings() {
   const titlebarStart = titlebarColors?.start || defaultStart;
   const titlebarEnd = titlebarColors?.end || defaultEnd;
 
-  useEffect(() => {
-    let alive = true;
-    api
-      .getPaths()
-      .then((p) => alive && setCurrentPath(p.dataDir))
-      .catch((e) => alive && setError(String(e)));
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  // Pick a new parent folder, move the data into `<parent>\Vellum`, then restart
-  // so the app reloads everything from the new location.
-  async function changeLocation() {
-    const parent = await open({
-      directory: true,
-      title: "Choose where to store Vellum data",
-    });
-    if (typeof parent !== "string") return;
-
-    const ok = await ask(
-      `Vellum will move all your notebooks and settings to:\n\n${parent}\\Vellum\n\nThe app will restart to finish. Continue?`,
-      { title: "Change data location", kind: "warning" },
-    );
-    if (!ok) return;
-
-    setBusy(true);
-    setError(null);
-    try {
-      // Persist the open page before its database is moved (flushSaves is absent
-      // when no editor is mounted, hence Promise.resolve).
-      await Promise.resolve(active?.flushSaves()).catch(() => {});
-      const newPath = await api.setDataDir(parent);
-      // Picking the current location is a no-op — no need to restart.
-      if (newPath === currentPath) {
-        setBusy(false);
-        return;
-      }
-      await relaunch();
-    } catch (e) {
-      setError(String(e));
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="v-set">
       <section className="v-set__section">
         <h3 className="v-set__heading">Appearance</h3>
         <p className="v-set__hint">
-          Aero is the Office 2007 look, with a glass title bar. Windows 98 swaps in flat grey
-          chrome, a solid title bar, and the 3D bevelled controls of the era. Dark schemes use a
-          dark page and toolbars throughout the app; printing and exported documents stay light.
+          Choose your style and colour scheme. Aero for those who loved glass vibes, Windows 98 if you're feeling nostalgic.
         </p>
         <div className="v-set__row">
           <label className="v-set__field">
@@ -173,16 +114,15 @@ export function GeneralSettings() {
           </label>
         </div>
         <p className="v-set__hint">
-          Corners round the section tabs, notebooks and controls. Automatic follows the theme —
-          rounded in Aero, square in Windows 98.
+          Corners round the section tabs, notebooks, and controls. Choose automatic to follow your theme.
         </p>
       </section>
 
       {family === "98" && (
         <section className="v-set__section">
-          <h3 className="v-set__heading">Title bar colours</h3>
+          <h3 className="v-set__heading">Title bar colors</h3>
           <p className="v-set__hint">
-            Windows 98 let you pick the two colours its title bar faded between. So does Vellum.
+            Windows 98 let you pick the two colors its title bar faded between. So does Vellum.
           </p>
           <div className="v-set__row">
             <label className="v-set__field">
@@ -226,32 +166,7 @@ export function GeneralSettings() {
         </section>
       )}
 
-      <section className="v-set__section">
-        <h3 className="v-set__heading">App data location</h3>
-        <p className="v-set__hint">
-          Your notebooks, attachments, and settings are stored here. On Windows this folder is
-          backed up by OneDrive automatically. You can move it elsewhere — for example, a folder
-          outside OneDrive — to stop OneDrive from making duplicate copies of open notebooks.
-        </p>
-        <div className="v-set__pathrow">
-          <code className="v-set__path">{currentPath || (error ? "Unavailable" : "…")}</code>
-          <Button
-            icon="blue-folder"
-            onClick={() => void api.revealDataDir()}
-            disabled={!currentPath || busy}
-          >
-            Open folder
-          </Button>
-          <Button
-            icon="blue-folder--arrow"
-            onClick={() => void changeLocation()}
-            disabled={!currentPath || busy}
-          >
-            {busy ? "Moving…" : "Change…"}
-          </Button>
-        </div>
-        {error && <p className="v-set__hint v-set__hint--error">{error}</p>}
-      </section>
+      <SatchelSettings />
     </div>
   );
 }
