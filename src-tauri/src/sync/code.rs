@@ -158,6 +158,33 @@ mod tests {
         assert_eq!(decode(&code, "my-passphrase").unwrap(), sample());
     }
 
+    /// Encrypting the same remote twice produces different text, because crypt
+    /// uses a fresh nonce per file — deterministic output would leak that the
+    /// payload hadn't changed. What matters is that both codes still carry the
+    /// *same* keys: if the crypt passwords were being regenerated instead, the
+    /// newer code would point at keys that cannot read data written under the
+    /// older one, and the Satchel would be unrecoverable.
+    #[test]
+    fn each_code_is_freshly_encrypted_but_carries_identical_keys() {
+        if rclone::binary_path().is_err() {
+            eprintln!("skipping: rclone sidecar not fetched");
+            return;
+        }
+        let config = sample();
+        let first = encode(&config, "my-passphrase").unwrap();
+        let second = encode(&config, "my-passphrase").unwrap();
+        assert_ne!(first, second, "identical ciphertext would leak that nothing changed");
+
+        let a = decode(&first, "my-passphrase").unwrap();
+        let b = decode(&second, "my-passphrase").unwrap();
+        assert_eq!(a, b, "the two codes describe different remotes");
+        assert_eq!(a, config);
+        assert_eq!(
+            a.crypt_password, config.crypt_password,
+            "the encryption key changed between codes; older data would be unreadable"
+        );
+    }
+
     #[test]
     fn the_wrong_passphrase_is_rejected_clearly() {
         if rclone::binary_path().is_err() {

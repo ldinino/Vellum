@@ -209,6 +209,22 @@ pub fn set_window_acrylic(app: AppHandle, enabled: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// Reveal the main window, which is created hidden.
+///
+/// Showing it only once the frontend has applied the saved theme and painted
+/// avoids both the white flash of an empty webview and the visible jump from
+/// the configured default geometry to the remembered one.
+#[tauri::command]
+pub fn show_main_window(app: AppHandle) {
+    if let Some(win) = app.get_webview_window("main") {
+        if win.is_visible().unwrap_or(false) {
+            return;
+        }
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Export / Print & version info (Phase 10, spec Sections 14 / 15)
 // ---------------------------------------------------------------------------

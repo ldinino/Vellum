@@ -428,6 +428,17 @@ function carryOverScheme(family: string, scheme: string): string {
   return DARK_SCHEMES.has(scheme) ? "dark" : schemes[0];
 }
 
+/** Show the main window, which the backend creates hidden. Deferred two frames
+ * so the themed first paint is on screen before the window appears — otherwise
+ * the user sees a white flash and a jump to the remembered geometry. */
+function revealWindow() {
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      api.showMainWindow().catch(() => {});
+    }),
+  );
+}
+
 /** Mirror the appearance onto the document root: `data-chrome` (window chrome
  * family), `data-theme` (the specific scheme's tokens), `data-scheme`
  * (light/dark, which every dark rule and the native controls key on) and
@@ -656,11 +667,13 @@ export function VellumProvider({ children }: { children: ReactNode }) {
           welcomeSeeded: cfg.settings.welcomeSeeded,
           configLoaded: true,
         }));
+        revealWindow();
       })
       .catch((e) => {
         console.error("load app config failed", e);
         // Don't trap the app behind a never-loading first-run gate.
         setState((s) => ({ ...s, configLoaded: true }));
+        revealWindow();
       });
   }, []);
 

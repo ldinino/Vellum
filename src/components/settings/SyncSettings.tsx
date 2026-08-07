@@ -203,6 +203,10 @@ export function SyncSettings() {
         ) : (
           <>
             <textarea className="v-sync__code" readOnly value={code} rows={4} />
+            <p className="v-sync__hint">
+              Each code you create looks different, because it's encrypted afresh every time. They
+              all open the same Satchel, so any copy you've saved keeps working.
+            </p>
             <div className="v-sync__actions">
               <Button
                 icon={copied ? "tick" : "clipboard-paste"}

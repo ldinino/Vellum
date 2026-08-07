@@ -52,6 +52,8 @@ export const getPaths = () => invoke<AppPaths>("get_paths");
 export const setWindowAcrylic = (enabled: boolean) =>
   invoke<void>("set_window_acrylic", { enabled });
 
+export const showMainWindow = () => invoke<void>("show_main_window");
+
 /** App / Harper / Ollama versions (Settings → About). */
 export const getVersionInfo = () => invoke<VersionInfo>("get_version_info");
 

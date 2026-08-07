@@ -136,11 +136,22 @@ pub fn run() {
                     });
                 }
             }
+
+            // Safety net: the window is created hidden and normally revealed by
+            // the frontend once it has painted. If that never arrives (a startup
+            // error in the renderer), show it anyway rather than leaving the user
+            // with no window at all.
+            let show_handle = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                commands::show_main_window(show_handle);
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_paths,
             commands::set_window_acrylic,
+            commands::show_main_window,
             commands::export_page,
             commands::export_batch,
             commands::reveal_path,
