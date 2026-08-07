@@ -68,6 +68,12 @@ pub fn run() {
                 app_log.init_file(p);
             }
             app_log.info("app", format!("Vellum {} starting", env!("CARGO_PKG_VERSION")));
+
+            // Sync shells out to rclone, whose argument lists carry keys and
+            // passwords; route them through the redactor so the log can record
+            // what ran without recording the credentials.
+            let sync_log = app_log.clone();
+            sync::rclone::set_logger(Box::new(move |line| sync_log.info("sync", line)));
             let panic_log = app_log.clone();
             let default_hook = std::panic::take_hook();
             std::panic::set_hook(Box::new(move |info| {
@@ -150,6 +156,15 @@ pub fn run() {
             commands::set_active_satchel,
             commands::forget_satchel,
             commands::rename_satchel,
+            commands::sync_providers,
+            commands::sync_status,
+            commands::sync_configure,
+            commands::sync_connection_code,
+            commands::sync_apply_connection_code,
+            commands::sync_stop,
+            commands::sync_now,
+            commands::sync_begin_session,
+            commands::sync_refresh_lease,
             commands::get_app_config,
             commands::save_app_config,
             commands::list_notebooks,

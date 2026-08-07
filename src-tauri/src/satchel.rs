@@ -85,6 +85,10 @@ pub struct SyncBinding {
     /// Human label for the provider, e.g. "Backblaze B2".
     pub label: String,
     pub last_synced_at: Option<String>,
+    /// The remote generation this machine last saw. A remote ahead of this
+    /// means another device pushed since we did, which is a conflict rather
+    /// than something to overwrite.
+    pub generation: u64,
 }
 
 // ---------------------------------------------------------------------------
@@ -118,6 +122,12 @@ fn local_vellum_dir(app: &AppHandle) -> Result<PathBuf, String> {
         .local_data_dir()
         .map_err(|e| format!("cannot resolve local data directory: {e}"))?;
     Ok(local.join("Vellum"))
+}
+
+/// `%LOCALAPPDATA%\Vellum` — machine-local state that must never live inside a
+/// Satchel (the Satchel list, this device's identity, sealed sync credentials).
+pub fn machine_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    local_vellum_dir(app)
 }
 
 pub fn list_path(app: &AppHandle) -> Result<PathBuf, String> {

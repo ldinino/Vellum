@@ -13,7 +13,7 @@ use crate::process::ollama::{self, OllamaState};
 use crate::process::ProcessStatus;
 use crate::grammar::{self, GrammarSpan};
 use crate::search::{self, SearchFilters, SearchHit};
-use crate::{db, paths, satchel};
+use crate::{db, paths, satchel, sync};
 
 /// Path to the master cross-notebook search index in the Vellum root.
 fn master_index_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
@@ -652,6 +652,9 @@ pub struct VersionInfo {
     pub harper: String,
     /// Pinned Ollama runtime version from the bundled manifest (e.g. "v0.30.10").
     pub ollama: String,
+    /// Bundled transfer engine behind sync (rclone), reported by the binary
+    /// itself rather than a pinned constant that could drift from what ships.
+    pub sync: String,
 }
 
 /// Versions shown in Settings → About (spec Section 15). The Ollama version is
@@ -666,6 +669,7 @@ pub fn get_version_info(app: AppHandle) -> Result<VersionInfo, String> {
         app: env!("CARGO_PKG_VERSION").to_string(),
         harper: HARPER_VERSION.to_string(),
         ollama,
+        sync: sync::support_version(),
     })
 }
 
@@ -762,6 +766,71 @@ pub fn forget_satchel(app: AppHandle, id: String) -> Result<(), String> {
 #[tauri::command]
 pub fn rename_satchel(app: AppHandle, id: String, name: String) -> Result<(), String> {
     satchel::rename(&app, &id, &name)
+}
+
+// ---------------------------------------------------------------------------
+// Sync (Settings → Sync)
+// ---------------------------------------------------------------------------
+
+/// The curated provider list the setup tiles render from.
+#[tauri::command]
+pub fn sync_providers() -> Vec<sync::providers::Provider> {
+    sync::providers::all()
+}
+
+#[tauri::command]
+pub fn sync_status(app: AppHandle) -> Result<sync::SyncStatus, String> {
+    sync::status(&app)
+}
+
+/// Save a remote after proving it works. `values` are the provider's form
+/// fields keyed by rclone option name.
+#[tauri::command]
+pub fn sync_configure(
+    app: AppHandle,
+    provider_id: String,
+    values: std::collections::BTreeMap<String, String>,
+    path: String,
+) -> Result<(), String> {
+    sync::configure(&app, &provider_id, values, &path)
+}
+
+#[tauri::command]
+pub fn sync_connection_code(app: AppHandle, passphrase: String) -> Result<String, String> {
+    sync::connection_code(&app, &passphrase)
+}
+
+#[tauri::command]
+pub fn sync_apply_connection_code(
+    app: AppHandle,
+    code: String,
+    passphrase: String,
+) -> Result<(), String> {
+    sync::apply_connection_code(&app, &code, &passphrase)
+}
+
+#[tauri::command]
+pub fn sync_stop(app: AppHandle) -> Result<(), String> {
+    sync::stop(&app)
+}
+
+/// Sync now. `takeOver` is the user's explicit answer to another device holding
+/// the lease, so it is never assumed.
+#[tauri::command]
+pub async fn sync_now(app: AppHandle, take_over: bool) -> Result<sync::SyncReport, String> {
+    sync::sync_now(&app, take_over).await
+}
+
+/// Take the lease and pull, when a synced Satchel is opened.
+#[tauri::command]
+pub async fn sync_begin_session(app: AppHandle) -> Result<Option<sync::SyncReport>, String> {
+    sync::begin_session(&app).await
+}
+
+/// Refresh our lease; `false` means another device took over.
+#[tauri::command]
+pub fn sync_refresh_lease(app: AppHandle) -> Result<bool, String> {
+    sync::refresh_lease(&app)
 }
 
 // ---------------------------------------------------------------------------

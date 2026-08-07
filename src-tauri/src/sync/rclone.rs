@@ -10,6 +10,25 @@
 
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::OnceLock;
+
+/// Sink for redacted command lines. Set once at startup so this module can
+/// report what it ran without depending on Tauri or the app log directly.
+type Logger = Box<dyn Fn(String) + Send + Sync>;
+static LOGGER: OnceLock<Logger> = OnceLock::new();
+
+pub fn set_logger(logger: Logger) {
+    let _ = LOGGER.set(logger);
+}
+
+/// Record an invocation. Always goes through [`redact`]: rclone argument lists
+/// carry keys, passwords and tokens, and a log is exactly the place they must
+/// not end up.
+fn log_invocation(args: &[&str]) {
+    if let Some(logger) = LOGGER.get() {
+        logger(redact(args));
+    }
+}
 
 /// Flags applied to every invocation.
 ///
@@ -74,6 +93,7 @@ pub struct RcloneOutput {
 /// through the environment rather than argv because argv is readable by any
 /// process on the machine via the process list; environment is not.
 pub fn run(env: &[(String, String)], args: &[&str]) -> Result<RcloneOutput, String> {
+    log_invocation(args);
     let bin = binary_path()?;
     let mut command = Command::new(&bin);
     command.args(COMMON_ARGS).args(args);
@@ -134,6 +154,7 @@ pub fn run_with_stdin(
     use std::io::Write;
     use std::process::Stdio;
 
+    log_invocation(args);
     let bin = binary_path()?;
     let mut command = Command::new(&bin);
     command
@@ -214,9 +235,9 @@ pub fn obscure(plaintext: &str) -> Result<String, String> {
     Ok(value)
 }
 
-/// Mask secrets in an argument list so it is safe to log. Matches the flags and
-/// value shapes that actually carry credentials; anything unrecognised is kept,
-/// since an over-broad filter would make logs useless.
+/// Mask secrets in an argument list so it is safe to log. Matches the flags,
+/// subcommands and value shapes that actually carry credentials; anything
+/// unrecognised is kept, since an over-broad filter would make logs useless.
 pub fn redact(args: &[&str]) -> String {
     const SECRET_FLAGS: &[&str] = &[
         "--password",
@@ -226,12 +247,21 @@ pub fn redact(args: &[&str]) -> String {
         "--client-secret",
         "--token",
     ];
+    // `rclone obscure <secret>` takes the secret as a positional argument, so
+    // flag matching alone would log passphrases in the clear.
+    const SECRET_SUBCOMMANDS: &[&str] = &["obscure"];
+
     let mut out: Vec<String> = Vec::with_capacity(args.len());
     let mut mask_next = false;
-    for arg in args {
+    for (i, arg) in args.iter().enumerate() {
         if mask_next {
             out.push("<redacted>".into());
             mask_next = false;
+            continue;
+        }
+        if i == 0 && SECRET_SUBCOMMANDS.contains(arg) {
+            out.push((*arg).to_string());
+            mask_next = true;
             continue;
         }
         // `key=value` config assignments carry secrets in the value half.
@@ -297,6 +327,17 @@ mod tests {
         assert!(out.contains("secret_access_key=<redacted>"), "{out}");
         assert!(out.contains("region=us-west"), "region is not a secret: {out}");
         assert!(!out.contains("hunter2"), "secret leaked: {out}");
+    }
+
+    /// `rclone obscure <secret>` puts the secret in a positional argument, so
+    /// flag-based redaction alone would write passphrases into the log.
+    #[test]
+    fn redacts_the_argument_to_obscure() {
+        assert_eq!(redact(&["obscure", "my-passphrase"]), "obscure <redacted>");
+        assert!(!redact(&["obscure", "hunter2"]).contains("hunter2"));
+        // Only in the subcommand position — a file literally named "obscure"
+        // further along must not swallow the next argument.
+        assert_eq!(redact(&["lsf", "obscure", "x"]), "lsf obscure x");
     }
 
     #[test]
