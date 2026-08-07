@@ -9,4 +9,6 @@
 #[allow(dead_code)]
 pub mod rclone;
 #[allow(dead_code)]
+pub mod remote;
+#[allow(dead_code)]
 pub mod secrets;
