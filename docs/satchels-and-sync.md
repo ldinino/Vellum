@@ -277,10 +277,24 @@ credentials) re-arms the same gate.
 - The remote is wrapped in an rclone **`crypt`** remote, always, so filenames
   and contents are encrypted before leaving the machine. The provider is never
   trusted — that's the whole pitch.
-- `rclone.conf` lives in `%LOCALAPPDATA%\Vellum\`, **never inside the Satchel**
-  (it must not sync). Config encryption is enabled and the config password is
-  stored in Windows Credential Manager (DPAPI-backed). rclone's default
-  "obscure" is obfuscation, not encryption — do not rely on it.
+- **There is no `rclone.conf`.** rclone accepts a complete remote definition
+  through `RCLONE_CONFIG_<NAME>_<KEY>` environment variables, and `--config ""`
+  disables the config file entirely — both verified against the shipped binary.
+  So credentials are never written to disk in rclone's format at all, and the
+  user's own `%APPDATA%\rclone\rclone.conf` can never collide with our remote
+  names. **This supersedes the original plan of an encrypted `rclone.conf` plus
+  a config password in Credential Manager; that whole layer is gone.**
+- The remote definition (endpoint, keys, and the two `crypt` passwords) is
+  stored as a single **DPAPI-encrypted blob** at
+  `%LOCALAPPDATA%\Vellum\satchels\<satchel-id>.remote` — machine-local, never
+  inside a Satchel, decryptable only by the same Windows user on the same
+  machine. That is the same protection class as Credential Manager without the
+  extra dependency.
+- Secrets reach rclone by **environment, not argv**: argv is readable by any
+  process on the machine via the process list; environment is not.
+- `crypt` passwords must be rclone-*obscured* values, produced by
+  `rclone obscure`. Obscuring is not encryption — it is merely the format crypt
+  expects, and the DPAPI blob is what actually protects them at rest.
 - **Never log rclone command lines or stdout verbatim** — tokens and passwords
   appear in both. The [applog](../src-tauri/src/applog.rs) integration must
   redact.
@@ -296,7 +310,7 @@ open while no secret ever syncs:
 | Where | What |
 |---|---|
 | `satchels.json` (machine-local) | Per Satchel: `sync: { remote: "b2", label: "Backblaze B2", lastSyncedAt }` — enough to draw the cloud icon and its tooltip. No credentials. |
-| `rclone.conf` (machine-local, encrypted) | Credentials and the crypt key. |
+| `<satchel-id>.remote` (machine-local, DPAPI-encrypted) | The full remote definition: endpoint, credentials, and the two crypt passwords. |
 | Inside the Satchel | Nothing sync-related except `lease.json` and the oplog. |
 - **Never log rclone command lines or stdout verbatim** — tokens and passwords
   appear in both. The [applog](../src-tauri/src/applog.rs) integration must
@@ -469,3 +483,4 @@ Flip only once §3's exit criteria are met.
 | 2026-08-06 | Setup **cannot be finished** until the connection code is copied or saved to a file. Copy button shows a checkmark + "Copied" for ~2s; manual text selection does not satisfy the gate. |
 | 2026-08-06 | Ship phase A, shadow-write the oplog in the same release, flip to phase B only after replay-and-diff is sustained-clean. |
 | 2026-08-06 | **rclone is bundled as a Tauri sidecar, not downloaded** (reverses the earlier call). At ~30 MB it is nothing like Ollama's 1.4 GB, and bundling removes the whole download/verify/retry/offline subsystem — which is what "stupidly easy" actually requires. Installer grows ~12 MB → ~42 MB. |
+| 2026-08-07 | **No `rclone.conf`.** Remotes are defined entirely through `RCLONE_CONFIG_*` environment variables with `--config ""`; the definition is stored as one DPAPI-encrypted blob. Verified against the shipped binary, including a `crypt` round trip. Removes the encrypted-config-file and config-password layer, keeps credentials off disk, and isolates us from the user's own rclone config. |

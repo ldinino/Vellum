@@ -11,10 +11,16 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-/// Flags applied to every invocation. `--ask-password=false` makes a locked
-/// config fail instead of blocking on a prompt there is no console to answer,
-/// and the timeout stops a stalled remote hanging the app forever.
-const COMMON_ARGS: &[&str] = &["--ask-password=false", "--contimeout", "30s"];
+/// Flags applied to every invocation.
+///
+/// `--config ""` disables the config file outright: remotes come from
+/// `RCLONE_CONFIG_*` environment variables instead, so no credential is ever
+/// written to disk in rclone's format, and the user's own
+/// `%APPDATA%\rclone\rclone.conf` can't collide with our remote names.
+/// `--ask-password=false` makes anything unexpected fail rather than block on a
+/// prompt there is no console to answer, and the timeout stops a stalled remote
+/// hanging the app forever.
+const COMMON_ARGS: &[&str] = &["--config", "", "--ask-password=false", "--contimeout", "30s"];
 
 /// The sidecar next to the running executable. Tauri strips the target-triple
 /// suffix when it stages `externalBin`, so it is a plain `rclone.exe` in both
@@ -64,20 +70,15 @@ pub struct RcloneOutput {
 
 /// Run rclone to completion, hidden, and capture its output.
 ///
-/// `config` is the rclone.conf to use; it lives under %LOCALAPPDATA%\Vellum and
-/// never inside a Satchel, so it can't sync. `config_password` is passed by
-/// environment rather than argv — argv is visible to other processes on the
-/// machine via the process list, environment is not.
-pub fn run(
-    config: &std::path::Path,
-    config_password: Option<&str>,
-    args: &[&str],
-) -> Result<RcloneOutput, String> {
+/// `env` carries the remote definition as `RCLONE_CONFIG_*` pairs. Secrets go
+/// through the environment rather than argv because argv is readable by any
+/// process on the machine via the process list; environment is not.
+pub fn run(env: &[(String, String)], args: &[&str]) -> Result<RcloneOutput, String> {
     let bin = binary_path()?;
     let mut command = Command::new(&bin);
-    command.arg("--config").arg(config).args(COMMON_ARGS).args(args);
-    if let Some(pw) = config_password {
-        command.env("RCLONE_CONFIG_PASS", pw);
+    command.args(COMMON_ARGS).args(args);
+    for (key, value) in env {
+        command.env(key, value);
     }
     #[cfg(windows)]
     {
@@ -131,18 +132,14 @@ const PROBE_FILE: &str = ".vellum-probe";
 /// keys and missing buckets both pass authentication and then fail at first
 /// sync, which is far harder to diagnose.
 ///
-/// `target` is an rclone destination such as `vellum-b2:my-bucket/vellum`.
-pub fn probe(
-    config: &std::path::Path,
-    config_password: Option<&str>,
-    target: &str,
-) -> Result<(), String> {
+/// `target` is an rclone destination such as `vellumcrypt:`.
+pub fn probe(env: &[(String, String)], target: &str) -> Result<(), String> {
     let probe_path = format!("{}/{PROBE_FILE}", target.trim_end_matches('/'));
 
-    run(config, config_password, &["mkdir", target])?;
-    run(config, config_password, &["touch", &probe_path])?;
+    run(env, &["mkdir", target])?;
+    run(env, &["touch", &probe_path])?;
 
-    let listing = run(config, config_password, &["lsf", target])?;
+    let listing = run(env, &["lsf", target])?;
     if !listing.stdout.lines().any(|l| l.trim() == PROBE_FILE) {
         // Deliberately not a hard error path for cleanup: leave the probe file
         // rather than risk deleting something else on a surprising backend.
@@ -151,9 +148,21 @@ pub fn probe(
         );
     }
 
-    run(config, config_password, &["deletefile", &probe_path])
+    run(env, &["deletefile", &probe_path])
         .map_err(|_| "The storage is readable but files can't be deleted from it.".to_string())?;
     Ok(())
+}
+
+/// rclone's "obscured" form of a password, which is the only format a `crypt`
+/// remote accepts. Obscuring is *not* encryption — it is a fixed, reversible
+/// transform; the DPAPI blob is what actually protects these at rest.
+pub fn obscure(plaintext: &str) -> Result<String, String> {
+    let out = run(&[], &["obscure", plaintext])?;
+    let value = out.stdout.trim().to_string();
+    if value.is_empty() {
+        return Err("could not prepare the encryption key".into());
+    }
+    Ok(value)
 }
 
 /// Mask secrets in an argument list so it is safe to log. Matches the flags and
@@ -278,12 +287,10 @@ mod tests {
             return;
         }
         let dir = std::env::temp_dir().join(format!("vellum-probe-{}", uuid::Uuid::new_v4()));
-        let config = dir.join("rclone.conf");
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(&config, "").unwrap();
 
         let target = format!(":local:{}", dir.join("remote").display());
-        probe(&config, None, &target).expect("probe should succeed against a local directory");
+        probe(&[], &target).expect("probe should succeed against a local directory");
 
         // The probe cleans up after itself: the folder exists, the file doesn't.
         assert!(dir.join("remote").is_dir());
@@ -298,14 +305,56 @@ mod tests {
             eprintln!("skipping: rclone sidecar not fetched");
             return;
         }
-        let dir = std::env::temp_dir().join(format!("vellum-probe-{}", uuid::Uuid::new_v4()));
-        let config = dir.join("rclone.conf");
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(&config, "").unwrap();
-
-        let err = probe(&config, None, "nosuchremote:bucket").unwrap_err();
+        let err = probe(&[], "nosuchremote:bucket").unwrap_err();
         assert!(!err.is_empty());
         assert!(!err.contains("NOTICE"), "raw rclone output leaked: {err}");
+    }
+
+    /// The whole security story rests on this: a remote defined only by
+    /// environment variables, wrapped in `crypt`, encrypts names and contents on
+    /// disk while reading back cleanly.
+    #[test]
+    fn crypt_remote_from_env_encrypts_on_disk_and_reads_back() {
+        if binary_path().is_err() {
+            eprintln!("skipping: rclone sidecar not fetched");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("vellum-crypt-{}", uuid::Uuid::new_v4()));
+        let store = dir.join("store");
+        std::fs::create_dir_all(&store).unwrap();
+        let source = dir.join("page.txt");
+        std::fs::write(&source, b"secret notes").unwrap();
+
+        let env = vec![
+            ("RCLONE_CONFIG_BASE_TYPE".to_string(), "local".to_string()),
+            ("RCLONE_CONFIG_VC_TYPE".to_string(), "crypt".to_string()),
+            (
+                "RCLONE_CONFIG_VC_REMOTE".to_string(),
+                format!("base:{}", store.display()),
+            ),
+            (
+                "RCLONE_CONFIG_VC_PASSWORD".to_string(),
+                obscure("correct-horse-battery").unwrap(),
+            ),
+            (
+                "RCLONE_CONFIG_VC_PASSWORD2".to_string(),
+                obscure("salt-value-here").unwrap(),
+            ),
+        ];
+
+        run(&env, &["copy", &source.to_string_lossy(), "vc:"]).unwrap();
+
+        let on_disk: Vec<String> = std::fs::read_dir(&store)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(on_disk.len(), 1, "expected exactly one stored object");
+        assert_ne!(on_disk[0], "page.txt", "filename was not encrypted at rest");
+
+        let listed = run(&env, &["lsf", "vc:"]).unwrap();
+        assert_eq!(listed.stdout.trim(), "page.txt", "name did not decrypt");
+        let content = run(&env, &["cat", "vc:page.txt"]).unwrap();
+        assert_eq!(content.stdout, "secret notes", "content did not decrypt");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
