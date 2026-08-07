@@ -5,6 +5,7 @@ mod db;
 mod grammar;
 mod link;
 mod notebook;
+mod oplog;
 mod paths;
 mod process;
 mod refine;
