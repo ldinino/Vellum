@@ -4,6 +4,7 @@ import { VellumShell } from "./components/VellumShell";
 import { VellumProvider } from "./state/vellum";
 import { ActiveEditorProvider } from "./state/activeEditor";
 import { UpdaterProvider } from "./state/updater";
+import { SyncSessionProvider } from "./state/syncSession";
 import { useWindowMaximized } from "./components/useWindowMaximized";
 import { installImageCopySupport } from "./lib/clipboard";
 
@@ -18,7 +19,9 @@ function App() {
       <VellumProvider>
         <ActiveEditorProvider>
           <UpdaterProvider>
-            <VellumShell />
+            <SyncSessionProvider>
+              <VellumShell />
+            </SyncSessionProvider>
           </UpdaterProvider>
         </ActiveEditorProvider>
       </VellumProvider>

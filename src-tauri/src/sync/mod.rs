@@ -194,8 +194,7 @@ pub fn connection_code(app: &AppHandle, passphrase: &str) -> Result<String, Stri
 }
 
 /// Adopt a remote from another device's code, after proving it works here.
-pub fn apply_connection_code(
-    app: &AppHandle,
+pub fn apply_connection_code(    app: &AppHandle,
     code_text: &str,
     passphrase: &str,
 ) -> Result<(), String> {

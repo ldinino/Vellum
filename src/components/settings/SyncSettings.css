@@ -1,0 +1,90 @@
+/* Settings ▸ Sync */
+
+.v-sync__tiles {
+  list-style: none;
+  margin: var(--space-2) 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+}
+
+.v-sync__tile {
+  width: 100%;
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--gradient-button);
+  font: inherit;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.v-sync__tile:hover {
+  border-color: var(--hover-border);
+  background: var(--gradient-hover);
+}
+
+.v-sync__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--space-3);
+}
+
+.v-sync__hint {
+  font-size: var(--text-size-small);
+  color: var(--text-muted);
+}
+
+.v-sync__actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  margin-top: var(--space-3);
+}
+
+/* Monospace so a code can be eyeballed for truncation; wraps rather than
+   scrolls so the whole thing is visibly present before copying. */
+.v-sync__code {
+  width: 100%;
+  margin-top: var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-control);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-size-small);
+  word-break: break-all;
+  resize: vertical;
+}
+
+.v-sync__facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px var(--space-3);
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-size-ui);
+}
+
+.v-sync__facts dt {
+  color: var(--text-muted);
+}
+
+.v-sync__facts dd {
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.v-sync__link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent);
+  text-decoration: underline;
+  cursor: pointer;
+}

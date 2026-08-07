@@ -152,6 +152,47 @@ export interface VersionInfo {
   app: string;
   harper: string;
   ollama: string;
+  /** Bundled transfer engine behind sync, reported by the binary itself. */
+  sync: string;
+}
+
+/** One field of a provider's setup form. */
+export interface SyncField {
+  /** rclone option name; also the key in the values map sent back. */
+  key: string;
+  label: string;
+  hint: string;
+  /** Render as a password box. */
+  secret: boolean;
+}
+
+/** A storage provider tile. The rclone backend name is never shown. */
+export interface SyncProvider {
+  id: string;
+  label: string;
+  backend: string;
+  fields: SyncField[];
+  pathLabel: string;
+  pathHint: string;
+}
+
+export interface SyncStatus {
+  configured: boolean;
+  label: string | null;
+  lastSyncedAt: string | null;
+  /** Another device is actively using this Satchel. */
+  heldBy: string | null;
+  heldSince: string | null;
+  /** Credentials exist but can't be read on this machine. */
+  error: string | null;
+}
+
+export interface SyncReport {
+  synced: boolean;
+  /** Where the local copy was preserved, when the remote had moved on. */
+  conflictCopy: string | null;
+  /** Notebooks copied without being checkpointed. */
+  skipped: string[];
 }
 
 /** One diagnostic log entry (Settings → About; spec Phase 11). */

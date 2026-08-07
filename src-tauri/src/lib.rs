@@ -160,6 +160,7 @@ pub fn run() {
             commands::sync_status,
             commands::sync_configure,
             commands::sync_connection_code,
+            commands::sync_write_connection_code,
             commands::sync_apply_connection_code,
             commands::sync_stop,
             commands::sync_now,

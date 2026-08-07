@@ -13,6 +13,7 @@ import { PageTemplatesManager } from "./PageTemplatesManager";
 import { EditorSettings } from "./EditorSettings";
 import { ProofingSettings } from "./ProofingSettings";
 import { RefineSettings } from "./RefineSettings";
+import { SyncSettings } from "./SyncSettings";
 import { AboutSettings } from "./AboutSettings";
 import "./SettingsModal.css";
 
@@ -28,6 +29,7 @@ const TABS: Tab[] = [
   { id: "editor", label: "Editor", icon: "edit-family" },
   { id: "proofing", label: "Proofing", icon: "spell-check" },
   { id: "refine", label: "Refine", icon: "wand" },
+  { id: "sync", label: "Sync", icon: "network-cloud" },
   { id: "about", label: "About", icon: "information" },
 ];
 
@@ -71,6 +73,7 @@ export function SettingsModal({
             {tab === "editor" && <EditorSettings />}
             {tab === "proofing" && <ProofingSettings />}
             {tab === "refine" && <RefineSettings />}
+            {tab === "sync" && <SyncSettings />}
             {tab === "about" && <AboutSettings />}
           </ErrorBoundary>
         </div>

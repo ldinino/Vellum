@@ -30,6 +30,9 @@ import type {
   Section,
   SearchFilters,
   SearchHit,
+  SyncProvider,
+  SyncReport,
+  SyncStatus,
   VersionInfo,
 } from "./types";
 
@@ -100,6 +103,47 @@ export const forgetSatchel = (id: string) => invoke<void>("forget_satchel", { id
 
 export const renameSatchel = (id: string, name: string) =>
   invoke<void>("rename_satchel", { id, name });
+
+// --- Sync -------------------------------------------------------------------
+
+/** The curated provider tiles for the setup wizard. */
+export const syncProviders = () => invoke<SyncProvider[]>("sync_providers");
+
+/** Sync state for the active Satchel (Settings → Sync). */
+export const syncStatus = () => invoke<SyncStatus>("sync_status");
+
+/** Save a remote after the backend proves it works. `values` is keyed by the
+ * provider's field keys. Rejects rather than saving a remote that can't be
+ * written to. */
+export const syncConfigure = (
+  providerId: string,
+  values: Record<string, string>,
+  path: string,
+) => invoke<void>("sync_configure", { providerId, values, path });
+
+/** The remote as one pasteable string, encrypted under `passphrase`. */
+export const syncConnectionCode = (passphrase: string) =>
+  invoke<string>("sync_connection_code", { passphrase });
+
+/** Write the connection code to a chosen path (the backend owns file output). */
+export const syncWriteConnectionCode = (destPath: string, passphrase: string) =>
+  invoke<void>("sync_write_connection_code", { destPath, passphrase });
+
+/** Adopt a remote from another device's connection code. */
+export const syncApplyConnectionCode = (code: string, passphrase: string) =>
+  invoke<void>("sync_apply_connection_code", { code, passphrase });
+
+/** Forget the remote on this machine. Deletes nothing, locally or remotely. */
+export const syncStop = () => invoke<void>("sync_stop");
+
+/** Push now. `takeOver` answers another device holding the lease. */
+export const syncNow = (takeOver = false) => invoke<SyncReport>("sync_now", { takeOver });
+
+/** Take the lease and pull, when a synced Satchel is opened. */
+export const syncBeginSession = () => invoke<SyncReport | null>("sync_begin_session");
+
+/** Refresh our lease; false means another device took over. */
+export const syncRefreshLease = () => invoke<boolean>("sync_refresh_lease");
 
 /** Write a page's Markdown to `mdPath` and copy its images/attachments into a
  * sibling `<filesDirName>/` folder next to it (spec Section 14). */

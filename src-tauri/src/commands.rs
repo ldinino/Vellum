@@ -814,6 +814,23 @@ pub async fn sync_connection_code(app: AppHandle, passphrase: String) -> Result<
     off_thread(move || sync::connection_code(&app, &passphrase)).await
 }
 
+/// Write the connection code to a path the user picked. Done here rather than
+/// in the webview because file output elsewhere in the app goes through Rust,
+/// where writing outside the app's own folders is already permitted.
+#[tauri::command]
+pub async fn sync_write_connection_code(
+    app: AppHandle,
+    dest_path: String,
+    passphrase: String,
+) -> Result<(), String> {
+    off_thread(move || {
+        let code = sync::connection_code(&app, &passphrase)?;
+        std::fs::write(&dest_path, code.as_bytes())
+            .map_err(|e| format!("could not save the connection code: {e}"))
+    })
+    .await
+}
+
 #[tauri::command]
 pub async fn sync_apply_connection_code(
     app: AppHandle,

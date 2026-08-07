@@ -108,6 +108,10 @@ export function AboutSettings() {
             <dt>Refine runtime (Ollama)</dt>
             <dd>{info?.ollama ?? "…"}</dd>
           </div>
+          <div className="v-set__ver">
+            <dt>Sync engine (rclone)</dt>
+            <dd>{info?.sync ?? "…"}</dd>
+          </div>
         </dl>
       </section>
 
@@ -174,7 +178,8 @@ export function AboutSettings() {
           Window chrome adapted from <strong>7.css</strong> (MIT); the Windows 98 theme's bevels
           from <strong>98.css</strong> (MIT). Icons from the{" "}
           <strong>Fugue</strong> set by Yusuke Kamiyamane (CC BY 3.0). Grammar and spelling by{" "}
-          <strong>Harper</strong> (Apache-2.0). Refine runs on <strong>Ollama</strong> (MIT).
+          <strong>Harper</strong> (Apache-2.0). Refine runs on <strong>Ollama</strong> (MIT). Sync
+          uses <strong>rclone</strong> (MIT).
         </p>
       </section>
 
