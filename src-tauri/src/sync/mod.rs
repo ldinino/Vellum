@@ -7,6 +7,8 @@
 // The wrapper lands before the config/setup layers that call it; the allow comes
 // off once phase A is wired to commands.
 #[allow(dead_code)]
+pub mod code;
+#[allow(dead_code)]
 pub mod device;
 #[allow(dead_code)]
 pub mod engine;

@@ -52,6 +52,9 @@ futures-util = "0.3"
 sha2 = "0.10"
 zip = { version = "8", default-features = false, features = ["deflate"] }
 sysinfo = { version = "0.36", default-features = false, features = ["system"] }
+# Connection-code text encoding. Already resolved at 0.22.1 transitively, so
+# naming it directly is additive and must NOT move `time` off 0.3.47.
+base64 = "0.22"
 
 # DXGI hardware detection is Windows-only; never compiled on macOS/Linux CI.
 # Win32_Security_Cryptography adds DPAPI (CryptProtectData) for the sync remote
