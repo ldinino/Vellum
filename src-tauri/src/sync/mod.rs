@@ -8,3 +8,5 @@
 // off once phase A is wired to commands.
 #[allow(dead_code)]
 pub mod rclone;
+#[allow(dead_code)]
+pub mod secrets;

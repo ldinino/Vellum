@@ -54,11 +54,15 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 sysinfo = { version = "0.36", default-features = false, features = ["system"] }
 
 # DXGI hardware detection is Windows-only; never compiled on macOS/Linux CI.
+# Win32_Security_Cryptography adds DPAPI (CryptProtectData) for the sync remote
+# definition — a feature on a crate we already depend on, so it stays additive
+# and must NOT move `time` off 0.3.47.
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Graphics_Dxgi",
   "Win32_Graphics_Dxgi_Common",
+  "Win32_Security_Cryptography",
 ] }
 # Real Aero-style glass (Phase 9): acrylic translucency behind the title bar.
 # Windows-only so macOS/Linux CI keeps building; the call site is also
