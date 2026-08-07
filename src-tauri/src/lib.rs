@@ -240,6 +240,11 @@ pub fn run() {
             if let tauri::RunEvent::Exit = event {
                 // The Ollama process must never outlive the app.
                 let _ = ollama::stop(&app.state::<OllamaState>());
+                // Hand the Satchel back, or the next device is locked out until
+                // the lease goes stale. Best-effort: an unclean exit still has
+                // staleness as the backstop, so a failure here is not worth
+                // delaying shutdown over.
+                let _ = sync::release_lease(app);
             }
         });
 }

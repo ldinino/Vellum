@@ -57,7 +57,12 @@ pub struct SyncState {
 /// Why a sync stopped without transferring.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SyncOutcome {
-    Completed(SyncState),
+    Completed {
+        state: SyncState,
+        /// Notebooks that could not be checkpointed and were shipped as they
+        /// were; surfaced so a damaged file doesn't fail silently.
+        skipped: Vec<String>,
+    },
     /// The remote moved on since our last pull; the caller must preserve the
     /// local copy before overwriting it.
     Conflict { local: u64, remote: u64 },
@@ -85,8 +90,7 @@ pub fn read_remote_state(
     env: &[(String, String)],
     target: &str,
 ) -> Result<Option<SyncState>, String> {
-    let listing = rclone::run(env, &["lsf", target])?;
-    if !listing.stdout.lines().any(|l| l.trim() == STATE_FILE) {
+    if !rclone::list(env, target)?.iter().any(|l| l == STATE_FILE) {
         return Ok(None);
     }
     let out = rclone::run(env, &["cat", &state_path(target)])?;
@@ -169,9 +173,10 @@ pub async fn push(
         });
     }
 
-    checkpoint_all(satchel_dir).await?;
+    let skipped = checkpoint_all(satchel_dir).await?;
 
-    let local = satchel_dir.to_string_lossy().into_owned();    let args = args_with_excludes(&["sync", &local, target]);
+    let local = satchel_dir.to_string_lossy().into_owned();
+    let args = args_with_excludes(&["sync", &local, target]);
     rclone::run(env, &as_str_args(&args))?;
 
     let next = SyncState {
@@ -181,11 +186,62 @@ pub async fn push(
         synced_at: chrono::Utc::now().to_rfc3339(),
     };
     write_remote_state(env, target, &next)?;
-    Ok(SyncOutcome::Completed(next))
+    Ok(SyncOutcome::Completed { state: next, skipped })
 }
 
-/// Bring the local Satchel in line with the remote. The caller must have closed
-/// the pools first — we are about to replace the database files underneath them.
+/// True if anything under the Satchel changed after `since`.
+///
+/// Used to decide whether a pull would destroy local work. It is a heuristic —
+/// mtimes can lie — but it errs toward preserving a copy, which is the safe
+/// direction.
+pub fn has_changes_since(satchel_dir: &Path, since: &str) -> bool {
+    let Ok(cutoff) = chrono::DateTime::parse_from_rfc3339(since) else {
+        // Unknown last-sync time: assume there is work worth protecting.
+        return true;
+    };
+    let cutoff: std::time::SystemTime = cutoff.with_timezone(&chrono::Utc).into();
+    newest_modification(satchel_dir).is_some_and(|newest| newest > cutoff)
+}
+
+fn newest_modification(dir: &Path) -> Option<std::time::SystemTime> {
+    let mut newest: Option<std::time::SystemTime> = None;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in entries.filter_map(Result::ok) {
+            let path = entry.path();
+            let Ok(meta) = entry.metadata() else { continue };
+            if meta.is_dir() {
+                stack.push(path);
+                continue;
+            }
+            // The search index is rewritten constantly and never synced, so it
+            // would make every Satchel look permanently modified.
+            if path
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy().starts_with("search-index.db"))
+            {
+                continue;
+            }
+            if let Ok(modified) = meta.modified() {
+                if newest.is_none_or(|n| modified > n) {
+                    newest = Some(modified);
+                }
+            }
+        }
+    }
+    newest
+}
+
+/// Bring the local Satchel in line with the remote.
+///
+/// **This deletes local files the remote doesn't have** — that is what makes it
+/// a sync rather than a merge, and it is why callers must only pull when the
+/// remote is strictly ahead, and must preserve a copy first if local work would
+/// be destroyed. The caller must also have closed the pools: we are about to
+/// replace database files underneath them.
 pub fn pull(
     env: &[(String, String)],
     target: &str,
@@ -305,7 +361,7 @@ mod tests {
 
         let outcome = push(&env, &target, &source, 0, &device("LAPTOP")).await.unwrap();
         let state = match outcome {
-            SyncOutcome::Completed(s) => s,
+            SyncOutcome::Completed { state, .. } => state,
             other => panic!("expected Completed, got {other:?}"),
         };
         assert_eq!(state.generation, 1);
@@ -369,6 +425,83 @@ mod tests {
         for d in [store, desktop_dir, laptop_dir, check] {
             let _ = std::fs::remove_dir_all(d);
         }
+    }
+
+    /// `rclone sync` makes the destination match the source, deleting anything
+    /// extra. The remote's own bookkeeping lives at that destination, so if the
+    /// exclusions did not also protect it, every push would wipe the lease and
+    /// the generation counter — losing conflict detection entirely.
+    #[tokio::test]
+    async fn a_second_push_does_not_delete_the_remote_lease_or_state() {
+        if rclone::binary_path().is_err() {
+            eprintln!("skipping: rclone sidecar not fetched");
+            return;
+        }
+        let store = temp("engine-keep-store");
+        let source = temp("engine-keep-src");
+        let (env, target) = local_remote(&store);
+        let me = device("LAPTOP");
+
+        std::fs::write(source.join("app.json"), b"{}").unwrap();
+        push(&env, &target, &source, 0, &me).await.unwrap();
+
+        // Something the lease module would have written.
+        rclone::run_with_stdin(
+            &env,
+            &["rcat", &format!("{target}lease.json")],
+            "{\"deviceId\":\"x\"}",
+        )
+        .unwrap();
+
+        std::fs::write(source.join("app.json"), b"{changed}").unwrap();
+        let outcome = push(&env, &target, &source, 1, &me).await.unwrap();
+        assert!(matches!(outcome, SyncOutcome::Completed { .. }), "{outcome:?}");
+
+        let listing = rclone::run(&env, &["lsf", &target]).unwrap().stdout;
+        assert!(listing.contains("lease.json"), "the push deleted the lease: {listing}");
+        assert!(listing.contains("state.json"), "the push deleted the state: {listing}");
+        assert_eq!(
+            read_remote_state(&env, &target).unwrap().unwrap().generation,
+            2
+        );
+
+        for d in [store, source] {
+            let _ = std::fs::remove_dir_all(d);
+        }
+    }
+
+    /// `pull` is destructive by design, so the guard that decides *whether* to
+    /// pull has to be right: a Satchel with unpushed edits must be recognised.
+    #[test]
+    fn local_changes_after_the_last_sync_are_detected() {
+        let dir = temp("engine-changes");
+        std::fs::write(dir.join("app.json"), b"{}").unwrap();
+
+        let future = (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
+        assert!(!has_changes_since(&dir, &future), "nothing is newer than an hour ahead");
+
+        let past = (chrono::Utc::now() - chrono::Duration::hours(1)).to_rfc3339();
+        assert!(has_changes_since(&dir, &past), "an existing file is newer than an hour ago");
+
+        // An unparseable timestamp must err toward preserving work.
+        assert!(has_changes_since(&dir, "not a date"));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// The search index is rewritten constantly and never synced, so counting it
+    /// would make every Satchel look permanently modified and force a conflict
+    /// copy on every single open.
+    #[test]
+    fn the_rebuildable_search_index_does_not_count_as_a_change() {
+        let dir = temp("engine-index");
+        let past = (chrono::Utc::now() - chrono::Duration::hours(1)).to_rfc3339();
+        std::fs::write(dir.join("search-index.db"), b"idx").unwrap();
+        assert!(
+            !has_changes_since(&dir, &past),
+            "the search index was treated as user work"
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

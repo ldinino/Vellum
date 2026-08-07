@@ -778,35 +778,49 @@ pub fn sync_providers() -> Vec<sync::providers::Provider> {
     sync::providers::all()
 }
 
+/// Every command below reaches the network through rclone. Tauri runs a
+/// synchronous command on the main thread, which would freeze the window
+/// against a slow or unreachable remote, so each one hands the blocking work to
+/// a worker.
+async fn off_thread<T, F>(work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|e| format!("sync task failed: {e}"))?
+}
+
 #[tauri::command]
-pub fn sync_status(app: AppHandle) -> Result<sync::SyncStatus, String> {
-    sync::status(&app)
+pub async fn sync_status(app: AppHandle) -> Result<sync::SyncStatus, String> {
+    off_thread(move || sync::status(&app)).await
 }
 
 /// Save a remote after proving it works. `values` are the provider's form
 /// fields keyed by rclone option name.
 #[tauri::command]
-pub fn sync_configure(
+pub async fn sync_configure(
     app: AppHandle,
     provider_id: String,
     values: std::collections::BTreeMap<String, String>,
     path: String,
 ) -> Result<(), String> {
-    sync::configure(&app, &provider_id, values, &path)
+    off_thread(move || sync::configure(&app, &provider_id, values, &path)).await
 }
 
 #[tauri::command]
-pub fn sync_connection_code(app: AppHandle, passphrase: String) -> Result<String, String> {
-    sync::connection_code(&app, &passphrase)
+pub async fn sync_connection_code(app: AppHandle, passphrase: String) -> Result<String, String> {
+    off_thread(move || sync::connection_code(&app, &passphrase)).await
 }
 
 #[tauri::command]
-pub fn sync_apply_connection_code(
+pub async fn sync_apply_connection_code(
     app: AppHandle,
     code: String,
     passphrase: String,
 ) -> Result<(), String> {
-    sync::apply_connection_code(&app, &code, &passphrase)
+    off_thread(move || sync::apply_connection_code(&app, &code, &passphrase)).await
 }
 
 #[tauri::command]
@@ -829,8 +843,8 @@ pub async fn sync_begin_session(app: AppHandle) -> Result<Option<sync::SyncRepor
 
 /// Refresh our lease; `false` means another device took over.
 #[tauri::command]
-pub fn sync_refresh_lease(app: AppHandle) -> Result<bool, String> {
-    sync::refresh_lease(&app)
+pub async fn sync_refresh_lease(app: AppHandle) -> Result<bool, String> {
+    off_thread(move || sync::refresh_lease(&app)).await
 }
 
 // ---------------------------------------------------------------------------

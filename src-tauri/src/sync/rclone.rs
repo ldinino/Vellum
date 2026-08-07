@@ -193,6 +193,24 @@ pub fn run_with_stdin(
     })
 }
 
+/// Names directly under `target`.
+///
+/// A folder that isn't there reads as empty rather than as a failure: rclone
+/// reports "directory not found", but on a fresh or emptied remote that is the
+/// normal state, and several backends prune empty directories on their own.
+pub fn list(env: &[(String, String)], target: &str) -> Result<Vec<String>, String> {
+    match run(env, &["lsf", target]) {
+        Ok(out) => Ok(out
+            .stdout
+            .lines()
+            .map(|l| l.trim().trim_end_matches('/').to_string())
+            .filter(|l| !l.is_empty())
+            .collect()),
+        Err(e) if e == MISSING_DIRECTORY => Ok(Vec::new()),
+        Err(e) => Err(e),
+    }
+}
+
 /// Name of the throwaway object written by `probe`.
 const PROBE_FILE: &str = ".vellum-probe";
 
@@ -209,8 +227,8 @@ pub fn probe(env: &[(String, String)], target: &str) -> Result<(), String> {
     run(env, &["mkdir", target])?;
     run(env, &["touch", &probe_path])?;
 
-    let listing = run(env, &["lsf", target])?;
-    if !listing.stdout.lines().any(|l| l.trim() == PROBE_FILE) {
+    let listing = list(env, target)?;
+    if !listing.iter().any(|l| l == PROBE_FILE) {
         // Deliberately not a hard error path for cleanup: leave the probe file
         // rather than risk deleting something else on a surprising backend.
         return Err(
@@ -285,10 +303,17 @@ pub fn redact(args: &[&str]) -> String {
     out.join(" ")
 }
 
+/// Distinct so callers can tell "nothing there yet" from a real failure; a
+/// fresh remote and an emptied one both report it.
+pub const MISSING_DIRECTORY: &str = "MISSING_DIRECTORY";
+
 /// Turn rclone's diagnostic stderr into something a person can act on. The raw
 /// text is deliberately dropped here — callers log the translated message only.
 fn translate_error(stderr: &str) -> String {
     let lower = stderr.to_lowercase();
+    if lower.contains("directory not found") || lower.contains("object not found") {
+        return MISSING_DIRECTORY.to_string();
+    }
     let known = [
         ("authenticationfailed", "The credentials were rejected. Check the key and secret, then try again."),
         ("403", "The credentials were rejected. Check the key and secret, then try again."),

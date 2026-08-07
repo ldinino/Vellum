@@ -61,8 +61,7 @@ pub fn read(env: &[(String, String)], target: &str) -> Result<Option<Lease>, Str
     let path = format!("{}{LEASE_FILE}", normalise(target));
     // A missing lease is the normal case, not an error — distinguish it from a
     // real failure by asking whether anything is there first.
-    let listing = rclone::run(env, &["lsf", target])?;
-    if !listing.stdout.lines().any(|l| l.trim() == LEASE_FILE) {
+    if !rclone::list(env, target)?.iter().any(|l| l == LEASE_FILE) {
         return Ok(None);
     }
     let out = rclone::run(env, &["cat", &path])?;

@@ -239,7 +239,7 @@ pub async fn sync_now(app: &AppHandle, take_over: bool) -> Result<SyncReport, St
     let generation = binding(app)?.map(|b| b.generation).unwrap_or(0);
 
     let result = match engine::push(&env, &target, &satchel_dir, generation, &me).await {
-        Ok(engine::SyncOutcome::Completed(state)) => {
+        Ok(engine::SyncOutcome::Completed { state, skipped }) => {
             set_binding(
                 app,
                 Some(satchel::SyncBinding {
@@ -249,7 +249,11 @@ pub async fn sync_now(app: &AppHandle, take_over: bool) -> Result<SyncReport, St
                     generation: state.generation,
                 }),
             )?;
-            Ok(SyncReport { synced: true, conflict_copy: None, skipped: Vec::new() })
+            if !skipped.is_empty() {
+                app.state::<AppLog>()
+                    .warn("sync", format!("Copied as-is (not checkpointed): {}", skipped.join("; ")));
+            }
+            Ok(SyncReport { synced: true, conflict_copy: None, skipped })
         }
         Ok(engine::SyncOutcome::Conflict { local, remote }) => {
             let copy =
@@ -297,10 +301,41 @@ pub async fn begin_session(app: &AppHandle) -> Result<Option<SyncReport>, String
     }
     lease::acquire(&env, &target, &me, now)?;
 
+    let current = binding(app)?;
+    let local_generation = current.as_ref().map(|b| b.generation).unwrap_or(0);
+    let remote_state = engine::read_remote_state(&env, &target)?.unwrap_or_default();
+
+    // Pulling at an equal generation would silently revert edits made offline
+    // since the last push, so only a strictly newer remote is worth pulling.
+    if remote_state.generation <= local_generation {
+        return Ok(Some(SyncReport {
+            synced: false,
+            conflict_copy: None,
+            skipped: Vec::new(),
+        }));
+    }
+
+    let satchel_dir = paths::data_dir(app)?;
+    // No recorded sync time means this Satchel has never been pushed, so
+    // everything in it is unpushed work.
+    let local_work_at_risk = match current.as_ref().and_then(|b| b.last_synced_at.as_deref()) {
+        Some(since) => engine::has_changes_since(&satchel_dir, since),
+        None => satchel_dir.is_dir(),
+    };
+    let conflict_copy = if local_work_at_risk {
+        let copy = engine::preserve_conflict_copy(&satchel_dir, &me.name, chrono::Local::now())?;
+        app.state::<AppLog>().warn(
+            "sync",
+            format!("Local changes preserved at {} before pulling", copy.display()),
+        );
+        Some(copy.to_string_lossy().into_owned())
+    } else {
+        None
+    };
+
     // The pull is about to replace database files, so nothing may hold them.
     app.state::<crate::db::PoolCache>().clear().await;
 
-    let satchel_dir = paths::data_dir(app)?;
     let state = engine::pull(&env, &target, &satchel_dir)?;
     set_binding(
         app,
@@ -313,7 +348,7 @@ pub async fn begin_session(app: &AppHandle) -> Result<Option<SyncReport>, String
     )?;
     app.state::<AppLog>()
         .info("sync", format!("Pulled generation {}", state.generation));
-    Ok(Some(SyncReport { synced: true, conflict_copy: None, skipped: Vec::new() }))
+    Ok(Some(SyncReport { synced: true, conflict_copy, skipped: Vec::new() }))
 }
 
 /// Refresh our claim while the app is open. `false` means another device took
@@ -329,6 +364,16 @@ pub fn refresh_lease(app: &AppHandle) -> Result<bool, String> {
         &me,
         chrono::Utc::now(),
     )
+}
+
+/// Hand the Satchel back on a clean exit, so the next device isn't locked out
+/// for the full staleness window. Never removes another device's lease.
+pub fn release_lease(app: &AppHandle) -> Result<(), String> {
+    let Some(config) = load_remote(app)? else {
+        return Ok(());
+    };
+    let me = this_device(app)?;
+    lease::release(&config.env_vars(), &config.target(), &me)
 }
 
 /// Version of the bundled transfer engine, for Settings ▸ About.
