@@ -16,12 +16,14 @@ import { OPEN_FIND_EVENT } from "./editor/find";
 import { SettingsModal } from "./settings/SettingsModal";
 import { FirstRunModal } from "./settings/FirstRunModal";
 import { SatchelProblemModal } from "./settings/SatchelProblemModal";
+import { ClosingSync } from "./ClosingSync";
 import { AppContextMenus } from "./AppContextMenus";
 import { UpdateNotice } from "./UpdateNotice";
 import { useVellum } from "../state/vellum";
 import { useActiveEditor } from "../state/activeEditor";
 import { printCurrentPage } from "../lib/print-page";
 import { DEFAULT_SECTION_COLOR } from "../data/palette";
+import * as api from "../data/api";
 import { Icon } from "./ui/Icon";
 import "./VellumShell.css";
 
@@ -45,6 +47,29 @@ export function VellumShell() {
   // persists the final debounced edits before the window is destroyed.
   const flushSavesRef = useRef<(() => Promise<void>) | null>(null);
   flushSavesRef.current = active?.flushSaves ?? null;
+
+  // Shutdown sync (see the close handler): the window stays up until this
+  // session's work has been pushed, or the user chooses to leave without it.
+  const [closingSync, setClosingSync] = useState<{
+    state: "syncing" | "failed";
+    error: string | null;
+  } | null>(null);
+
+  const destroyNow = useCallback(() => {
+    if ("__TAURI_INTERNALS__" in window) void getCurrentWindow().destroy();
+  }, []);
+
+  const runClosingSync = useCallback(async () => {
+    setClosingSync({ state: "syncing", error: null });
+    try {
+      await api.syncNow(false);
+      destroyNow();
+    } catch (e) {
+      // Never close silently on failure: the person needs to know their last
+      // session hasn't reached the other device.
+      setClosingSync({ state: "failed", error: String(e) });
+    }
+  }, [destroyNow]);
 
   // Final check before the window closes: run the open page's inline-image
   // cleanup (it never gets a navigate-away), then destroy the window. Catches the
@@ -71,7 +96,19 @@ export function VellumShell() {
         } catch {
           /* best effort — never block the close */
         }
-        await win.destroy();
+        // Closing without pushing would strand this session's work on this
+        // device. Unlike the flush above there is no timeout race: an upload
+        // takes as long as it takes, so it is shown instead of hidden, and the
+        // overlay offers a way out.
+        const synced = await api
+          .syncStatus()
+          .then((s) => s.configured && !s.error)
+          .catch(() => false);
+        if (!synced) {
+          await win.destroy();
+          return;
+        }
+        void runClosingSync();
       })
       .then((fn) => {
         unlisten = fn;
@@ -237,6 +274,14 @@ export function VellumShell() {
       <ImportWizard open={importOpen} onClose={() => setImportOpen(false)} />
       <FirstRunModal />
       <SatchelProblemModal />
+      {closingSync && (
+        <ClosingSync
+          state={closingSync.state}
+          error={closingSync.error}
+          onCloseAnyway={destroyNow}
+          onRetry={() => void runClosingSync()}
+        />
+      )}
       <AppContextMenus />
       <UpdateNotice />
     </div>

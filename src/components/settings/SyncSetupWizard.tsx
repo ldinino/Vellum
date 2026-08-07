@@ -77,6 +77,9 @@ export function SyncSetupWizard({
       // The backend performs a real write/read/delete round trip, so a
       // misconfigured remote can't be saved.
       await api.syncConfigure(provider.id, values, path);
+      // Tell the panel now rather than at Finish: the remote is already saved,
+      // and leaving "Set up sync…" showing behind the dialog reads as failure.
+      onConfigured();
       setStep("code");
     } catch (e) {
       setError(String(e));

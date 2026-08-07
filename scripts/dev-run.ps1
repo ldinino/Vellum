@@ -10,11 +10,17 @@
                  `npm install` if dependencies are missing.
     2. Restores - if a previous run left temporary edits behind (see "TEMP
                  CHANGES" below), it puts them back before starting.
-    3. Builds + runs `npm run tauri dev` in its own window (compiles the Rust
+    3. Asks    - a 3 second countdown before building. Press any key for
+                 HOT-RELOAD mode, in which the session stays live across app
+                 restarts (features that relaunch Vellum, or a Rust edit that
+                 makes `tauri dev` rebuild, come back up on their own) and you
+                 end it by pressing a key in this console. Let the countdown
+                 lapse for normal mode, where closing Vellum ends the session.
+    4. Builds + runs `npm run tauri dev` in its own window (compiles the Rust
                  backend and launches the app).
-    4. Waits   - watches the Vellum process; nothing is torn down until you
-                 close the app window (no prompt).
-    5. Puts back - stops the dev server + app, frees the Vite port, and reverts
+    5. Waits   - watches the Vellum process; nothing is torn down until the
+                 session ends as described above.
+    6. Puts back - stops the dev server + app, frees the Vite port, and reverts
                  any temporary edits this script made.
 
   Nothing here is specific to one machine: paths are resolved relative to the
@@ -122,6 +128,38 @@ function Restore-Backups {
     $script:Backups.Clear()
 }
 
+# --- Up-front countdown enabling hot-reload mode; $true if a key was pressed --
+# A non-interactive host has no keyboard to poll, so it stays in normal mode.
+function Wait-ForHotReload {
+    param([int]$Seconds = 3)
+    $raw = $Host.UI.RawUI
+    try { $null = $raw.KeyAvailable } catch { return $false }
+    while ($raw.KeyAvailable) { [void]$raw.ReadKey('NoEcho,IncludeKeyDown') }
+
+    for ($i = $Seconds; $i -gt 0; $i--) {
+        Write-Host "`rPress any key for hot reloads... $i " -NoNewline
+        $deadline = (Get-Date).AddSeconds(1)
+        while ((Get-Date) -lt $deadline) {
+            if ($raw.KeyAvailable) {
+                [void]$raw.ReadKey('NoEcho,IncludeKeyDown')
+                Write-Host "`r                                        "
+                return $true
+            }
+            Start-Sleep -Milliseconds 50
+        }
+    }
+    Write-Host "`r                                        "
+    return $false
+}
+
+# --- Drain and report a keypress without blocking -----------------------------
+function Test-KeyPressed {
+    $raw = $Host.UI.RawUI
+    try { if (-not $raw.KeyAvailable) { return $false } } catch { return $false }
+    while ($raw.KeyAvailable) { [void]$raw.ReadKey('NoEcho,IncludeKeyDown') }
+    return $true
+}
+
 # ============================ main ===========================================
 $script:Repo = Find-RepoRoot
 Set-Location $script:Repo
@@ -154,7 +192,7 @@ if ($PrepOnly) {
     return
 }
 
-# === TEMP CHANGES (auto-reverted when you answer 'Are you done? -> yes') ======
+# === TEMP CHANGES (kept across relaunches, auto-reverted when the session ends)
 # Make reversible edits here, e.g. to flip a flag or seed a config for testing:
 #
 #   Set-TempFile 'src-tauri/tauri.conf.json' {
@@ -165,35 +203,67 @@ if ($PrepOnly) {
 #
 # None are needed right now. =================================================
 
+$hotReload = Wait-ForHotReload -Seconds 3
+if ($hotReload) {
+    Write-Host "Hot-reload mode: the session stays live across app restarts."
+    Write-Host "Press any key in this window to end it."
+} else {
+    Write-Host "Normal mode: everything is put away when you close Vellum."
+}
+
 $dev = $null
 try {
-    # Clear a stale instance/port so the build doesn't fail on "port in use".
-    Stop-DevRun -Proc $null -Port $port
+    while ($true) {
+        # Clear a stale instance/port so the build doesn't fail on "port in use".
+        Stop-DevRun -Proc $dev -Port $port
 
-    Write-Host "`nBuilding and launching the app (npm run tauri dev) in a new window..."
-    # Launch through cmd.exe so PATH resolves npm's launcher (npm.cmd) regardless
-    # of whether `npm` points at a .ps1/.cmd; taskkill /T later kills the tree.
-    $dev = Start-Process -FilePath "$env:ComSpec" -ArgumentList '/c', 'npm run tauri dev' `
-        -WorkingDirectory $script:Repo -PassThru
-    Write-Host "The build runs in its own window; the app appears when it finishes."
+        Write-Host "`nBuilding and launching the app (npm run tauri dev) in a new window..."
+        # Launch through cmd.exe so PATH resolves npm's launcher (npm.cmd) regardless
+        # of whether `npm` points at a .ps1/.cmd; taskkill /T later kills the tree.
+        $dev = Start-Process -FilePath "$env:ComSpec" -ArgumentList '/c', 'npm run tauri dev' `
+            -WorkingDirectory $script:Repo -PassThru
+        Write-Host "The build runs in its own window; the app appears when it finishes."
 
-    # No prompt: wait for the Vellum window to appear (the build takes a while),
-    # then block until you close it. Closing the app ends the session and the
-    # finally block tears everything down. If the dev process exits before the
-    # app ever appears, the build failed or was cancelled, so stop waiting.
-    Write-Host "`nWaiting for the Vellum app to start..."
-    while (-not (Get-Process -Name vellum -ErrorAction SilentlyContinue) -and -not $dev.HasExited) {
-        Start-Sleep -Seconds 1
-    }
-
-    if (Get-Process -Name vellum -ErrorAction SilentlyContinue) {
-        Write-Host "App is running. Close the Vellum window when you're done - cleanup is automatic."
-        while (Get-Process -Name vellum -ErrorAction SilentlyContinue) {
+        # Wait for the Vellum window to appear (the build takes a while). If the
+        # dev process exits first, the build failed or was cancelled.
+        Write-Host "`nWaiting for the Vellum app to start..."
+        while (-not (Get-Process -Name vellum -ErrorAction SilentlyContinue) -and -not $dev.HasExited) {
             Start-Sleep -Seconds 1
         }
-        Write-Host "Vellum closed."
-    } else {
-        Write-Host "The app didn't start (the dev/build process exited first)."
+
+        if (-not (Get-Process -Name vellum -ErrorAction SilentlyContinue)) {
+            Write-Host "The app didn't start (the dev/build process exited first)."
+            break
+        }
+
+        if (-not $hotReload) {
+            Write-Host "App is running. Close the Vellum window when you're done - cleanup is automatic."
+            while (Get-Process -Name vellum -ErrorAction SilentlyContinue) {
+                Start-Sleep -Seconds 1
+            }
+            Write-Host "Vellum closed."
+            break
+        }
+
+        # Hot-reload mode. A feature that relaunches the app (or a Rust edit that
+        # makes `tauri dev` rebuild) makes the vellum process vanish and come
+        # back; only a dev server that has actually exited needs a fresh build,
+        # so wait it out rather than tearing down a still-warm session.
+        Write-Host "App is running. Restarts are handled; press a key here to end the session."
+        $relaunch = $false
+        while (-not $relaunch) {
+            if (Test-KeyPressed) {
+                Write-Host "Ending the session."
+                break
+            }
+            if ($dev.HasExited) {
+                Write-Host "Dev server exited - rebuilding."
+                $relaunch = $true
+                break
+            }
+            Start-Sleep -Milliseconds 500
+        }
+        if (-not $relaunch) { break }
     }
 }
 finally {

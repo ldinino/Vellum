@@ -53,3 +53,14 @@
   border-color: var(--accent-deep);
   background: var(--gradient-accent-pressed);
 }
+
+/* Must come after the accent rules: they would otherwise re-apply the accent
+   colour and gradient over the disabled state, leaving a dead button looking
+   perfectly clickable. */
+.v-button--accent:disabled {
+  color: var(--text-disabled);
+  border-color: var(--border-default);
+  background: var(--surface-panel);
+  box-shadow: none;
+  cursor: default;
+}

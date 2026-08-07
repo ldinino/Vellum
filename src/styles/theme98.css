@@ -1015,6 +1015,16 @@
   box-shadow: var(--bevel-default-pressed);
 }
 
+/* A disabled default action keeps the raised face but loses the default-action
+   ring, so it reads as unavailable rather than as the button to press. The
+   embossed label above supplies the rest of the 98 disabled look. */
+:root[data-chrome="98"] .v-button--accent:disabled {
+  color: var(--text-disabled);
+  border-color: transparent;
+  background: var(--w98-face);
+  box-shadow: var(--bevel-raised);
+}
+
 /* 98 presses a button by flipping its bevel, not by nudging it down. */
 :root[data-chrome="98"] .v-button:active:not(:disabled) {
   transform: none;
