@@ -18,6 +18,14 @@ _None logged yet._
 ### UI
 
 - [ ] Refine spinner needs a better asset — an hourglass GIF or something.
+- [ ] Invalid HTML in the menus: `MenuList` renders a `SubMenu`'s
+  `<button role="menuitem">` inside its parent `<button role="menuitem">`, so
+  React logs "In HTML, `<button>` cannot be a descendant of `<button>`" (a
+  hydration error) every time a menu with a submenu opens. See
+  [MenuBar.tsx](../src/components/MenuBar.tsx).
+- [ ] React warns "flushSync was called from inside a lifecycle method. React
+  cannot flush when React is already rendering." during normal editing — source
+  not yet identified (suspect Tiptap).
 - [x] Grammar check sometimes incorrectly flags two lines as a run-on sentence:
   finish a sentence with a colon, hit Return, and begin a new sentence, and
   Harper mistakes the two for one long sentence.
