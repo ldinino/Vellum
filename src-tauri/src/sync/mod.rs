@@ -31,6 +31,8 @@ use crate::{paths, satchel};
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncStatus {
+    /// False when sync is gated off in this build; the UI hides itself entirely.
+    pub available: bool,
     pub configured: bool,
     /// Provider label, e.g. "Backblaze B2". Never the rclone backend name.
     pub label: Option<String>,
@@ -54,6 +56,19 @@ pub struct SyncReport {
     pub conflict_copy: Option<String>,
     /// Notebooks that couldn't be checkpointed and were shipped as they were.
     pub skipped: Vec<String>,
+}
+
+/// Whether sync is available at all in this build.
+///
+/// Shipped builds hide it until it is finished; a debug build always has it, so
+/// development doesn't depend on remembering to flip a flag.
+pub fn is_enabled(app: &AppHandle) -> bool {
+    if cfg!(debug_assertions) {
+        return true;
+    }
+    crate::config::load_app_config(app)
+        .map(|c| c.settings.sync_enabled)
+        .unwrap_or(false)
 }
 
 fn active_satchel_id(app: &AppHandle) -> Result<String, String> {
@@ -97,6 +112,7 @@ pub fn status(app: &AppHandle) -> Result<SyncStatus, String> {
         .map(|d| satchel::is_onedrive_path(&d))
         .unwrap_or(false);
     let blank = SyncStatus {
+        available: is_enabled(app),
         configured: false,
         label: None,
         last_synced_at: None,
@@ -105,6 +121,9 @@ pub fn status(app: &AppHandle) -> Result<SyncStatus, String> {
         error: None,
         onedrive_conflict,
     };
+    if !blank.available {
+        return Ok(blank);
+    }
     let config = match load_remote(app) {
         Ok(Some(c)) => c,
         Ok(None) => return Ok(blank),
@@ -125,6 +144,7 @@ pub fn status(app: &AppHandle) -> Result<SyncStatus, String> {
         };
 
     Ok(SyncStatus {
+        available: true,
         configured: true,
         label: Some(config.label),
         last_synced_at,
@@ -305,6 +325,9 @@ pub async fn sync_now(app: &AppHandle, take_over: bool) -> Result<SyncReport, St
 /// isn't synced, so callers can treat "no sync configured" as ordinary rather
 /// than as a failure.
 pub async fn begin_session(app: &AppHandle) -> Result<Option<SyncReport>, String> {
+    if !is_enabled(app) {
+        return Ok(None);
+    }
     let Some(config) = load_remote(app)? else {
         return Ok(None);
     };
@@ -376,6 +399,9 @@ pub async fn begin_session(app: &AppHandle) -> Result<Option<SyncReport>, String
 /// Refresh our claim while the app is open. `false` means another device took
 /// the Satchel over and this one must stop writing to the remote.
 pub fn refresh_lease(app: &AppHandle) -> Result<bool, String> {
+    if !is_enabled(app) {
+        return Ok(true);
+    }
     let Some(config) = load_remote(app)? else {
         return Ok(true);
     };
@@ -391,6 +417,9 @@ pub fn refresh_lease(app: &AppHandle) -> Result<bool, String> {
 /// Hand the Satchel back on a clean exit, so the next device isn't locked out
 /// for the full staleness window. Never removes another device's lease.
 pub fn release_lease(app: &AppHandle) -> Result<(), String> {
+    if !is_enabled(app) {
+        return Ok(());
+    }
     let Some(config) = load_remote(app)? else {
         return Ok(());
     };

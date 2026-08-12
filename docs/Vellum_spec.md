@@ -70,7 +70,37 @@ The Ollama download flow shows progress and handles failure/retry; Refine degrad
 
 OneDrive (and other sync clients) cover this path by default on Windows — no code required for cloud backup.
 
-> **Design note (relocatable data root, as built):** the data root defaults to `Documents\Vellum` but can be moved to any folder via Settings → General ("Change…"). Changing it moves the whole root — `app.json`, `notebooks.json`, `search-index.db`, and every notebook folder — into `<chosen>\Vellum` and records that path machine-locally in `%LOCALAPPDATA%\Vellum\data-location.txt` (never in the movable/synced root, so it always resolves and the choice is per-machine). This lets a user keep the live SQLite databases and search index outside a OneDrive-synced folder, avoiding the sync-conflict duplicate copies OneDrive makes of files that change while the app holds them open. The app restarts after a move so everything reloads from the new location.
+> **Design note (Satchels, as built — supersedes the relocatable data root):** the
+> data root is a **Satchel**: a self-contained folder holding `app.json`,
+> `notebooks.json`, `search-index.db` and every notebook folder. A user may keep
+> several and switch between them (Settings → General). Settings live *inside*
+> the Satchel, so one opened on another machine is already configured — that is
+> the point of keeping them there rather than machine-side.
+>
+> Identity is a `satchel.json` marker carrying a stable UUID, a display name and
+> a `formatVersion`, **not** the folder name or path. That is what lets a Satchel
+> moved in Explorer be recognised as the same one, and — because a copied folder
+> duplicates the marker — a *copy* is detected (the folder already on record is
+> still present) and given a fresh identity instead of hijacking the original's
+> entry. A marker written by a newer Vellum is refused rather than opened.
+>
+> The list of known Satchels is machine-local
+> (`%LOCALAPPDATA%\Vellum\satchels.json`, replacing `data-location.txt`, which is
+> migrated silently on first launch): a good path differs per machine, and the
+> list must resolve wherever the data currently lives. Switching **relaunches**
+> the app rather than hot-swapping, which avoids invalidating the pool cache, the
+> asset-protocol scope and every frontend store; the `--satchel` CLI override was
+> considered and rejected.
+>
+> The old "Change…" action, which moved the data root for the user, is **removed**:
+> relocating a Satchel is closing Vellum, moving the folder in Explorer, and
+> using **Open…**. Explorer's move is more reliable than ours and obviously
+> reversible, and the stable id makes the moved folder recognisable.
+>
+> A Satchel that cannot be found at startup — disconnected drive, or a synced
+> folder not yet downloaded — surfaces a chooser (Locate / Open another / Create).
+> It deliberately does **not** fall back to a fresh empty root, which would read
+> as data loss.
 
 **SQLite schema (per notebook):**
 
@@ -517,14 +547,14 @@ No PDF or HTML *export* in v1; PDF, RTF, and OneNote (`.one`) *import* are likew
 
 | Section | Contents |
 |---|---|
-| General | App data location (read-only, shows Documents path) |
+| General | Appearance (theme family, colour scheme, corners); Satchels — pick, open, create |
 | Templates | Page template library: create, edit, delete |
 | Editor | Default font, default font size |
 | Proofing | Spell check + grammar check on/off (Harper, English); custom dictionary (add/remove words); ignored grammar rules (review/restore). See Section 10. |
 | Refine | Enable toggle, Strict ↔ Liberal slider, model selector, Refine template manager, debug panel access |
 | About | Version, Harper version, Ollama runtime version, check for updates |
 
-> **As built:** the Settings dialog ships **General**, **Page Templates**, **Editor**, **Proofing**, **Refine**, and **About** tabs (Phase 10 added General / Editor / About). **General** shows the read-only `Documents\Vellum` data location with an Open-folder button; **Editor** sets the default font + size, applied live via CSS custom properties (`--editor-font` / `--editor-font-size`) so unstyled page text updates immediately and the toolbar's font/size fallback tracks it; **About** lists the app / Harper / Ollama versions and acknowledgements, with a disabled “Check for updates” (in-app updates are wired in Phase 11). **Proofing** (Section 10) consolidates the spell- and grammar-check toggles with the custom-dictionary and ignored-rules managers, so everything that controls Harper lives in one place.
+> **As built:** the Settings dialog ships **General**, **Page Templates**, **Editor**, **Proofing**, **Refine**, and **About** tabs (Phase 10 added General / Editor / About). **General** holds appearance (theme family, colour scheme, corner style, and the Windows 98 title bar colours) and the **Satchel** picker — a list of known Satchels with the active one highlighted, plus **Open…**, **New Satchel…** and **Open folder**; each row carries a sync-state icon and a non-destructive ✕ that forgets it without touching the folder. **Editor** sets the default font + size, applied live via CSS custom properties (`--editor-font` / `--editor-font-size`) so unstyled page text updates immediately and the toolbar's font/size fallback tracks it; **About** lists the app / Harper / Ollama / sync-engine versions and acknowledgements, with a working “Check for updates” (Phase 11). **Proofing** (Section 10) consolidates the spell- and grammar-check toggles with the custom-dictionary and ignored-rules managers, so everything that controls Harper lives in one place. A **Sync** tab exists in the codebase but is hidden unless `settings.syncEnabled` is set by hand in `app.json` (always shown in debug builds) — BYO sync is unfinished; see [satchels-and-sync.md](satchels-and-sync.md).
 
 ---
 

@@ -19,6 +19,22 @@ item ships. Sizes are relative complexity (S/M/L/XL), not time estimates.
 release — the oplog is written but not yet trusted. SYNC-B flips the switch only
 once replay-and-diff has been clean over a sustained stretch of real usage.
 
+**Status (2026-08-12).** SATCHEL **shipped in v0.4.0** and its decisions are
+folded into [Vellum_spec.md](Vellum_spec.md). SYNC-A is **built but gated off**:
+the Sync tab is hidden and nothing syncs on open or close unless
+`settings.syncEnabled` is set by hand in `app.json` (debug builds always show
+it). OPLOG has its foundation only — clock, record format and writer — with the
+mutation paths not yet instrumented and no verifier. SYNC-B is untouched.
+
+**Why sync is gated rather than shipped.** It works end to end against a local
+folder and Google Drive, but it has not been proven over time or across real
+devices. The OAuth token is stored without an rclone config file, so whether a
+provider that rotates refresh tokens still works days later is unverified; only
+Drive's error strings have been seen in anger; and OPLOG — the thing that makes
+concurrent editing genuinely safe — is barely started. Putting people's
+notebooks behind a mechanism we can't yet stand behind is the one mistake this
+feature cannot recover from.
+
 ---
 
 ## 1. Satchels

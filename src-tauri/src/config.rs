@@ -69,6 +69,12 @@ pub struct AppSettings {
     /// chose to ignore via "Ignore this rule". Persisted so the choice is
     /// reversible (managed in Settings → Proofing).
     pub ignored_grammar_rules: Vec<String>,
+    /// Sync is unfinished, so it is hidden in shipped builds: no Settings tab,
+    /// and nothing syncs on open or close. There is deliberately no UI toggle —
+    /// setting this by hand in app.json is the opt-in, which keeps it testable
+    /// from an installed build (two-device testing needs that) without exposing
+    /// a half-built feature. Debug builds always show it.
+    pub sync_enabled: bool,
 }
 
 impl Default for AppSettings {
@@ -94,6 +100,7 @@ impl Default for AppSettings {
             welcome_seeded: false,
             custom_dictionary: Vec::new(),
             ignored_grammar_rules: Vec::new(),
+            sync_enabled: false,
         }
     }
 }

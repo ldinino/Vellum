@@ -179,6 +179,8 @@ export interface SyncProvider {
 }
 
 export interface SyncStatus {
+  /** False when sync is gated off in this build; the UI hides itself entirely. */
+  available: boolean;
   configured: boolean;
   label: string | null;
   lastSyncedAt: string | null;

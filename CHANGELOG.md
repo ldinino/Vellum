@@ -5,6 +5,44 @@ All notable changes to Vellum are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-12
+
+### Added
+
+- **Satchels** — Vellum can now keep more than one set of notebooks. A Satchel
+  is a self-contained folder holding its own notebooks, attachments and
+  settings, so you can keep one for work and one for testing and switch between
+  them under **Settings ▸ General**. Because the settings live inside the
+  Satchel, one opened on another machine is already set up the way you left it —
+  same theme, same templates, same dictionary. Switching restarts Vellum, which
+  takes a moment but means nothing is left half-loaded from the previous one.
+- **New Satchel…** creates one wherever you like, optionally copying the
+  settings from the Satchel you're already in.
+- **Open…** picks up a Satchel that already exists — one you moved, or one from
+  a backup. Vellum recognises a Satchel it has seen before even if you moved the
+  folder, and recognises a *copy* as a new Satchel of its own rather than
+  confusing it with the original.
+- **✕ next to a Satchel** removes it from the list without touching the folder
+  or anything inside it.
+
+### Changed
+
+- **Moving your notes is now done in Explorer.** The old **Change…** button,
+  which moved the data folder for you, is gone: close Vellum, move the folder
+  wherever you want it, then use **Open…** to point Vellum at it. Explorer is
+  better at moving folders than we are, and it is obvious how to undo.
+
+### Fixed
+
+- A Satchel that can't be found at startup — a disconnected drive, or a synced
+  folder that hasn't downloaded yet — now says so and offers to locate it,
+  rather than quietly starting up empty as though your notebooks were gone.
+- Check boxes now look like Windows 98 check boxes in the Windows 98 theme,
+  instead of the modern rounded control.
+- Buttons that are unavailable now look unavailable. The default action in a
+  dialog kept its blue fill (or its default-action ring in Windows 98) while
+  disabled, so it appeared ready to click when it wasn't.
+
 ## [0.3.0] - 2026-07-29
 
 ### Added

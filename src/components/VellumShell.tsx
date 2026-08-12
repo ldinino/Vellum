@@ -102,7 +102,7 @@ export function VellumShell() {
         // overlay offers a way out.
         const synced = await api
           .syncStatus()
-          .then((s) => s.configured && !s.error)
+          .then((s) => s.available && s.configured && !s.error)
           .catch(() => false);
         if (!synced) {
           await win.destroy();
