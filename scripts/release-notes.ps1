@@ -64,7 +64,7 @@ if ($fixed.Count -gt 0) {
 [void]$out.AppendLine('1. Download the Vellum setup .exe from the assets below.')
 [void]$out.AppendLine('2. Run it. Vellum installs per-user, no administrator rights required.')
 [void]$out.AppendLine('')
-[void]$out.AppendLine('Vellum is not code-signed, so Windows SmartScreen may warn on first run. Choose "More info" then "Run anyway" to continue. Your notes are stored under Documents\Vellum.')
+[void]$out.AppendLine('Vellum is not code-signed, so Windows SmartScreen may warn on first run. Choose "More info" then "Run anyway" to continue. Your notes live in a Satchel, which starts out at Documents\Vellum and can be moved or added to under Settings > General.')
 [void]$out.AppendLine('')
 [void]$out.AppendLine('Vellum is an independent project and is not affiliated with, endorsed by, or sponsored by Microsoft. OneNote, Windows, Office, OneDrive, and Segoe UI are trademarks of Microsoft Corporation.')
 
