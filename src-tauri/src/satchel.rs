@@ -644,6 +644,10 @@ mod tests {
         assert_eq!(sanitize_folder_name("   "), "Vellum");
     }
 
+    /// Windows-only: `\` is not a separator elsewhere, so these paths would be a
+    /// single opaque component and `components()` would never see the OneDrive
+    /// folder. The check itself only means anything on Windows anyway.
+    #[cfg(windows)]
     #[test]
     fn detects_satchels_living_inside_onedrive() {
         // The business form is what a redirected Documents folder actually

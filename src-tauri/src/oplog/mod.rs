@@ -10,8 +10,13 @@
 //! log — you cannot spot it by reading. So the log is checked by rebuilding a
 //! database from it and comparing against the live one (see `verify`).
 
+// Parts of these are exercised only by their own tests until the mutation paths
+// are instrumented and the verifier lands, which is the next step.
+#[allow(dead_code)]
 pub mod clock;
+#[allow(dead_code)]
 pub mod record;
+#[allow(dead_code)]
 pub mod writer;
 
 use std::path::Path;
