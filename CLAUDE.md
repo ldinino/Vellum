@@ -52,5 +52,9 @@ powershell scripts/fetch-references.ps1   # Office-Ribbon-2010 + makeaero → ve
 
 ## Conventions
 
-- Work happens directly on `main` for now; CI must pass.
+- **Agent work goes through a PR, not straight to `main`.** The **Staff Engineer** agent
+  (`.github/agents/staff-engineer.agent.md`) cuts a branch in a worktree, implements, and
+  opens a PR; the **Head Engineer** agent (`.github/agents/head-engineer.agent.md`) audits
+  it and is the only one who merges. Neither agent merges its own work. The maintainer
+  still commits directly to `main` when he wants to. CI must pass either way.
 - App identifier is `tel.corpo.vellum`; product name "Vellum" (still listed as a placeholder name in the spec's open items).
