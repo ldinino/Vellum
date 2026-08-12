@@ -14,6 +14,10 @@ item ships. Sizes are relative complexity (S/M/L/XL), not time estimates.
 | [SYNC-A](#2-sync-phase-a--whole-satchel-sync) | BYO sync, phase A: whole-Satchel rclone sync + lease | L | SATCHEL |
 | [OPLOG](#3-oplog-shadow-write--replay-and-diff) | Oplog shadow-write + replay-and-diff harness | L | SATCHEL |
 | [SYNC-B](#4-sync-phase-b--oplog-as-canonical) | BYO sync, phase B: oplog becomes canonical | XL | SYNC-A, OPLOG |
+| [STANDDOWN](#51-standdown--act-on-a-lost-lease) | Stand down when the lease is lost | S | SYNC-A |
+| [YIELD](#52-yield--release-the-lease-on-idle-lock-and-sleep) | Release the lease on idle, lock and sleep | M | STANDDOWN |
+| [HANDOFF](#53-handoff--ask-the-holder-to-let-go) | Ask the holder to let go (remote request file) | M | STANDDOWN, YIELD |
+| [STAGEDPUSH](#54-stagedpush--make-the-remote-switchover-the-commit) | Make the remote switchover the commit point | M | SYNC-A |
 
 **Sequencing.** SATCHEL ships alone. SYNC-A and OPLOG ship together in the next
 release — the oplog is written but not yet trusted. SYNC-B flips the switch only
@@ -25,6 +29,9 @@ the Sync tab is hidden and nothing syncs on open or close unless
 `settings.syncEnabled` is set by hand in `app.json` (debug builds always show
 it). OPLOG has its foundation only — clock, record format and writer — with the
 mutation paths not yet instrumented and no verifier. SYNC-B is untouched.
+[§5 Device handoff](#5-device-handoff-2026-08-12-batch) is the newly opened
+track that makes the checkout model liveable across three devices; it is a
+prerequisite for ungating sync, and SYNC-B is not.
 
 **Why sync is gated rather than shipped.** It works end to end against a local
 folder and Google Drive, but it has not been proven over time or across real
@@ -479,6 +486,92 @@ Flip only once §3's exit criteria are met.
 
 ---
 
+## 5. Device handoff (2026-08-12 batch)
+
+**Why this exists.** The three-device goal is *sequential* use — desk, then
+laptop, then back. SYNC-A's checkout model is the right shape for that, but the
+switch currently feels terrible: the departing device holds the lease until it
+is closed or goes stale, and staleness is 15 minutes
+(`STALE_AFTER_SECS`, [lease.rs](../src-tauri/src/sync/lease.rs)) polled every
+4 minutes (`HEARTBEAT_MS`, [syncSession.tsx](../src/state/syncSession.tsx)).
+
+This track makes the flip feel instant **without** SYNC-B. It is deliberately
+not a step toward concurrent editing; it is what makes checkout liveable.
+
+**Decided:** solve it by releasing the lease *on the way out*, not by asking for
+it faster on the way in. The departing device knows it is being left long before
+the arriving device knows it wants in. Polling harder was considered and
+rejected as the primary mechanism — each poll is an rclone spawn plus an
+authenticated round trip, and some backends meter transactions.
+
+### 5.1 STANDDOWN — act on a lost lease
+
+**Prerequisite for the rest of this track.** Today the heartbeat detects that
+another device took the lease and sets `lostLease` in
+[syncSession.tsx](../src/state/syncSession.tsx) — and **nothing reads it**. The
+app keeps accepting edits and will push over the new holder on close, so the
+existing take-over path is effectively decorative.
+
+- On losing the lease: drop the session to read-only and say so plainly.
+- Never push after losing the lease. Offer to preserve unsynced local work as a
+  conflict Satchel instead — the mechanism §2 already defines.
+- Re-acquiring is an explicit user action, not automatic, in this task.
+
+### 5.2 YIELD — release the lease on idle, lock and sleep
+
+The one the user actually feels. The desktop syncs and releases once it is
+clearly not in use, so the laptop finds the lease already free and waits for
+nothing.
+
+- Trigger on *unfocused **and** no input for a tunable idle period* — **not**
+  bare blur, which would drop the lease every time you alt-tab to a browser.
+- Session lock and system suspend release **immediately**, no timer: both mean
+  "gone" unambiguously.
+- Precedent for the shape: `REFINE_IDLE_RELEASE_MS` in
+  [PageEditor.tsx](../src/components/editor/PageEditor.tsx) already idle-releases
+  Ollama.
+- Returning must be **optimistically writable** — re-take the lease in the
+  background and only interrupt if someone else holds it. Blocking on a network
+  round trip every time you come back replaces one bad feeling with another.
+
+### 5.3 HANDOFF — ask the holder to let go
+
+Backstop for "I walked away mid-sentence and it never noticed". The arriving
+device writes a request file to the remote; the holder sees it on the poll it is
+already doing, finishes its sync, and releases.
+
+- Only helps when the holder is **running and online**. If nothing answers, fall
+  through to the existing forced take-over, with staleness as the final backstop.
+- The arriving device must show the wait honestly and offer **Take over now**
+  rather than spinning silently.
+- Poll rate should be **inverse to local activity**: actively typing means you
+  are not about to switch, so poll slowly; idle or unfocused means poll quickly.
+  YIELD naturally bounds how long the fast window lasts.
+
+### 5.4 STAGEDPUSH — make the remote switchover the commit point
+
+`push` transfers with `rclone sync` **in place** and writes the generation
+marker afterwards ([engine.rs](../src-tauri/src/sync/engine.rs)). A transfer
+interrupted midway therefore leaves the remote holding half-new data under an
+old marker, and a puller trusts the marker. SYNC-A's exit criterion "killing the
+app mid-sync leaves both local and remote openable" is believed **not met**.
+
+Stage into a generation-scoped path and let the marker flip be the only commit —
+a single small-file write, atomic on every supported backend.
+
+### Exit criteria
+
+- Losing the lease makes the session read-only and prevents any later push.
+- Desk → laptop within a minute of stopping work: the laptop opens writable with
+  no take-over prompt and no perceptible wait.
+- Locking the workstation releases the lease without waiting out the idle timer.
+- Returning to the yielded device is immediately typable.
+- A holder left open and idle responds to a handoff request without the user
+  touching it; a holder that is offline still yields via take-over.
+- Killing the app mid-push leaves the remote openable at the previous generation.
+
+---
+
 ## Decisions log
 
 | Date | Decision |
@@ -500,3 +593,6 @@ Flip only once §3's exit criteria are met.
 | 2026-08-06 | Ship phase A, shadow-write the oplog in the same release, flip to phase B only after replay-and-diff is sustained-clean. |
 | 2026-08-06 | **rclone is bundled as a Tauri sidecar, not downloaded** (reverses the earlier call). At ~30 MB it is nothing like Ollama's 1.4 GB, and bundling removes the whole download/verify/retry/offline subsystem — which is what "stupidly easy" actually requires. Installer grows ~12 MB → ~42 MB. |
 | 2026-08-07 | **No `rclone.conf`.** Remotes are defined entirely through `RCLONE_CONFIG_*` environment variables with `--config ""`; the definition is stored as one DPAPI-encrypted blob. Verified against the shipped binary, including a `crypt` round trip. Removes the encrypted-config-file and config-password layer, keeps credentials off disk, and isolates us from the user's own rclone config. |
+| 2026-08-12 | The three-device goal is served by **checkout, made fast** — not by concurrent editing. SYNC-B stays parked; §5 is what makes SYNC-A liveable. |
+| 2026-08-12 | Handoff works by the departing device **yielding on idle/lock/sleep**, not by the arriving device polling harder. Faster polling was rejected as the primary mechanism (rclone spawn + authenticated round trip per poll; some backends meter transactions); it survives only as an activity-inverse backstop in HANDOFF. |
+| 2026-08-12 | Returning to a yielded device must be optimistically writable — the lease is re-taken in the background, never blocking the first keystroke. |
