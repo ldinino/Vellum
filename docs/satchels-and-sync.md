@@ -15,10 +15,10 @@ item ships. Sizes are relative complexity (S/M/L/XL), not time estimates.
 | [OPLOG](#3-oplog-shadow-write--replay-and-diff) | Oplog shadow-write + replay-and-diff harness | L | SATCHEL |
 | [SYNC-B](#4-sync-phase-b--oplog-as-canonical) | BYO sync, phase B: oplog becomes canonical | XL | SYNC-A, OPLOG |
 | [STANDDOWN](#51-standdown--act-on-a-lost-lease-shipped) | Stand down when the lease is lost _(shipped)_ | S | SYNC-A |
-| [YIELD](#52-yield--release-the-lease-on-idle-lock-and-sleep) | Release the lease on idle, lock and sleep | M | STANDDOWN |
+| [YIELD](#52-yield--release-the-lease-on-idle-lock-and-sleep) | Release the lease on idle, lock and sleep _(shipped)_ | M | STANDDOWN |
 | [HANDOFF](#53-handoff--ask-the-holder-to-let-go) | Ask the holder to let go (remote request file + Notify) | M | STANDDOWN, YIELD |
 | [STAGEDPUSH](#54-stagedpush--make-the-remote-switchover-the-commit-point) | Make the remote switchover the commit point | M | SYNC-A |
-| [COPY](#55-copy--how-the-take-over-is-described) | Take-over wording and vocabulary rules | S | STANDDOWN |
+| [COPY](#55-copy--how-the-take-over-is-described) | Take-over wording and vocabulary rules _(shipped)_ | S | STANDDOWN |
 
 **Sequencing.** SATCHEL ships alone. SYNC-A and OPLOG ship together in the next
 release — the oplog is written but not yet trusted. SYNC-B flips the switch only
@@ -560,6 +560,32 @@ nothing.
   background and only interrupt if someone else holds it. Blocking on a network
   round trip every time you come back replaces one bad feeling with another.
 
+**Shipped 2026-08-13 (#4).** `YIELD_IDLE_MS` = 60s, in
+[yield-lease.ts](../src/lib/yield-lease.ts); the rule is the pure `msUntilYield`
+and the provider only feeds it focus and input. Resume goes through
+`lease::state`, **not** `heartbeat` — `heartbeat` has no notion of a *stale*
+lease, which is exactly what a returning device should reclaim.
+
+**A refuted premise:** lock and suspend needed no message hook into Tauri's
+window. `PowerRegisterSuspendResumeNotification` takes a plain callback and WTS
+session notifications are a targeted registration, so both are served by a
+message-only window of our own on its own thread. Note for anyone tempted by the
+tidier route: `WM_POWERBROADCAST` is broadcast to *top-level* windows only, so
+registering a message-only window for it compiles, runs, and never fires.
+
+The decision — which message means gone — is the pure `classify`, deliberately
+free of Windows types in its signature so it compiles and is tested on all three
+CI platforms; only the plumbing is `#[cfg(windows)]`. Worth copying whenever
+unsafe platform code needs to stay auditable.
+
+**Residuals:**
+- The Win32 half is **compile-verified only**. Locking the workstation has never
+  been observed to release the lease.
+- A yield is a full push, so a machine that sleeps mid-yield leaves the transfer
+  unfinished — the exposure §5.4 STAGEDPUSH closes.
+- `WTS_REMOTE_DISCONNECT` (`0x4`) is not classified as "gone". For an RDP
+  session it arguably is. Left deliberate, not overlooked.
+
 ### 5.3 HANDOFF — ask the holder to let go
 
 Backstop for "I walked away mid-sentence and it never noticed". The arriving
@@ -619,6 +645,17 @@ something. The backend error string should be brought onto the same wording as
 the bar rather than saying "is using this Satchel" in one place and "is open on"
 in the other.
 
+**Shipped 2026-08-13 (#4).** `sync::IN_USE_PREFIX` in
+[mod.rs](../src-tauri/src/sync/mod.rs) is the single source, both refusals go
+through `refuse_if_held`, and `SATCHEL_IN_USE` in
+[SyncSettings.tsx](../src/components/settings/SyncSettings.tsx) mirrors it under
+a comment saying so. A Rust test pins the exact string.
+
+**It does not stop the two sides drifting.** Measured at audit: changing only the
+TypeScript constant left `tsc`, `npm run build` and all 150 Rust tests green,
+and would silently turn the take-over prompt into a bare error. Nothing
+compile-level can close that across the IPC boundary; it is on the punchlist.
+
 ### Exit criteria
 
 - Losing the lease makes the session read-only and prevents any later push.
@@ -661,3 +698,6 @@ in the other.
 | 2026-08-13 | Take-over copy: **"This Satchel is open on DESKTOP-01. Editing is paused here."** with **[ Save a copy here ] [ Take over ]**. Name the machine — "elsewhere" tells the user they are blocked and refuses to say by what. *Fork* and *Transfer session* rejected. |
 | 2026-08-13 | UI vocabulary: *open on*, *paused*, *take over*, *a copy of your unsent changes*. Banned from the UI: *lease*, *heartbeat*, *stand down*, *generation*, *conflict Satchel*. |
 | 2026-08-13 | HANDOFF gets an explicit **Notify** button, after Word 97's *File In Use* dialog, which solved this against a dumb SMB share with no arbitration. Polling fast is justified because the user asked, not as ambient behaviour. |
+| 2026-08-13 | `YIELD_IDLE_MS` = **60s**, and short on purpose: yielding early costs one round trip the optimistic re-acquire hides, yielding late costs the wait the whole track exists to remove. Asymmetric, so err short. Expect retuning. |
+| 2026-08-13 | Platform code is split so the **decision** is portable and the **plumbing** is `#[cfg]`-gated — `presence::classify` carries no Windows types, so it compiles and is tested on all three CI platforms. Apply this shape to any future unsafe platform work. |
+| 2026-08-13 | Resume re-takes the lease via `lease::state`, not `heartbeat`: only `state` distinguishes a **stale** foreign lease, which a returning device should reclaim rather than stand down for. |
