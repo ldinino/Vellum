@@ -43,10 +43,35 @@ _None logged yet._
 
 ### Other
 
-- [ ] **Confirm on real hardware** that locking the workstation and suspending the
-  machine release the Satchel. `sync::presence` is compile-verified only — no
-  Win32 callback has ever been observed to fire. Check the remote `lease.json`
-  disappears on lock.
+- [ ] **SILENTHOLD.** An instance that opens a Satchel another device already
+  holds shows **nothing at all** — an ordinary writable window. Observed on the
+  §5.6 rig (#7, screenshot in that PR). The user edits happily into a divergence
+  they were never told about. This is the top open product defect on the sync
+  track: STANDDOWN covers *losing* the lease mid-session, but never *arriving* to
+  find it held.
+- [x] Confirm on real hardware that locking the workstation releases the Satchel.
+  **Observed 2026-08-13** on the rig with the idle timer at ten minutes so it
+  could not be the cause: `LockWorkStation` 14:54:38.757 → `deletefile
+  lease.json` 14:54:44.483. `sync::presence` is alive. *Suspend/resume and
+  `WTS_REMOTE_DISCONNECT` are still unobserved.*
+- [x] **DOUBLEYIELD — closed as a rig artefact (2026-08-13).** Measured on three
+  configurations: dev + StrictMode, dev with StrictMode removed, and a static
+  production frontend with no HMR. Yield and resume each issued exactly one
+  rclone sequence in all three, with one React root and one `SyncSessionProvider`
+  instance throughout, including across HMR generations. The doubling reproduces
+  only when two `vellum.exe` share one `VELLUM_MACHINE_DIR` and therefore one
+  log — including log lines torn mid-write by two writers, which no single
+  process can produce. The lost push was two rig processes racing one crypt
+  destination, not the shipped push path.
+- [ ] Rig hygiene, both from the DOUBLEYIELD triage: `dev-two.ps1` writes
+  `instance.pid` (line 202) and never reads it, so nothing stops a second
+  `-Which A` — refuse to launch when that pid is alive, with `-Force` to
+  override. And prefix every `applog` line with the process id, so a doubled
+  operation in a shared log is attributable at a glance rather than after a day.
+- [ ] Measurement trap: after any HMR update, `getCurrentWindow().isFocused()`
+  returns `true` for a window that is not focused, so the yield timer never arms.
+  Any rig measurement taken after a mid-session edit silently cannot yield.
+  Use the prod-mode recipe (§5.6) for anything load-bearing.
 - [ ] Retune `YIELD_IDLE_MS` (currently 60s) once the desk-to-laptop flip has
   been felt a few times, and watch how often a yield fires while a browser is in
   front of Vellum.
