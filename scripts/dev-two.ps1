@@ -158,6 +158,21 @@ $remoteBlob = Join-Path $machineDir "remotes\$($rigCfg.satchelId).remote"
 New-Dir (Split-Path -Parent $remoteBlob)
 [IO.File]::WriteAllBytes($remoteBlob, $sealed)
 
+# --- Settings the rig imposes ------------------------------------------------
+# Refine off: Ollama's port 11435 is fixed and two instances would fight over
+# it. First run marked complete: the welcome dialog is modal and would sit over
+# everything the rig exists to look at. Nothing else is touched, so app.json is
+# otherwise whatever the app itself wrote.
+$appJson = Join-Path $dataDir 'app.json'
+if (Test-Path $appJson) {
+    $cfg = Get-Content $appJson -Raw -Encoding UTF8 | ConvertFrom-Json
+} else {
+    $cfg = [pscustomobject]@{ settings = [pscustomobject]@{} }
+}
+$cfg.settings | Add-Member -NotePropertyName refineEnabled -NotePropertyValue $false -Force
+$cfg.settings | Add-Member -NotePropertyName firstRunComplete -NotePropertyValue $true -Force
+Write-Utf8NoBom $appJson ($cfg | ConvertTo-Json -Depth 20)
+
 Write-Host "Vellum two-process rig - instance $Which"
 Write-Host "  machine dir : $machineDir"
 Write-Host "  satchel     : $dataDir"
