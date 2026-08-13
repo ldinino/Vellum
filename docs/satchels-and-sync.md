@@ -582,8 +582,13 @@ CI platforms; only the plumbing is `#[cfg(windows)]`. Worth copying whenever
 unsafe platform code needs to stay auditable.
 
 **Residuals:**
-- The Win32 half is **compile-verified only**. Locking the workstation has never
-  been observed to release the lease.
+- ~~The Win32 half is compile-verified only.~~ **Observed 2026-08-13** on the
+  §5.6 rig, with the idle timer set to ten minutes so it could not be the cause:
+  `LockWorkStation` at `14:54:38.757`, first network call `14:54:41.065`,
+  `deletefile lease.json` at `14:54:44.483` — the push and generation marker
+  completed first. Both processes received the notification, so the mechanism is
+  the session notification, not anything focus-derived. **Suspend/resume and
+  `WTS_REMOTE_DISCONNECT` remain unobserved.**
 - A yield is a full push, so a machine that sleeps mid-yield leaves the transfer
   unfinished — the exposure §5.4 STAGEDPUSH closes.
 - `WTS_REMOTE_DISCONNECT` (`0x4`) is not classified as "gone". For an RDP
@@ -621,6 +626,14 @@ app mid-sync leaves both local and remote openable" is believed **not met**.
 
 Stage into a generation-scoped path and let the marker flip be the only commit —
 a single small-file write, atomic on every supported backend.
+
+**The rig cannot reach this yet (2026-08-13).** Closing the window fires *resume*
+before the close push, so a kill 2.5 s after `WM_CLOSE` lands on the lease write
+rather than a transfer. STAGEDPUSH needs a way to start a push on demand — a
+debug-only command, or a rig-controlled payload large enough to interrupt
+reliably. **Note also that the one observation which appeared to support this
+track — the lost push in #7 — was two rig processes racing, not a torn transfer.
+The premise here is still unobserved.**
 
 ### 5.5 COPY — how the take-over is described
 
@@ -677,7 +690,7 @@ machine-local directory (`local_vellum_dir` in [satchel.rs](../src-tauri/src/sat
 is the single choke point for the Satchel list, `device.json` and the sealed
 `.remote` blob; the log path in [paths.rs](../src-tauri/src/paths.rs) needs the
 same treatment or two processes rotate one log). **Overriding `LOCALAPPDATA`
-itself is not sufficient** \u2014 Tauri resolves that through the Windows
+itself is not sufficient** — Tauri resolves that through the Windows
 known-folder API, which ignores the variable.
 
 **Known collisions, accepted:** Ollama's port 11435 is fixed, so Refine stays
@@ -686,7 +699,7 @@ directory override, so the two windows fight over position.
 
 **What it can prove:** pairing by connection code, the `crypt` round trip, lease
 acquire/release, take-over, stand-down and the push guard, yield on idle,
-optimistic resume, stale reclaim, conflict copies \u2014 and, because
+optimistic resume, stale reclaim, conflict copies — and, because
 `rundll32 user32.dll,LockWorkStation` signals both processes at once, the
 `sync::presence` Win32 path that today has no evidence whatsoever behind it.
 
@@ -694,9 +707,40 @@ optimistic resume, stale reclaim, conflict copies \u2014 and, because
 days, clock skew between machines, OneDrive interference. Those still want two
 real machines.
 
-**Sequencing:** before STAGEDPUSH. \u00a75.4's premise \u2014 that killing the app mid-push
-leaves a torn remote \u2014 has never been observed. This rig is how it gets observed,
+**Sequencing:** before STAGEDPUSH. §5.4's premise — that killing the app mid-push
+leaves a torn remote — has never been observed. This rig is how it gets observed,
 which turns the fix from reasoning into measurement.
+
+### 5.6.1 Rig prod mode — measuring without the dev-only differences
+
+The rig's first serious finding (DOUBLEYIELD) turned out to be the rig itself,
+and the triage that established it needed a configuration with no StrictMode
+double-mount, no HMR and no Fast Refresh. That configuration costs nothing:
+
+```sh
+npm run build
+npx vite preview --port 1420 --strictPort   # in front of the existing debug exe
+```
+
+The Rust half stays a **debug** build — the machine-dir override is
+`#[cfg(debug_assertions)]` — while the frontend is the production bundle. That
+covers every frontend-side dev/prod difference, which is where all three
+suspects lived. Confirm you really have it: stack frames read `index-*.js`
+rather than `syncSession.tsx?t=…`, and the shipped 60 s idle applies because
+`import.meta.env.DEV` is false and the interval overrides are eliminated.
+
+**Use this for anything load-bearing**, because of two dev-only traps measured
+on 2026-08-13: after any HMR update `getCurrentWindow().isFocused()` returns
+`true` for an unfocused window, so the yield timer never arms and the run
+silently cannot yield at all; and editing `syncSession.tsx` invalidates
+`useSyncSession` and escalates to a full App remount.
+
+**Rejected:** a Cargo `rig` feature replacing `#[cfg(debug_assertions)]`, which
+would turn a gate nobody can flip into a build flag anyone can, for no benefit
+until something is suspected in the release *profile* specifically — nothing yet
+has been. Also rejected: a switch that disables StrictMode from inside shipped
+`main.tsx`, which buys nothing over the recipe above and puts a test hook in
+production code.
 
 ### Exit criteria
 
@@ -744,3 +788,6 @@ which turns the fix from reasoning into measurement.
 | 2026-08-13 | Resume re-takes the lease via `lease::state`, not `heartbeat`: only `state` distinguishes a **stale** foreign lease, which a returning device should reclaim rather than stand down for. |
 | 2026-08-13 | **The 2026-08-06 "no CLI/env override" decision is narrowed to production, not reversed.** A `#[cfg(debug_assertions)]` override of the machine-local directory is permitted, and required, because without it two instances on one machine share an identity and none of the handoff behaviour can be observed at all. It cannot exist in a release build. Authorised by the maintainer. |
 | 2026-08-13 | Multi-device behaviour is proven by **two processes on one machine** (§5.6), not by two machines. Device identity is per-directory (`device::get_or_create(dir)`) and the device *name* already comes from `COMPUTERNAME`, so separated machine dirs give genuinely distinct devices. Two real machines remain necessary only for network failure, OAuth token rotation, clock skew and OneDrive interference. |
+| 2026-08-13 | **Locking the workstation releases the Satchel — observed, not inferred.** `sync::presence` works. This was the last claim in the track with no evidence behind it. |
+| 2026-08-13 | **DOUBLEYIELD was the rig, not the product.** Refuted across three configurations; reproduces only when two `vellum.exe` share one `VELLUM_MACHINE_DIR`. A negative result that kept a phantom defect from being fixed — and a reminder that the first serious finding from a new harness is as likely to be the harness as the subject. |
+| 2026-08-13 | Release-configuration testing uses the **prod-mode recipe** (§5.6.1: production frontend bundle in front of the debug exe), not a Cargo feature flag and not a StrictMode switch in shipped code. |
