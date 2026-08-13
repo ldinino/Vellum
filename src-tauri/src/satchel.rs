@@ -139,7 +139,27 @@ pub fn is_onedrive_path(dir: &Path) -> bool {
         .any(|root| dir.starts_with(Path::new(&root)))
 }
 
+/// Debug-only override of the machine-local directory, so two processes on one
+/// machine are two devices (docs/satchels-and-sync.md 5.6).
+///
+/// Compiled out of release builds entirely: production keeps the 2026-08-06
+/// "no CLI or environment override" decision. Overriding `LOCALAPPDATA` itself
+/// would not work — Tauri resolves it through the Windows known-folder API.
+#[cfg(debug_assertions)]
+pub const MACHINE_DIR_ENV: &str = "VELLUM_MACHINE_DIR";
+
+#[cfg(debug_assertions)]
+fn machine_dir_override() -> Option<PathBuf> {
+    std::env::var_os(MACHINE_DIR_ENV)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+}
+
 fn local_vellum_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    #[cfg(debug_assertions)]
+    if let Some(dir) = machine_dir_override() {
+        return Ok(dir);
+    }
     let local = app
         .path()
         .local_data_dir()

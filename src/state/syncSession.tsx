@@ -20,7 +20,8 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, u
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as api from "../data/api";
 import { onDeviceGone } from "../data/events";
-import { msUntilYield } from "../lib/yield-lease";
+import { devIntervalMs } from "../lib/dev-tuning";
+import { msUntilYield, YIELD_IDLE_MS } from "../lib/yield-lease";
 
 export interface SyncSessionState {
   /** Set when the pull preserved a copy of local work. */
@@ -59,7 +60,10 @@ export const useSyncSession = () => useContext(SyncSessionContext);
 
 /** Comfortably inside the backend's 15-minute staleness window, so a brief
  *  network blip doesn't hand the Satchel to another device. */
-const HEARTBEAT_MS = 4 * 60 * 1000;
+const HEARTBEAT_MS = devIntervalMs("VITE_VELLUM_HEARTBEAT_MS", 4 * 60 * 1000);
+
+/** The yield rule's own default, shortened only by the debug-only rig. */
+const YIELD_MS = devIntervalMs("VITE_VELLUM_YIELD_IDLE_MS", YIELD_IDLE_MS);
 
 export function SyncSessionProvider({ children }: { children: ReactNode }) {
   const [conflictCopy, setConflictCopy] = useState<string | null>(null);
@@ -230,13 +234,13 @@ export function SyncSessionProvider({ children }: { children: ReactNode }) {
       if (timer !== undefined) window.clearTimeout(timer);
       timer = undefined;
       if (disposed) return;
-      const wait = msUntilYield({ focused, lastInputAt }, Date.now());
+      const wait = msUntilYield({ focused, lastInputAt }, Date.now(), YIELD_MS);
       if (wait === null) return;
       timer = window.setTimeout(() => {
         timer = undefined;
         // Re-read rather than trust the timer: focus can have come back, or
         // input arrived, since it was armed.
-        if (msUntilYield({ focused, lastInputAt }, Date.now()) === 0) void handOver();
+        if (msUntilYield({ focused, lastInputAt }, Date.now(), YIELD_MS) === 0) void handOver();
         else arm();
       }, wait);
     };
