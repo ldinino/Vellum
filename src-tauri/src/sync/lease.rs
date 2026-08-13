@@ -114,26 +114,40 @@ pub fn acquire(
     }
 }
 
-/// Refresh our heartbeat. Returns `false` if someone else now holds the lease,
-/// which means we were taken over and must stop writing.
+/// What a heartbeat found on the remote.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Standing {
+    /// Still ours, and refreshed.
+    Ours,
+    /// Nobody holds it. This is *not* a take-over: `sync_now` releases the
+    /// lease when it finishes, so an idle session sits here between syncs.
+    Vacant,
+    /// Another device holds it; this one must stop writing.
+    TakenOver(Lease),
+}
+
+/// Refresh our heartbeat.
+///
+/// A network or storage failure is an `Err`, never a `Standing` — losing the
+/// wifi must not be read as losing the Satchel.
 pub fn heartbeat(
     env: &[(String, String)],
     target: &str,
     me: &Device,
     now: chrono::DateTime<chrono::Utc>,
-) -> Result<bool, String> {
+) -> Result<Standing, String> {
     let Some(current) = read(env, target)? else {
-        return Ok(false);
+        return Ok(Standing::Vacant);
     };
     if current.device_id != me.id {
-        return Ok(false);
+        return Ok(Standing::TakenOver(current));
     }
     write(
         env,
         target,
         &Lease { heartbeat_at: now.to_rfc3339(), ..current },
     )?;
-    Ok(true)
+    Ok(Standing::Ours)
 }
 
 /// Give up the lease. Never removes another device's lease.
@@ -236,10 +250,14 @@ mod tests {
             LeaseState::Available(Some(_))
         ));
 
-        assert!(heartbeat(&env, &target, &me, now()).unwrap());
+        assert_eq!(heartbeat(&env, &target, &me, now()).unwrap(), Standing::Ours);
 
         release(&env, &target, &me).unwrap();
         assert_eq!(read(&env, &target).unwrap(), None);
+
+        // Our own `sync_now` releases the lease when it finishes, so a missing
+        // lease is an ordinary gap, not somebody taking the Satchel over.
+        assert_eq!(heartbeat(&env, &target, &me, now()).unwrap(), Standing::Vacant);
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -277,9 +295,13 @@ mod tests {
             "release removed another device's lease"
         );
 
-        // Nor should a heartbeat succeed once taken over.
+        // Nor should a heartbeat succeed once taken over — and it must name the
+        // device that took it, since that is what the user is told.
         acquire(&env, &target, &laptop, later).unwrap();
-        assert!(!heartbeat(&env, &target, &desktop, later).unwrap());
+        match heartbeat(&env, &target, &desktop, later).unwrap() {
+            Standing::TakenOver(l) => assert_eq!(l.device_name, "LAPTOP"),
+            other => panic!("expected TakenOver, got {other:?}"),
+        }
 
         let _ = std::fs::remove_dir_all(&dir);
     }

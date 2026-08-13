@@ -17,6 +17,8 @@ import { SettingsModal } from "./settings/SettingsModal";
 import { FirstRunModal } from "./settings/FirstRunModal";
 import { SatchelProblemModal } from "./settings/SatchelProblemModal";
 import { ClosingSync } from "./ClosingSync";
+import { StandDownBar } from "./StandDownBar";
+import { useSyncSession } from "../state/syncSession";
 import { AppContextMenus } from "./AppContextMenus";
 import { UpdateNotice } from "./UpdateNotice";
 import { useVellum } from "../state/vellum";
@@ -47,6 +49,12 @@ export function VellumShell() {
   // persists the final debounced edits before the window is destroyed.
   const flushSavesRef = useRef<(() => Promise<void>) | null>(null);
   flushSavesRef.current = active?.flushSaves ?? null;
+
+  // Always-current ref to the take-over, for the same reason: the close
+  // listener is registered once and must see the situation as it stands now.
+  const { takenOverBy } = useSyncSession();
+  const standDownRef = useRef<string | null>(null);
+  standDownRef.current = takenOverBy;
 
   // Shutdown sync (see the close handler): the window stays up until this
   // session's work has been pushed, or the user chooses to leave without it.
@@ -100,10 +108,15 @@ export function VellumShell() {
         // device. Unlike the flush above there is no timeout race: an upload
         // takes as long as it takes, so it is shown instead of hidden, and the
         // overlay offers a way out.
-        const synced = await api
-          .syncStatus()
-          .then((s) => s.available && s.configured && !s.error)
-          .catch(() => false);
+        // Unless another device took the Satchel over: pushing then would write
+        // over their work. The backend refuses it anyway; asking would only be
+        // a dialog with nothing behind it.
+        const synced =
+          standDownRef.current === null &&
+          (await api
+            .syncStatus()
+            .then((s) => s.available && s.configured && !s.error)
+            .catch(() => false));
         if (!synced) {
           await win.destroy();
           return;
@@ -219,6 +232,7 @@ export function VellumShell() {
         onOpenImport={() => setImportOpen(true)}
       />
       <TopToolbar />
+      <StandDownBar />
 
       {error && (
         <div className="v-shell__error" role="alert">

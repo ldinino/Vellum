@@ -14,6 +14,7 @@ import type {
   GrammarSpan,
   ImportEntry,
   InstalledModel,
+  LeaseStanding,
   LogEntry,
   Manifest,
   Notebook,
@@ -144,8 +145,14 @@ export const syncNow = (takeOver = false) => invoke<SyncReport>("sync_now", { ta
 /** Take the lease and pull, when a synced Satchel is opened. */
 export const syncBeginSession = () => invoke<SyncReport | null>("sync_begin_session");
 
-/** Refresh our lease; false means another device took over. */
-export const syncRefreshLease = () => invoke<boolean>("sync_refresh_lease");
+/** Refresh our lease. A named `takenOverBy` means another device took over. */
+export const syncRefreshLease = () => invoke<LeaseStanding>("sync_refresh_lease");
+
+/** Keep this session's unsynced work as a conflict Satchel; returns its path. */
+export const syncPreserveLocalCopy = () => invoke<string>("sync_preserve_local_copy");
+
+/** Take the Satchel back after standing down. Always the user's own choice. */
+export const syncTakeBack = () => invoke<void>("sync_take_back");
 
 /** Write a page's Markdown to `mdPath` and copy its images/attachments into a
  * sibling `<filesDirName>/` folder next to it (spec Section 14). */
