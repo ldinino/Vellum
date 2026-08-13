@@ -50,6 +50,7 @@ pub fn run() {
         .manage(refine::logbuf::LogBuffer::default())
         .manage(refine::runtime::InstallState::default())
         .manage(satchel::StartupStatus::default())
+        .manage(sync::StandDown::default())
         .setup(|app| {
             // Resolve the active Satchel before anything touches the data root.
             // A missing or too-new Satchel is recorded rather than replaced with
@@ -178,6 +179,8 @@ pub fn run() {
             commands::sync_now,
             commands::sync_begin_session,
             commands::sync_refresh_lease,
+            commands::sync_preserve_local_copy,
+            commands::sync_take_back,
             commands::get_app_config,
             commands::save_app_config,
             commands::list_notebooks,

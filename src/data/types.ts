@@ -202,6 +202,15 @@ export interface SyncReport {
   skipped: string[];
 }
 
+/** What a heartbeat found. */
+export interface LeaseStanding {
+  /** True while this device still holds the Satchel. */
+  held: boolean;
+  /** The device that took it over. Only this means stand down — an absent
+   * lease is ordinary between syncs, and a network failure throws instead. */
+  takenOverBy: string | null;
+}
+
 /** One diagnostic log entry (Settings → About; spec Phase 11). */
 export interface LogEntry {
   /** RFC 3339, local time. */

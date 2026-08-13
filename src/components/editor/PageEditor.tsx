@@ -17,6 +17,7 @@ import { AttachmentBar, AttachmentItem } from "../panels/AttachmentBar";
 import { createDebouncer } from "../../lib/debounce";
 import { useVellum } from "../../state/vellum";
 import { useActiveEditor } from "../../state/activeEditor";
+import { useSyncSession } from "../../state/syncSession";
 import * as api from "../../data/api";
 import type { Attachment, Page, RefineTemplate } from "../../data/types";
 import "./editor.css";
@@ -165,6 +166,10 @@ export function PageEditor({
   const { actions, refineEnabled, refineTemplates, refineAdherence, attachmentsRefreshTick, proofing } =
     useVellum();
   const { setActiveEditor } = useActiveEditor();
+  // Another device took the Satchel over: keep accepting nothing rather than
+  // collecting edits this device can never send (docs/satchels-and-sync.md 5.1).
+  const { takenOverBy } = useSyncSession();
+  const readOnly = takenOverBy !== null;
   const [title, setTitle] = useState(page.title);
   const titleRef = useRef<HTMLInputElement>(null);
   const loadingRef = useRef(true);
@@ -480,6 +485,7 @@ export function PageEditor({
 
   const editor = useEditor({
     extensions: buildExtensions(),
+    editable: !readOnly,
     editorProps: {
       // WebView2 native spell check is off: spelling is sourced from Harper now
       // (spec Section 10 design note), so the native menu's "correct this word"
@@ -603,6 +609,12 @@ export function PageEditor({
     },
   });
   editorRef.current = editor;
+
+  // The take-over arrives mid-session, on a heartbeat, so the editor has to be
+  // switched over in place — `editable` above only covers a page opened after.
+  useEffect(() => {
+    editor?.setEditable(!readOnly);
+  }, [editor, readOnly]);
 
   // Publish this page's editor to the shell toolbar; clear it on unmount (page
   // switch / close) so the toolbar disables when no page is open.
@@ -807,6 +819,7 @@ export function PageEditor({
           ref={titleRef}
           className="v-editor__title"
           value={title}
+          readOnly={readOnly}
           placeholder="Untitled page"
           onChange={(e) => setTitle(e.target.value)}
           onBlur={commitTitle}

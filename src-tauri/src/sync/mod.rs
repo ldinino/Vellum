@@ -58,6 +58,47 @@ pub struct SyncReport {
     pub skipped: Vec<String>,
 }
 
+/// What the heartbeat found, as the window needs to hear it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeaseStanding {
+    /// True while this device still holds the lease.
+    pub held: bool,
+    /// The device that took the Satchel over, when one did. Only this means
+    /// stand down: a lease that is merely absent is the ordinary state between
+    /// syncs, and a network failure surfaces as an error instead.
+    pub taken_over_by: Option<String>,
+}
+
+/// Records that another device took the Satchel over while we were open.
+///
+/// This is the push guard, and it lives in the backend on purpose: the close
+/// handler, Settings ▸ Sync and any future caller all funnel through
+/// [`sync_now`], so refusing here is the only way to be sure nothing pushes
+/// over the new holder.
+#[derive(Default)]
+pub struct StandDown(std::sync::Mutex<Option<String>>);
+
+impl StandDown {
+    /// The device that took over, if this session has stood down.
+    pub fn taken_over_by(&self) -> Option<String> {
+        self.0.lock().map(|g| g.clone()).unwrap_or(None)
+    }
+
+    pub fn record(&self, device_name: String) {
+        if let Ok(mut g) = self.0.lock() {
+            *g = Some(device_name);
+        }
+    }
+
+    /// Only an explicit take-back clears this.
+    pub fn clear(&self) {
+        if let Ok(mut g) = self.0.lock() {
+            *g = None;
+        }
+    }
+}
+
 /// Whether sync is available at all in this build.
 ///
 /// Shipped builds hide it until it is finished; a debug build always has it, so
@@ -255,8 +296,41 @@ pub fn stop(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Whether a push may leave this device.
+///
+/// Split out from [`sync_now`] because that needs an `AppHandle`, and this is
+/// the rule the whole feature turns on.
+fn push_permitted(stood_down: Option<&str>, take_over: bool) -> Result<(), String> {
+    match stood_down {
+        Some(holder) if !take_over => Err(format!(
+            "{holder} took this Satchel over, so this device can no longer save to your storage."
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// Turn a heartbeat into what the window is told, arming the push guard when
+/// — and only when — another device has taken the Satchel.
+fn standing_outcome(standing: lease::Standing, guard: &StandDown) -> LeaseStanding {
+    match standing {
+        lease::Standing::Ours => LeaseStanding { held: true, taken_over_by: None },
+        lease::Standing::Vacant => LeaseStanding { held: false, taken_over_by: None },
+        lease::Standing::TakenOver(l) => {
+            guard.record(l.device_name.clone());
+            LeaseStanding { held: false, taken_over_by: Some(l.device_name) }
+        }
+    }
+}
+
 /// Push the active Satchel: take the lease, checkpoint, transfer, release.
 pub async fn sync_now(app: &AppHandle, take_over: bool) -> Result<SyncReport, String> {
+    // Another device is in charge of this Satchel. Pushing would write over
+    // work it has already done, so nothing but an explicit take-over gets past
+    // here — including the push the window runs on close.
+    let stood_down = app.state::<StandDown>().taken_over_by();
+    push_permitted(stood_down.as_deref(), take_over)?;
+    app.state::<StandDown>().clear();
+
     let config = load_remote(app)?.ok_or_else(|| "This Satchel isn't synced yet.".to_string())?;
     let env = config.env_vars();
     let target = config.target();
@@ -396,22 +470,64 @@ pub async fn begin_session(app: &AppHandle) -> Result<Option<SyncReport>, String
     Ok(Some(SyncReport { synced: true, conflict_copy, skipped: Vec::new() }))
 }
 
-/// Refresh our claim while the app is open. `false` means another device took
-/// the Satchel over and this one must stop writing to the remote.
-pub fn refresh_lease(app: &AppHandle) -> Result<bool, String> {
+/// Refresh our claim while the app is open.
+///
+/// `taken_over_by` set means another device holds the Satchel and this one must
+/// stand down; the guard is armed here so no later push can slip out.
+pub fn refresh_lease(app: &AppHandle) -> Result<LeaseStanding, String> {
+    let held = LeaseStanding { held: true, taken_over_by: None };
     if !is_enabled(app) {
-        return Ok(true);
+        return Ok(held);
     }
     let Some(config) = load_remote(app)? else {
-        return Ok(true);
+        return Ok(held);
     };
     let me = this_device(app)?;
-    lease::heartbeat(
+    let standing = lease::heartbeat(
         &config.env_vars(),
         &config.target(),
         &me,
         chrono::Utc::now(),
-    )
+    )?;
+    let outcome = standing_outcome(standing, &app.state::<StandDown>());
+    if let Some(holder) = &outcome.taken_over_by {
+        app.state::<AppLog>().warn(
+            "sync",
+            format!("{holder} took the Satchel over; this session is read-only"),
+        );
+    }
+    Ok(outcome)
+}
+
+/// Keep this session's unsynced work as a conflict Satchel beside the current
+/// one — the same preservation §2 uses on a losing pull, so there is only ever
+/// one mechanism for "don't lose my edits".
+pub async fn preserve_local_copy(app: &AppHandle) -> Result<String, String> {
+    let me = this_device(app)?;
+    let satchel_dir = paths::data_dir(app)?;
+    // A copy taken with the WAL still outstanding would miss the most recent
+    // edits, which are exactly the ones being preserved.
+    app.state::<crate::db::PoolCache>().clear().await;
+    engine::checkpoint_all(&satchel_dir).await?;
+    let copy = engine::preserve_conflict_copy(&satchel_dir, &me.name, chrono::Local::now())?;
+    app.state::<AppLog>().warn(
+        "sync",
+        format!("Unsynced work preserved at {}", copy.display()),
+    );
+    Ok(copy.to_string_lossy().into_owned())
+}
+
+/// Take the Satchel back after standing down. Deliberately only ever a response
+/// to the user asking: re-acquiring on our own would fight the other device for
+/// the lease.
+pub fn take_back(app: &AppHandle) -> Result<(), String> {
+    let config = load_remote(app)?.ok_or_else(|| "This Satchel isn't synced yet.".to_string())?;
+    let me = this_device(app)?;
+    lease::acquire(&config.env_vars(), &config.target(), &me, chrono::Utc::now())?;
+    app.state::<StandDown>().clear();
+    app.state::<AppLog>()
+        .info("sync", "Satchel taken back by this device");
+    Ok(())
 }
 
 /// Hand the Satchel back on a clean exit, so the next device isn't locked out
@@ -430,4 +546,47 @@ pub fn release_lease(app: &AppHandle) -> Result<(), String> {
 /// Version of the bundled transfer engine, for Settings ▸ About.
 pub fn support_version() -> String {
     rclone::version().unwrap_or_else(|_| "not available".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn lease_of(name: &str) -> lease::Lease {
+        lease::Lease {
+            device_id: format!("id-{name}"),
+            device_name: name.to_string(),
+            acquired_at: "2026-08-12T09:00:00Z".into(),
+            heartbeat_at: "2026-08-12T09:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn only_a_take_over_stands_the_session_down() {
+        let guard = StandDown::default();
+        let ours = standing_outcome(lease::Standing::Ours, &guard);
+        assert!(ours.held);
+        assert_eq!(guard.taken_over_by(), None);
+
+        // `sync_now` releases the lease when it finishes, so an absent lease is
+        // the ordinary state between syncs. Reading it as a take-over would put
+        // the user into read-only after every successful sync.
+        let vacant = standing_outcome(lease::Standing::Vacant, &guard);
+        assert!(!vacant.held);
+        assert_eq!(vacant.taken_over_by, None);
+        assert_eq!(guard.taken_over_by(), None, "a vacant lease armed the guard");
+
+        let taken = standing_outcome(lease::Standing::TakenOver(lease_of("DESKTOP")), &guard);
+        assert_eq!(taken.taken_over_by.as_deref(), Some("DESKTOP"));
+        assert_eq!(guard.taken_over_by().as_deref(), Some("DESKTOP"));
+    }
+
+    #[test]
+    fn a_stood_down_device_pushes_only_when_the_user_takes_over() {
+        assert!(push_permitted(None, false).is_ok());
+        let refused = push_permitted(Some("DESKTOP"), false).expect_err("push was allowed");
+        assert!(refused.contains("DESKTOP"));
+        // The take-over prompt in Settings ▸ Sync is the user saying so out loud.
+        assert!(push_permitted(Some("DESKTOP"), true).is_ok());
+    }
 }

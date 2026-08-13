@@ -236,3 +236,85 @@ async fn the_satchel_is_handed_over_cleanly_between_devices() {
 
     let _ = std::fs::remove_dir_all(store);
 }
+
+/// STANDDOWN (docs/satchels-and-sync.md 5.1): once another device takes the
+/// Satchel, this one must find out on its heartbeat and never push again.
+///
+/// Driven through the real rclone stack so the whole chain is exercised —
+/// take-over, heartbeat, guard, refused push — rather than the guard alone.
+#[tokio::test]
+async fn a_taken_over_device_stands_down_and_cannot_push() {
+    if skip() {
+        return;
+    }
+    let store = temp("standdown-store");
+    let one = temp("standdown-device1");
+    make_satchel(&one, b"typed just before the take-over").await;
+
+    let (p1, p2) = super::remote::generate_crypt_passwords().unwrap();
+    let config = RemoteConfig {
+        backend: "local".into(),
+        label: "Folder or network drive".into(),
+        options: BTreeMap::new(),
+        path: store.to_string_lossy().into_owned(),
+        crypt_password: p1,
+        crypt_password2: p2,
+    };
+    let env = config.env_vars();
+    let target = config.target();
+    let laptop = device("LAPTOP");
+    let desktop = device("DESKTOP");
+    let now = chrono::Utc::now();
+    let guard = super::StandDown::default();
+
+    // LAPTOP is the open window; its heartbeats are unremarkable.
+    lease::acquire(&env, &target, &laptop, now).unwrap();
+    let standing = lease::heartbeat(&env, &target, &laptop, now).unwrap();
+    let outcome = super::standing_outcome(standing, &guard);
+    assert!(outcome.held && outcome.taken_over_by.is_none());
+    assert_eq!(guard.taken_over_by(), None);
+    super::push_permitted(guard.taken_over_by().as_deref(), false)
+        .expect("a device holding the lease must be able to push");
+
+    // DESKTOP takes over, as the existing take-over path does.
+    lease::acquire(&env, &target, &desktop, now).unwrap();
+
+    // LAPTOP's next heartbeat is where it finds out.
+    let standing = lease::heartbeat(&env, &target, &laptop, now).unwrap();
+    let outcome = super::standing_outcome(standing, &guard);
+    assert!(!outcome.held);
+    assert_eq!(
+        outcome.taken_over_by.as_deref(),
+        Some("DESKTOP"),
+        "the window must be able to name who took it"
+    );
+    assert_eq!(guard.taken_over_by().as_deref(), Some("DESKTOP"));
+
+    // The close-time push is the dangerous one: it asks for no take-over and
+    // would otherwise write over DESKTOP's work.
+    let refused = super::push_permitted(guard.taken_over_by().as_deref(), false)
+        .expect_err("a stood-down device pushed");
+    assert!(
+        refused.contains("DESKTOP"),
+        "the refusal must say who has it, got {refused:?}"
+    );
+
+    // And the work typed before the take-over is preservable the same way a
+    // losing pull preserves it.
+    let copy = engine::preserve_conflict_copy(&one, &laptop.name, chrono::Local::now()).unwrap();
+    assert_eq!(
+        std::fs::read(copy.join("nb").join("page.txt")).unwrap(),
+        b"typed just before the take-over",
+        "the unsynced work was lost"
+    );
+
+    // Taking it back is explicit, and only then does pushing become possible.
+    lease::acquire(&env, &target, &laptop, now).unwrap();
+    guard.clear();
+    super::push_permitted(guard.taken_over_by().as_deref(), false)
+        .expect("after taking the Satchel back, pushing must work again");
+
+    for d in [store, one, copy] {
+        let _ = std::fs::remove_dir_all(d);
+    }
+}

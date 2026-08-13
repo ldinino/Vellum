@@ -874,10 +874,23 @@ pub async fn sync_begin_session(app: AppHandle) -> Result<Option<sync::SyncRepor
     sync::begin_session(&app).await
 }
 
-/// Refresh our lease; `false` means another device took over.
+/// Refresh our lease. A named `takenOverBy` means another device took the
+/// Satchel and this session must stand down.
 #[tauri::command]
-pub async fn sync_refresh_lease(app: AppHandle) -> Result<bool, String> {
+pub async fn sync_refresh_lease(app: AppHandle) -> Result<sync::LeaseStanding, String> {
     off_thread(move || sync::refresh_lease(&app)).await
+}
+
+/// Keep this session's unsynced work as a conflict Satchel.
+#[tauri::command]
+pub async fn sync_preserve_local_copy(app: AppHandle) -> Result<String, String> {
+    sync::preserve_local_copy(&app).await
+}
+
+/// Take the Satchel back after standing down. Always the user's own choice.
+#[tauri::command]
+pub async fn sync_take_back(app: AppHandle) -> Result<(), String> {
+    off_thread(move || sync::take_back(&app)).await
 }
 
 // ---------------------------------------------------------------------------
