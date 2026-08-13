@@ -300,13 +300,32 @@ pub fn stop(app: &AppHandle) -> Result<(), String> {
 ///
 /// Split out from [`sync_now`] because that needs an `AppHandle`, and this is
 /// the rule the whole feature turns on.
-fn push_permitted(stood_down: Option<&str>, take_over: bool) -> Result<(), String> {
-    match stood_down {
+fn push_permitted(guard: &StandDown, take_over: bool) -> Result<PushPermit, String> {
+    match guard.taken_over_by() {
         Some(holder) if !take_over => Err(format!(
             "{holder} took this Satchel over, so this device can no longer save to your storage."
         )),
-        _ => Ok(()),
+        _ => Ok(PushPermit),
     }
+}
+
+/// Proof that the guard was consulted. [`push_permitted`] is the only thing
+/// that makes one and [`push_satchel`] is the only thing that takes one, so a
+/// push that skips the guard does not compile — a test can only catch that
+/// after someone has written it.
+#[must_use]
+#[derive(Debug)]
+struct PushPermit;
+
+async fn push_satchel(
+    _permit: &PushPermit,
+    env: &[(String, String)],
+    target: &str,
+    satchel_dir: &std::path::Path,
+    generation: u64,
+    me: &device::Device,
+) -> Result<engine::SyncOutcome, String> {
+    engine::push(env, target, satchel_dir, generation, me).await
 }
 
 /// Turn a heartbeat into what the window is told, arming the push guard when
@@ -327,9 +346,9 @@ pub async fn sync_now(app: &AppHandle, take_over: bool) -> Result<SyncReport, St
     // Another device is in charge of this Satchel. Pushing would write over
     // work it has already done, so nothing but an explicit take-over gets past
     // here — including the push the window runs on close.
-    let stood_down = app.state::<StandDown>().taken_over_by();
-    push_permitted(stood_down.as_deref(), take_over)?;
-    app.state::<StandDown>().clear();
+    let stood_down = app.state::<StandDown>();
+    let permit = push_permitted(&stood_down, take_over)?;
+    stood_down.clear();
 
     let config = load_remote(app)?.ok_or_else(|| "This Satchel isn't synced yet.".to_string())?;
     let env = config.env_vars();
@@ -354,7 +373,7 @@ pub async fn sync_now(app: &AppHandle, take_over: bool) -> Result<SyncReport, St
     let satchel_dir = paths::data_dir(app)?;
     let generation = binding(app)?.map(|b| b.generation).unwrap_or(0);
 
-    let result = match engine::push(&env, &target, &satchel_dir, generation, &me).await {
+    let result = match push_satchel(&permit, &env, &target, &satchel_dir, generation, &me).await {
         Ok(engine::SyncOutcome::Completed { state, skipped }) => {
             set_binding(
                 app,
@@ -583,10 +602,13 @@ mod tests {
 
     #[test]
     fn a_stood_down_device_pushes_only_when_the_user_takes_over() {
-        assert!(push_permitted(None, false).is_ok());
-        let refused = push_permitted(Some("DESKTOP"), false).expect_err("push was allowed");
+        let guard = StandDown::default();
+        assert!(push_permitted(&guard, false).is_ok());
+
+        guard.record("DESKTOP".into());
+        let refused = push_permitted(&guard, false).expect_err("push was allowed");
         assert!(refused.contains("DESKTOP"));
-        // The take-over prompt in Settings ▸ Sync is the user saying so out loud.
-        assert!(push_permitted(Some("DESKTOP"), true).is_ok());
+        // The take-over prompt is the user saying so out loud.
+        assert!(push_permitted(&guard, true).is_ok());
     }
 }

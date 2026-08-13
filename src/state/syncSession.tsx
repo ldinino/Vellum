@@ -54,50 +54,62 @@ export function SyncSessionProvider({ children }: { children: ReactNode }) {
   const [preservedCopy, setPreservedCopy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const started = useRef(false);
+  // The heartbeat outlives the effect that starts it: taking the Satchel back
+  // has to restart it, or this device would hold a lease it never refreshes and
+  // silently go stale.
+  const timerRef = useRef<number | undefined>(undefined);
+  const goneRef = useRef(false);
+
+  const stopHeartbeat = useCallback(() => {
+    if (timerRef.current !== undefined) window.clearInterval(timerRef.current);
+    timerRef.current = undefined;
+  }, []);
+
+  const startHeartbeat = useCallback(() => {
+    stopHeartbeat();
+    if (goneRef.current) return;
+    timerRef.current = window.setInterval(() => {
+      void api
+        .syncRefreshLease()
+        .then((standing) => {
+          // Only a named holder is a take-over. An absent lease is ordinary:
+          // our own "Sync now" hands it back when it finishes.
+          if (goneRef.current || !standing.takenOverBy) return;
+          setTakenOverBy(standing.takenOverBy);
+          // Nothing left to refresh: the Satchel is someone else's until the
+          // user asks for it back.
+          stopHeartbeat();
+        })
+        .catch(() => {
+          // A failed heartbeat is usually a dropped network. Staleness is the
+          // backstop, and a lost connection must never make you read-only.
+        });
+    }, HEARTBEAT_MS);
+  }, [stopHeartbeat]);
 
   useEffect(() => {
     // React 18 mounts twice in development; taking the lease twice would be
     // harmless but the pull is not worth doing twice.
     if (started.current) return;
     started.current = true;
-
-    let cancelled = false;
-    let timer: number | undefined;
+    goneRef.current = false;
 
     void (async () => {
       try {
         const report = await api.syncBeginSession();
-        if (cancelled || !report) return;
+        if (goneRef.current || !report) return;
         if (report.conflictCopy) setConflictCopy(report.conflictCopy);
       } catch (e) {
-        if (!cancelled) setMessage(String(e));
+        if (!goneRef.current) setMessage(String(e));
       }
-
-      if (cancelled) return;
-      timer = window.setInterval(() => {
-        void api
-          .syncRefreshLease()
-          .then((standing) => {
-            // Only a named holder is a take-over. An absent lease is ordinary:
-            // our own "Sync now" hands it back when it finishes.
-            if (cancelled || !standing.takenOverBy) return;
-            setTakenOverBy(standing.takenOverBy);
-            // Nothing left to heartbeat: the Satchel is someone else's until
-            // the user asks for it back.
-            if (timer !== undefined) window.clearInterval(timer);
-          })
-          .catch(() => {
-            // A failed heartbeat is usually a dropped network. Staleness is the
-            // backstop, and a lost connection must never make you read-only.
-          });
-      }, HEARTBEAT_MS);
+      startHeartbeat();
     })();
 
     return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearInterval(timer);
+      goneRef.current = true;
+      stopHeartbeat();
     };
-  }, []);
+  }, [startHeartbeat, stopHeartbeat]);
 
   const preserveCopy = useCallback(async () => {
     setActionError(null);
@@ -113,10 +125,12 @@ export function SyncSessionProvider({ children }: { children: ReactNode }) {
     try {
       await api.syncTakeBack();
       setTakenOverBy(null);
+      // We hold the lease again, so it has to be kept alive again.
+      startHeartbeat();
     } catch (e) {
       setActionError(String(e));
     }
-  }, []);
+  }, [startHeartbeat]);
 
   const value: SyncSessionState = {
     conflictCopy,

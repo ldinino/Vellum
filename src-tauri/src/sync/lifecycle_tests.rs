@@ -273,7 +273,7 @@ async fn a_taken_over_device_stands_down_and_cannot_push() {
     let outcome = super::standing_outcome(standing, &guard);
     assert!(outcome.held && outcome.taken_over_by.is_none());
     assert_eq!(guard.taken_over_by(), None);
-    super::push_permitted(guard.taken_over_by().as_deref(), false)
+    let _permit = super::push_permitted(&guard, false)
         .expect("a device holding the lease must be able to push");
 
     // DESKTOP takes over, as the existing take-over path does.
@@ -292,8 +292,7 @@ async fn a_taken_over_device_stands_down_and_cannot_push() {
 
     // The close-time push is the dangerous one: it asks for no take-over and
     // would otherwise write over DESKTOP's work.
-    let refused = super::push_permitted(guard.taken_over_by().as_deref(), false)
-        .expect_err("a stood-down device pushed");
+    let refused = super::push_permitted(&guard, false).expect_err("a stood-down device pushed");
     assert!(
         refused.contains("DESKTOP"),
         "the refusal must say who has it, got {refused:?}"
@@ -311,7 +310,7 @@ async fn a_taken_over_device_stands_down_and_cannot_push() {
     // Taking it back is explicit, and only then does pushing become possible.
     lease::acquire(&env, &target, &laptop, now).unwrap();
     guard.clear();
-    super::push_permitted(guard.taken_over_by().as_deref(), false)
+    let _permit = super::push_permitted(&guard, false)
         .expect("after taking the Satchel back, pushing must work again");
 
     for d in [store, one, copy] {

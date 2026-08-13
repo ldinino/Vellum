@@ -10,6 +10,7 @@
  */
 
 import { useState } from "react";
+import { ask } from "@tauri-apps/plugin-dialog";
 import { Button } from "./ui/Button";
 import { useSyncSession } from "../state/syncSession";
 import "./StandDownBar.css";
@@ -29,12 +30,22 @@ export function StandDownBar() {
     }
   }
 
+  // Taking it back is a take-over in the other direction, so it carries the
+  // same warning section 2 gives the first one.
+  async function confirmTakeBack() {
+    const ok = await ask(
+      `${takenOverBy} is using this Satchel right now.\n\nTaking it back means anything unsaved on that device may be lost.\n\nTake it back anyway?`,
+      { title: "Take the Satchel back", kind: "warning" },
+    );
+    if (ok) await takeBack();
+  }
+
   return (
     <div className="v-standdown" role="status" aria-live="polite">
       <div className="v-standdown__text">
         <strong className="v-standdown__title">{takenOverBy} is using this Satchel now.</strong>{" "}
-        This window has stopped saving, so the two devices can&apos;t write over each other. Your
-        notebooks on this device are untouched.
+        Editing is paused here and nothing will be sent to your storage, so the two devices
+        can&apos;t write over each other. Your notebooks on this device are untouched.
         {preservedCopy && (
           <>
             {" "}
@@ -50,7 +61,7 @@ export function StandDownBar() {
             Keep a copy of this session
           </Button>
         )}
-        <Button icon="network-cloud" onClick={() => void run(takeBack)} disabled={busy}>
+        <Button icon="network-cloud" onClick={() => void run(confirmTakeBack)} disabled={busy}>
           Take it back
         </Button>
       </div>
