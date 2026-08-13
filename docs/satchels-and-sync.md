@@ -19,6 +19,7 @@ item ships. Sizes are relative complexity (S/M/L/XL), not time estimates.
 | [HANDOFF](#53-handoff--ask-the-holder-to-let-go) | Ask the holder to let go (remote request file + Notify) | M | STANDDOWN, YIELD |
 | [STAGEDPUSH](#54-stagedpush--make-the-remote-switchover-the-commit-point) | Make the remote switchover the commit point | M | SYNC-A |
 | [COPY](#55-copy--how-the-take-over-is-described) | Take-over wording and vocabulary rules _(shipped)_ | S | STANDDOWN |
+| [TWOPROC](#56-twoproc--two-instances-on-one-machine) | Two instances on one machine, to observe any of this | M | YIELD |
 
 **Sequencing.** SATCHEL ships alone. SYNC-A and OPLOG ship together in the next
 release — the oplog is written but not yet trusted. SYNC-B flips the switch only
@@ -65,7 +66,9 @@ user keep several (e.g. a dev Satchel and a real one) and switch between them.
   price of the above.
 - **No titlebar indicator.** If you're unsure which Satchel you're in, check
   Settings.
-- **No CLI/env override.** Dropped.
+- **No CLI/env override.** Dropped *for users* — see the 2026-08-13 entry in the
+  decisions log, which narrows this to production. A debug-only override exists
+  to make the two-process test rig (§5.6) possible.
 - **"Change…" (move data) is removed, not replaced.** Relocating a Satchel is
   done by closing Vellum, moving the folder in Explorer, and re-opening it —
   Explorer's move is more reliable than ours and obviously reversible. The
@@ -656,6 +659,45 @@ TypeScript constant left `tsc`, `npm run build` and all 150 Rust tests green,
 and would silently turn the take-over prompt into a bare error. Nothing
 compile-level can close that across the IPC boundary; it is on the punchlist.
 
+### 5.6 TWOPROC — two instances on one machine
+
+**The point:** every claim in this track about multi-device behaviour is
+currently either a unit test below the app or a source read. Nothing has ever
+been *observed* in a running Vellum. Two real machines are slow to set up and
+slower to iterate on; two processes on one machine close most of that gap today.
+
+**Why it works.** `device::get_or_create(dir)` keys identity off a directory, so
+separated machine dirs yield genuinely distinct devices, and `machine_name()`
+already reads `COMPUTERNAME`, so each process can name itself. No
+single-instance plugin is registered, and `is_enabled` returns true in debug
+builds, so neither process needs `app.json` edited.
+
+**What it needs.** A `#[cfg(debug_assertions)]` environment override of the
+machine-local directory (`local_vellum_dir` in [satchel.rs](../src-tauri/src/satchel.rs)
+is the single choke point for the Satchel list, `device.json` and the sealed
+`.remote` blob; the log path in [paths.rs](../src-tauri/src/paths.rs) needs the
+same treatment or two processes rotate one log). **Overriding `LOCALAPPDATA`
+itself is not sufficient** \u2014 Tauri resolves that through the Windows
+known-folder API, which ignores the variable.
+
+**Known collisions, accepted:** Ollama's port 11435 is fixed, so Refine stays
+off in the rig; window geometry is shared and the window-state plugin has no
+directory override, so the two windows fight over position.
+
+**What it can prove:** pairing by connection code, the `crypt` round trip, lease
+acquire/release, take-over, stand-down and the push guard, yield on idle,
+optimistic resume, stale reclaim, conflict copies \u2014 and, because
+`rundll32 user32.dll,LockWorkStation` signals both processes at once, the
+`sync::presence` Win32 path that today has no evidence whatsoever behind it.
+
+**What it cannot prove:** real network failure, OAuth refresh-token rotation over
+days, clock skew between machines, OneDrive interference. Those still want two
+real machines.
+
+**Sequencing:** before STAGEDPUSH. \u00a75.4's premise \u2014 that killing the app mid-push
+leaves a torn remote \u2014 has never been observed. This rig is how it gets observed,
+which turns the fix from reasoning into measurement.
+
 ### Exit criteria
 
 - Losing the lease makes the session read-only and prevents any later push.
@@ -677,8 +719,7 @@ compile-level can close that across the IPC boundary; it is on the punchlist.
 | 2026-08-06 | All settings stay Satchel-scoped (inside `app.json`) so a synced Satchel is preconfigured on a new machine. Only the known-Satchel list is machine-local. |
 | 2026-08-06 | Switching Satchels relaunches the app. No live swap. |
 | 2026-08-06 | No titlebar Satchel indicator — Settings is the place to check. |
-| 2026-08-06 | No CLI parameter or environment override. |
-| 2026-08-06 | "Change…" / move-data is **removed**, not replaced. Move the folder in Explorer and re-open it; **New Satchel…** takes its place in the UI. |
+| 2026-08-06 | No CLI parameter or environment override. || 2026-08-06 | "Change…" / move-data is **removed**, not replaced. Move the folder in Explorer and re-open it; **New Satchel…** takes its place in the UI. |
 | 2026-08-06 | Forgetting a Satchel is non-destructive; ✕ carries a tooltip saying so. |
 | 2026-08-06 | **New Satchel…** copies settings from the current Satchel by default (checkbox, checked); unchecking gives defaults. |
 | 2026-08-06 | Each Satchel shows a sync-state icon in the dropdown: disk (local) or cloud (synced). |
@@ -701,3 +742,5 @@ compile-level can close that across the IPC boundary; it is on the punchlist.
 | 2026-08-13 | `YIELD_IDLE_MS` = **60s**, and short on purpose: yielding early costs one round trip the optimistic re-acquire hides, yielding late costs the wait the whole track exists to remove. Asymmetric, so err short. Expect retuning. |
 | 2026-08-13 | Platform code is split so the **decision** is portable and the **plumbing** is `#[cfg]`-gated — `presence::classify` carries no Windows types, so it compiles and is tested on all three CI platforms. Apply this shape to any future unsafe platform work. |
 | 2026-08-13 | Resume re-takes the lease via `lease::state`, not `heartbeat`: only `state` distinguishes a **stale** foreign lease, which a returning device should reclaim rather than stand down for. |
+| 2026-08-13 | **The 2026-08-06 "no CLI/env override" decision is narrowed to production, not reversed.** A `#[cfg(debug_assertions)]` override of the machine-local directory is permitted, and required, because without it two instances on one machine share an identity and none of the handoff behaviour can be observed at all. It cannot exist in a release build. Authorised by the maintainer. |
+| 2026-08-13 | Multi-device behaviour is proven by **two processes on one machine** (§5.6), not by two machines. Device identity is per-directory (`device::get_or_create(dir)`) and the device *name* already comes from `COMPUTERNAME`, so separated machine dirs give genuinely distinct devices. Two real machines remain necessary only for network failure, OAuth token rotation, clock skew and OneDrive interference. |
