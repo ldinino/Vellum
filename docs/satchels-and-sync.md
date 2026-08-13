@@ -14,10 +14,11 @@ item ships. Sizes are relative complexity (S/M/L/XL), not time estimates.
 | [SYNC-A](#2-sync-phase-a--whole-satchel-sync) | BYO sync, phase A: whole-Satchel rclone sync + lease | L | SATCHEL |
 | [OPLOG](#3-oplog-shadow-write--replay-and-diff) | Oplog shadow-write + replay-and-diff harness | L | SATCHEL |
 | [SYNC-B](#4-sync-phase-b--oplog-as-canonical) | BYO sync, phase B: oplog becomes canonical | XL | SYNC-A, OPLOG |
-| [STANDDOWN](#51-standdown--act-on-a-lost-lease) | Stand down when the lease is lost | S | SYNC-A |
+| [STANDDOWN](#51-standdown--act-on-a-lost-lease-shipped) | Stand down when the lease is lost _(shipped)_ | S | SYNC-A |
 | [YIELD](#52-yield--release-the-lease-on-idle-lock-and-sleep) | Release the lease on idle, lock and sleep | M | STANDDOWN |
-| [HANDOFF](#53-handoff--ask-the-holder-to-let-go) | Ask the holder to let go (remote request file) | M | STANDDOWN, YIELD |
-| [STAGEDPUSH](#54-stagedpush--make-the-remote-switchover-the-commit) | Make the remote switchover the commit point | M | SYNC-A |
+| [HANDOFF](#53-handoff--ask-the-holder-to-let-go) | Ask the holder to let go (remote request file + Notify) | M | STANDDOWN, YIELD |
+| [STAGEDPUSH](#54-stagedpush--make-the-remote-switchover-the-commit-point) | Make the remote switchover the commit point | M | SYNC-A |
+| [COPY](#55-copy--how-the-take-over-is-described) | Take-over wording and vocabulary rules | S | STANDDOWN |
 
 **Sequencing.** SATCHEL ships alone. SYNC-A and OPLOG ship together in the next
 release — the oplog is written but not yet trusted. SYNC-B flips the switch only
@@ -504,18 +505,43 @@ the arriving device knows it wants in. Polling harder was considered and
 rejected as the primary mechanism — each poll is an rclone spawn plus an
 authenticated round trip, and some backends meter transactions.
 
-### 5.1 STANDDOWN — act on a lost lease
+### 5.1 STANDDOWN — act on a lost lease *(shipped)*
 
-**Prerequisite for the rest of this track.** Today the heartbeat detects that
-another device took the lease and sets `lostLease` in
-[syncSession.tsx](../src/state/syncSession.tsx) — and **nothing reads it**. The
-app keeps accepting edits and will push over the new holder on close, so the
-existing take-over path is effectively decorative.
+**Shipped 2026-08-13 (#2).** Prerequisite for the rest of this track.
+
+The heartbeat detected that another device took the lease, set `lostLease` in
+[syncSession.tsx](../src/state/syncSession.tsx) — and **nothing read it**. The
+app kept accepting edits and would push over the new holder on close, so the
+existing take-over path was effectively decorative.
 
 - On losing the lease: drop the session to read-only and say so plainly.
 - Never push after losing the lease. Offer to preserve unsynced local work as a
   conflict Satchel instead — the mechanism §2 already defines.
 - Re-acquiring is an explicit user action, not automatic, in this task.
+
+**A refuted premise worth keeping.** The brief assumed a false heartbeat meant
+"taken over". It did not: an **absent** lease also returned false, and
+`sync_now` releases the lease when it finishes. Wiring read-only to that boolean
+would have dropped the user into read-only after **every successful sync**. The
+heartbeat now returns a three-way `Standing` — `Ours`, `Vacant`, `TakenOver` —
+and only `TakenOver` stands the session down. A transport failure stays an
+`Err`, so a dropped connection never means read-only.
+
+**`Standing::Vacant` is YIELD's trigger.** A vacant lease is the ordinary state
+between syncs; §5.2's optimistic re-acquire is exactly the case of finding
+`Vacant` and quietly taking it back.
+
+**Deliberately left open:** local structural edits (create/rename/delete section
+or page, attachments) still write while stood down. Nothing reaches the remote
+except through the guarded push, and the generation check turns divergence into
+a conflict Satchel. Page editing is continuous and is where "silently unable to
+save" bites; structural edits are discrete. Revisit only if it bites in practice.
+
+**Residual, recorded not hidden:** the push guard is enforced by a `PushPermit`
+token the pusher cannot fabricate, which closes "the guard's answer was
+discarded" at compile time. It does **not** close "the guard was asked about the
+wrong state". Closing that needs a mock `AppHandle` or a binary-level
+integration test; judged bigger than the fix. On the punchlist.
 
 ### 5.2 YIELD — release the lease on idle, lock and sleep
 
@@ -548,6 +574,14 @@ already doing, finishes its sync, and releases.
   are not about to switch, so poll slowly; idle or unfocused means poll quickly.
   YIELD naturally bounds how long the fast window lasts.
 
+**Notify is a button, not just a mechanism.** Word 97 solved this exact problem
+against a dumb SMB share with no server arbitration — our constraint precisely —
+with a **File In Use** dialog offering *Read Only / Notify / Cancel*, where
+**Notify** polled the lock and told you the moment the file came free. Adopt it:
+asking to be notified is an explicit user action, not silent background
+behaviour. That also settles the polling-cost argument — poll quickly **because
+the user asked**, and only then.
+
 ### 5.4 STAGEDPUSH — make the remote switchover the commit point
 
 `push` transfers with `rclone sync` **in place** and writes the generation
@@ -558,6 +592,32 @@ app mid-sync leaves both local and remote openable" is believed **not met**.
 
 Stage into a generation-scoped path and let the marker flip be the only commit —
 a single small-file write, atomic on every supported backend.
+
+### 5.5 COPY — how the take-over is described
+
+Settled 2026-08-13 after seeing the shipped bar in the app. The original text
+read as an apology: three separate reassurances for one situation.
+
+> **This Satchel is open on DESKTOP-01.** Editing is paused here.
+> **[ Save a copy here ]  [ Take over ]**
+
+- **Name the machine.** "Open elsewhere" tells the user they are blocked and
+  refuses to say by what.
+- **One reassurance, not three.** Drop "nothing will be sent to your storage" —
+  that is mechanism, not comfort.
+- **"Take over" matches the shipped dialog** in
+  [SyncSettings.tsx](../src/components/settings/SyncSettings.tsx) ("Take over
+  anyway?", title "Satchel in use"). One word per action across the product.
+- Rejected: *Fork from here* (developer vocabulary; does not say what is copied
+  or where it lands) and *Transfer session* ("session" is our word, and it is
+  directionally ambiguous on the one button that evicts another machine).
+
+**Vocabulary rules.** User-facing: *open on*, *paused*, *take over*, *a copy of
+your unsent changes*. Never in the UI: *lease*, *heartbeat*, *stand down*,
+*generation*, *conflict Satchel* — "conflict" makes people think they broke
+something. The backend error string should be brought onto the same wording as
+the bar rather than saying "is using this Satchel" in one place and "is open on"
+in the other.
 
 ### Exit criteria
 
@@ -596,3 +656,8 @@ a single small-file write, atomic on every supported backend.
 | 2026-08-12 | The three-device goal is served by **checkout, made fast** — not by concurrent editing. SYNC-B stays parked; §5 is what makes SYNC-A liveable. |
 | 2026-08-12 | Handoff works by the departing device **yielding on idle/lock/sleep**, not by the arriving device polling harder. Faster polling was rejected as the primary mechanism (rclone spawn + authenticated round trip per poll; some backends meter transactions); it survives only as an activity-inverse backstop in HANDOFF. |
 | 2026-08-12 | Returning to a yielded device must be optimistically writable — the lease is re-taken in the background, never blocking the first keystroke. |
+| 2026-08-13 | A heartbeat has **three** outcomes, not two: `Ours` / `Vacant` / `TakenOver`. Only `TakenOver` stands a session down; `Vacant` is ordinary (our own sync releases the lease when it finishes) and is YIELD's re-acquire trigger. A transport failure is an `Err`, never a standing — a dropped connection must not mean read-only. |
+| 2026-08-13 | While stood down, **local structural edits stay allowed** (sections, pages, attachments). Nothing reaches the remote except the guarded push, and divergence becomes a conflict Satchel. Only page editing is paused. |
+| 2026-08-13 | Take-over copy: **"This Satchel is open on DESKTOP-01. Editing is paused here."** with **[ Save a copy here ] [ Take over ]**. Name the machine — "elsewhere" tells the user they are blocked and refuses to say by what. *Fork* and *Transfer session* rejected. |
+| 2026-08-13 | UI vocabulary: *open on*, *paused*, *take over*, *a copy of your unsent changes*. Banned from the UI: *lease*, *heartbeat*, *stand down*, *generation*, *conflict Satchel*. |
+| 2026-08-13 | HANDOFF gets an explicit **Notify** button, after Word 97's *File In Use* dialog, which solved this against a dumb SMB share with no arbitration. Polling fast is justified because the user asked, not as ambient behaviour. |

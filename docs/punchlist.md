@@ -22,7 +22,8 @@ _None logged yet._
   `<button role="menuitem">` inside its parent `<button role="menuitem">`, so
   React logs "In HTML, `<button>` cannot be a descendant of `<button>`" (a
   hydration error) every time a menu with a submenu opens. See
-  [MenuBar.tsx](../src/components/MenuBar.tsx).
+  [MenuBar.tsx](../src/components/MenuBar.tsx). **Reproduced 2026-08-13** — fires
+  on the first menu open in `tauri dev`, with the full component stack.
 - [ ] React warns "flushSync was called from inside a lifecycle method. React
   cannot flush when React is already rendering." during normal editing — source
   not yet identified (suspect Tiptap).
@@ -41,6 +42,20 @@ _None logged yet._
   italic — i.e. an inline code mark rather than a block.
 
 ### Other
+
+- [ ] `package-lock.json` is stuck at `"version": "0.2.0"` while package.json,
+  Cargo.toml and tauri.conf.json are current — [bump-version.ps1](../scripts/bump-version.ps1)
+  updates three files and not the lockfile. Every `npm install` therefore dirties
+  the tree, which quietly undermines "the working tree is clean" as a check.
+- [ ] Sync: the push guard's `PushPermit` proves the guard's answer was not
+  discarded, but nothing proves it was asked about the *right* state —
+  `push_permitted(&StandDown::default(), …)` still compiles. Closing it needs a
+  mock `AppHandle` (`tauri::test`) or a binary-level integration test. Measured
+  2026-08-13: with the call site neutralised, all 145 tests still passed.
+- [ ] Sync session state `message` and `conflictCopy` are set and never read —
+  a failed `begin_session` and a conflict copy taken during the opening pull are
+  both invisible to the user. See
+  [syncSession.tsx](../src/state/syncSession.tsx).
 
 - [x] The UI is slow to draw: clicking a section takes a couple of seconds for
   the pages to come in, especially on ARM64 machines (tested on a Mac running
