@@ -13,6 +13,11 @@ import * as api from "../../data/api";
 import type { SyncStatus } from "../../data/types";
 import "./SyncSettings.css";
 
+/** The backend's refusal when another device has the Satchel — the prefix of
+ *  `sync::IN_USE_PREFIX` (src-tauri/src/sync/mod.rs). Changing either without
+ *  the other silently turns the take-over prompt into a bare error. */
+const SATCHEL_IN_USE = "This Satchel is open on";
+
 function whenLabel(iso: string | null): string {
   if (!iso) return "Never";
   const then = new Date(iso);
@@ -48,7 +53,7 @@ export function SyncSettings() {
       let report = await api.syncNow(false).catch(async (e) => {
         // Another device holds the lease; taking over is the user's call, never
         // an assumption.
-        if (!String(e).includes("is using this Satchel")) throw e;
+        if (!String(e).includes(SATCHEL_IN_USE)) throw e;
         const ok = await ask(`${String(e)}\n\nTake over anyway?`, {
           title: "Satchel in use",
           kind: "warning",

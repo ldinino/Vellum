@@ -296,6 +296,27 @@ pub fn stop(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// How the product says "another device has this Satchel"
+/// (docs/satchels-and-sync.md 5.5). The window matches on this prefix to tell a
+/// take-over apart from any other sync failure, so it is a contract: keep it in
+/// step with `SATCHEL_IN_USE` in SyncSettings.tsx.
+pub const IN_USE_PREFIX: &str = "This Satchel is open on";
+
+fn in_use(device_name: &str, consequence: &str) -> String {
+    format!("{IN_USE_PREFIX} {device_name}. {consequence}")
+}
+
+/// Refuse to touch the remote while another device has the Satchel.
+///
+/// Both the push and the opening pull go through here so there is one wording
+/// and one rule; ignoring the result is an `unused_must_use` warning.
+fn refuse_if_held(state: &lease::LeaseState, consequence: &str) -> Result<(), String> {
+    match state {
+        lease::LeaseState::Held(l) => Err(in_use(&l.device_name, consequence)),
+        lease::LeaseState::Available(_) => Ok(()),
+    }
+}
+
 /// Whether a push may leave this device.
 ///
 /// Split out from [`sync_now`] because that needs an `AppHandle`, and this is
@@ -356,13 +377,11 @@ pub async fn sync_now(app: &AppHandle, take_over: bool) -> Result<SyncReport, St
     let me = this_device(app)?;
     let now = chrono::Utc::now();
 
-    if let lease::LeaseState::Held(l) = lease::state(&env, &target, &me, now)? {
-        if !take_over {
-            return Err(format!(
-                "{} is using this Satchel right now. Syncing would risk losing their changes.",
-                l.device_name
-            ));
-        }
+    if !take_over {
+        refuse_if_held(
+            &lease::state(&env, &target, &me, now)?,
+            "Syncing now would risk losing the changes made there.",
+        )?;
     }
     lease::acquire(&env, &target, &me, now)?;
 
@@ -429,14 +448,12 @@ pub async fn begin_session(app: &AppHandle) -> Result<Option<SyncReport>, String
     let me = this_device(app)?;
     let now = chrono::Utc::now();
 
-    if let lease::LeaseState::Held(l) = lease::state(&env, &target, &me, now)? {
-        // Opening read-only would be a lie: the editor saves as you type. Better
-        // to say plainly that the other device is in charge and change nothing.
-        return Err(format!(
-            "{} is using this Satchel right now, so it hasn't been updated from the cloud.",
-            l.device_name
-        ));
-    }
+    // Opening read-only would be a lie: the editor saves as you type. Better to
+    // say plainly that the other device has it and change nothing.
+    refuse_if_held(
+        &lease::state(&env, &target, &me, now)?,
+        "It hasn't been updated from your storage.",
+    )?;
     lease::acquire(&env, &target, &me, now)?;
 
     let current = binding(app)?;
@@ -598,6 +615,23 @@ mod tests {
         let taken = standing_outcome(lease::Standing::TakenOver(lease_of("DESKTOP")), &guard);
         assert_eq!(taken.taken_over_by.as_deref(), Some("DESKTOP"));
         assert_eq!(guard.taken_over_by().as_deref(), Some("DESKTOP"));
+    }
+
+    #[test]
+    fn the_refusal_names_the_machine_in_the_wording_the_window_matches() {
+        let held = lease::LeaseState::Held(lease_of("DESKTOP-01"));
+        let refused = refuse_if_held(&held, "Editing is paused here.").expect_err("allowed");
+        assert_eq!(refused, "This Satchel is open on DESKTOP-01. Editing is paused here.");
+        // SyncSettings.tsx tells a take-over apart from any other sync failure
+        // by this prefix; the old "is using this Satchel" wording is gone.
+        assert!(refused.starts_with(IN_USE_PREFIX));
+        assert!(!refused.contains("is using this Satchel"));
+
+        // Our own lease, a stale one and no lease at all are all ordinary.
+        assert!(refuse_if_held(&lease::LeaseState::Available(None), "x").is_ok());
+        assert!(
+            refuse_if_held(&lease::LeaseState::Available(Some(lease_of("US"))), "x").is_ok()
+        );
     }
 
     #[test]
