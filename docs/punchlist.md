@@ -43,6 +43,22 @@ _None logged yet._
 
 ### Other
 
+- [ ] **Confirm on real hardware** that locking the workstation and suspending the
+  machine release the Satchel. `sync::presence` is compile-verified only — no
+  Win32 callback has ever been observed to fire. Check the remote `lease.json`
+  disappears on lock.
+- [ ] Retune `YIELD_IDLE_MS` (currently 60s) once the desk-to-laptop flip has
+  been felt a few times, and watch how often a yield fires while a browser is in
+  front of Vellum.
+- [ ] Nothing on the TypeScript side has permanent test coverage. Measured at the
+  #4 audit: mutating `msUntilYield` to ignore `focused` (yield on bare blur, the
+  one behaviour the task forbade) and mutating `SATCHEL_IN_USE` so it no longer
+  matches `IN_USE_PREFIX` both left `tsc`, `npm run build` and all 150 Rust tests
+  green. Disposable harnesses prove logic at the time and guard nothing after.
+  Deciding whether to adopt a JS test runner is the real item here.
+- [ ] `shouldYieldNow` in [yield-lease.ts](../src/lib/yield-lease.ts) is exported
+  and never called; `tsc` does not flag unused exports.
+
 - [ ] `package-lock.json` is stuck at `"version": "0.2.0"` while package.json,
   Cargo.toml and tauri.conf.json are current — [bump-version.ps1](../scripts/bump-version.ps1)
   updates three files and not the lockfile. Every `npm install` therefore dirties
