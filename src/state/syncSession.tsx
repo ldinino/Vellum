@@ -88,11 +88,14 @@ export function SyncSessionProvider({ children }: { children: ReactNode }) {
   }, [stopHeartbeat]);
 
   useEffect(() => {
+    // Above the guard on purpose: StrictMode's first cleanup sets this true,
+    // and the second mount returns early, so resetting it below would leave the
+    // session marked gone for good and never start the heartbeat.
+    goneRef.current = false;
     // React 18 mounts twice in development; taking the lease twice would be
     // harmless but the pull is not worth doing twice.
     if (started.current) return;
     started.current = true;
-    goneRef.current = false;
 
     void (async () => {
       try {
@@ -109,6 +112,9 @@ export function SyncSessionProvider({ children }: { children: ReactNode }) {
       goneRef.current = true;
       stopHeartbeat();
     };
+    // The `started` guard assumes these two are stable, as useCallback([]) makes
+    // them: give either a dependency and this effect re-runs, returns early, and
+    // the heartbeat stops for the rest of the session.
   }, [startHeartbeat, stopHeartbeat]);
 
   const preserveCopy = useCallback(async () => {
