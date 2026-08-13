@@ -151,6 +151,14 @@ export const syncRefreshLease = () => invoke<LeaseStanding>("sync_refresh_lease"
 /** Keep this session's unsynced work as a conflict Satchel; returns its path. */
 export const syncPreserveLocalCopy = () => invoke<string>("sync_preserve_local_copy");
 
+/** Push this session's work and hand the Satchel back, once this device is
+ *  clearly not in use. Quiet: it runs when nobody is watching. */
+export const syncYieldLease = () => invoke<void>("sync_yield_lease");
+
+/** Take the Satchel back after yielding it. A named `takenOverBy` means
+ *  somebody moved in while we were away. */
+export const syncResumeSession = () => invoke<LeaseStanding>("sync_resume_session");
+
 /** Take the Satchel back after standing down. Always the user's own choice. */
 export const syncTakeBack = () => invoke<void>("sync_take_back");
 

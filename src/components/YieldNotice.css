@@ -1,0 +1,11 @@
+/* Yielded-Satchel notice. Quieter than the lost-lease bar on purpose: panel
+   colours rather than warning colours, muted text, and no actions. */
+
+.v-yielded {
+  padding: var(--space-1) var(--space-3);
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface-panel);
+  color: var(--text-muted);
+  font-size: var(--text-size-small);
+  line-height: 1.45;
+}

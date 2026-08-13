@@ -66,6 +66,13 @@ windows = { version = "0.61", features = [
   "Win32_Graphics_Dxgi",
   "Win32_Graphics_Dxgi_Common",
   "Win32_Security_Cryptography",
+  # Session-lock and suspend notifications for YIELD (docs 5.2). Features on a
+  # crate already depended on, so still additive.
+  "Win32_System_LibraryLoader",
+  "Win32_System_Power",
+  "Win32_System_RemoteDesktop",
+  "Win32_System_SystemServices",
+  "Win32_UI_WindowsAndMessaging",
 ] }
 # Real Aero-style glass (Phase 9): acrylic translucency behind the title bar.
 # Windows-only so macOS/Linux CI keeps building; the call site is also

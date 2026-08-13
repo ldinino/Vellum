@@ -16,3 +16,9 @@ export const onModelProgress = (
 
 export const onOllamaLog = (cb: (line: string) => void): Promise<UnlistenFn> =>
   listen<{ line: string }>("refine://ollama-log", (e) => cb(e.payload.line));
+
+/** The workstation locked or the machine is suspending: the person has gone,
+ *  unambiguously, so the Satchel is handed back at once rather than after the
+ *  idle period (docs/satchels-and-sync.md 5.2). */
+export const onDeviceGone = (cb: () => void): Promise<UnlistenFn> =>
+  listen("sync://device-gone", () => cb());
