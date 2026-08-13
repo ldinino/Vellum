@@ -887,6 +887,21 @@ pub async fn sync_preserve_local_copy(app: AppHandle) -> Result<String, String> 
     sync::preserve_local_copy(&app).await
 }
 
+/// Hand the Satchel back once this device is clearly not in use, so the next
+/// one finds it free (docs/satchels-and-sync.md 5.2).
+#[tauri::command]
+pub async fn sync_yield_lease(app: AppHandle) -> Result<(), String> {
+    sync::yield_lease(&app).await
+}
+
+/// Take the Satchel back after yielding it. Runs in the background while the
+/// window is already accepting edits, so a named `takenOverBy` is the only
+/// thing the person ever hears about.
+#[tauri::command]
+pub async fn sync_resume_session(app: AppHandle) -> Result<sync::LeaseStanding, String> {
+    off_thread(move || sync::resume_session(&app)).await
+}
+
 /// Take the Satchel back after standing down. Always the user's own choice.
 #[tauri::command]
 pub async fn sync_take_back(app: AppHandle) -> Result<(), String> {

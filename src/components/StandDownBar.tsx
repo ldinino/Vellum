@@ -30,12 +30,12 @@ export function StandDownBar() {
     }
   }
 
-  // Taking it back is a take-over in the other direction, so it carries the
+  // Taking it over is a take-over in the other direction, so it carries the
   // same warning section 2 gives the first one.
   async function confirmTakeBack() {
     const ok = await ask(
-      `${takenOverBy} is using this Satchel right now.\n\nTaking it back means anything unsaved on that device may be lost.\n\nTake it back anyway?`,
-      { title: "Take the Satchel back", kind: "warning" },
+      `This Satchel is open on ${takenOverBy}.\n\nTaking it over means anything unsaved there may be lost.\n\nTake over anyway?`,
+      { title: "Satchel in use", kind: "warning" },
     );
     if (ok) await takeBack();
   }
@@ -43,14 +43,13 @@ export function StandDownBar() {
   return (
     <div className="v-standdown" role="status" aria-live="polite">
       <div className="v-standdown__text">
-        <strong className="v-standdown__title">{takenOverBy} is using this Satchel now.</strong>{" "}
-        Editing is paused here and nothing will be sent to your storage, so the two devices
-        can&apos;t write over each other. Your notebooks on this device are untouched.
+        <strong className="v-standdown__title">This Satchel is open on {takenOverBy}.</strong>{" "}
+        Editing is paused here.
         {preservedCopy && (
           <>
             {" "}
-            A copy of the work from this session was saved to <code>{preservedCopy}</code> — open
-            it like any other Satchel.
+            A copy of your unsent changes was saved to <code>{preservedCopy}</code> — open it
+            like any other Satchel.
           </>
         )}
         {actionError && <span className="v-standdown__error"> {actionError}</span>}
@@ -58,11 +57,11 @@ export function StandDownBar() {
       <div className="v-standdown__actions">
         {!preservedCopy && (
           <Button icon="disk" onClick={() => void run(preserveCopy)} disabled={busy}>
-            Keep a copy of this session
+            Save a copy here
           </Button>
         )}
         <Button icon="network-cloud" onClick={() => void run(confirmTakeBack)} disabled={busy}>
-          Take it back
+          Take over
         </Button>
       </div>
     </div>

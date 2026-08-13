@@ -98,6 +98,11 @@ pub fn run() {
                 Err(e) => app_log.error("app", format!("asset scope: {e}")),
             }
 
+            // Locking the workstation or suspending the machine both mean the
+            // person has gone, so the Satchel is handed back at once instead of
+            // waiting out the idle timer (docs/satchels-and-sync.md 5.2).
+            sync::presence::watch(app.handle().clone());
+
             // Load the user's saved custom dictionary into the grammar engine so
             // the very first lint already accepts their words (spec Section 10),
             // independent of when the renderer syncs.
@@ -179,6 +184,8 @@ pub fn run() {
             commands::sync_now,
             commands::sync_begin_session,
             commands::sync_refresh_lease,
+            commands::sync_yield_lease,
+            commands::sync_resume_session,
             commands::sync_preserve_local_copy,
             commands::sync_take_back,
             commands::get_app_config,

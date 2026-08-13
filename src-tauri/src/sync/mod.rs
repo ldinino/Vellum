@@ -12,6 +12,7 @@ pub mod code;
 pub mod device;
 pub mod engine;
 pub mod lease;
+pub mod presence;
 pub mod providers;
 pub mod rclone;
 pub mod remote;
@@ -296,6 +297,27 @@ pub fn stop(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// How the product says "another device has this Satchel"
+/// (docs/satchels-and-sync.md 5.5). The window matches on this prefix to tell a
+/// take-over apart from any other sync failure, so it is a contract: keep it in
+/// step with `SATCHEL_IN_USE` in SyncSettings.tsx.
+pub const IN_USE_PREFIX: &str = "This Satchel is open on";
+
+fn in_use(device_name: &str, consequence: &str) -> String {
+    format!("{IN_USE_PREFIX} {device_name}. {consequence}")
+}
+
+/// Refuse to touch the remote while another device has the Satchel.
+///
+/// Both the push and the opening pull go through here so there is one wording
+/// and one rule; ignoring the result is an `unused_must_use` warning.
+fn refuse_if_held(state: &lease::LeaseState, consequence: &str) -> Result<(), String> {
+    match state {
+        lease::LeaseState::Held(l) => Err(in_use(&l.device_name, consequence)),
+        lease::LeaseState::Available(_) => Ok(()),
+    }
+}
+
 /// Whether a push may leave this device.
 ///
 /// Split out from [`sync_now`] because that needs an `AppHandle`, and this is
@@ -356,13 +378,11 @@ pub async fn sync_now(app: &AppHandle, take_over: bool) -> Result<SyncReport, St
     let me = this_device(app)?;
     let now = chrono::Utc::now();
 
-    if let lease::LeaseState::Held(l) = lease::state(&env, &target, &me, now)? {
-        if !take_over {
-            return Err(format!(
-                "{} is using this Satchel right now. Syncing would risk losing their changes.",
-                l.device_name
-            ));
-        }
+    if !take_over {
+        refuse_if_held(
+            &lease::state(&env, &target, &me, now)?,
+            "Syncing now would risk losing the changes made there.",
+        )?;
     }
     lease::acquire(&env, &target, &me, now)?;
 
@@ -429,14 +449,12 @@ pub async fn begin_session(app: &AppHandle) -> Result<Option<SyncReport>, String
     let me = this_device(app)?;
     let now = chrono::Utc::now();
 
-    if let lease::LeaseState::Held(l) = lease::state(&env, &target, &me, now)? {
-        // Opening read-only would be a lie: the editor saves as you type. Better
-        // to say plainly that the other device is in charge and change nothing.
-        return Err(format!(
-            "{} is using this Satchel right now, so it hasn't been updated from the cloud.",
-            l.device_name
-        ));
-    }
+    // Opening read-only would be a lie: the editor saves as you type. Better to
+    // say plainly that the other device has it and change nothing.
+    refuse_if_held(
+        &lease::state(&env, &target, &me, now)?,
+        "It hasn't been updated from your storage.",
+    )?;
     lease::acquire(&env, &target, &me, now)?;
 
     let current = binding(app)?;
@@ -562,6 +580,77 @@ pub fn release_lease(app: &AppHandle) -> Result<(), String> {
     lease::release(&config.env_vars(), &config.target(), &me)
 }
 
+/// Hand the Satchel over on the way out of the room (docs 5.2).
+///
+/// The departing device knows it is being left long before the arriving one
+/// knows it wants in, so this is a final sync followed by letting go — the same
+/// thing closing the window does, minus the closing. [`sync_now`] releases the
+/// lease when it finishes, push or no push, so there is only one release path.
+pub async fn yield_lease(app: &AppHandle) -> Result<(), String> {
+    if !is_enabled(app) || load_remote(app)?.is_none() {
+        return Ok(());
+    }
+    // Already stood down: the Satchel is not ours to hand over, and the backend
+    // would refuse the push anyway.
+    if app.state::<StandDown>().taken_over_by().is_some() {
+        return Ok(());
+    }
+    sync_now(app, false).await.map(|_| ())
+}
+
+/// What to do about the lease we find on returning to a yielded device.
+#[derive(Debug, Clone, PartialEq)]
+enum Resume {
+    /// Nobody has it, it is already ours, or the holder went stale.
+    Reacquire,
+    /// Somebody moved in while we were away.
+    StandDown(lease::Lease),
+}
+
+/// Separated from the round trip so the decision is testable. Taking an absent
+/// or stale lease straight back is the entire point of yielding; finding a live
+/// holder has to land in STANDDOWN's existing path rather than fight for it.
+fn resume_action(state: lease::LeaseState) -> Resume {
+    match state {
+        lease::LeaseState::Held(l) => Resume::StandDown(l),
+        lease::LeaseState::Available(_) => Resume::Reacquire,
+    }
+}
+
+/// Take the Satchel back after yielding it.
+///
+/// Optimistic on purpose: the window never stopped accepting edits, so this
+/// runs in the background and only ever reports back. Blocking on a network
+/// round trip every time you sit down would trade one bad feeling for another.
+pub fn resume_session(app: &AppHandle) -> Result<LeaseStanding, String> {
+    let held = LeaseStanding { held: true, taken_over_by: None };
+    if !is_enabled(app) {
+        return Ok(held);
+    }
+    let Some(config) = load_remote(app)? else {
+        return Ok(held);
+    };
+    let env = config.env_vars();
+    let target = config.target();
+    let me = this_device(app)?;
+    let now = chrono::Utc::now();
+
+    match resume_action(lease::state(&env, &target, &me, now)?) {
+        Resume::Reacquire => {
+            lease::acquire(&env, &target, &me, now)?;
+            app.state::<AppLog>()
+                .info("sync", "Satchel taken back after yielding");
+            Ok(held)
+        }
+        // Route through the same mapping the heartbeat uses, so the push guard
+        // is armed the one way it is armed everywhere else.
+        Resume::StandDown(l) => Ok(standing_outcome(
+            lease::Standing::TakenOver(l),
+            &app.state::<StandDown>(),
+        )),
+    }
+}
+
 /// Version of the bundled transfer engine, for Settings ▸ About.
 pub fn support_version() -> String {
     rclone::version().unwrap_or_else(|_| "not available".into())
@@ -598,6 +687,51 @@ mod tests {
         let taken = standing_outcome(lease::Standing::TakenOver(lease_of("DESKTOP")), &guard);
         assert_eq!(taken.taken_over_by.as_deref(), Some("DESKTOP"));
         assert_eq!(guard.taken_over_by().as_deref(), Some("DESKTOP"));
+    }
+
+    #[test]
+    fn returning_takes_the_lease_back_unless_somebody_moved_in() {
+        // The ordinary case: yielding deleted our lease, so there is nothing
+        // there and we simply take it again. No prompt, no wait.
+        assert_eq!(resume_action(lease::LeaseState::Available(None)), Resume::Reacquire);
+        // Our own lease still sitting there (a yield whose release failed) and
+        // another device's stale one are both `Available` — take both back.
+        assert_eq!(
+            resume_action(lease::LeaseState::Available(Some(lease_of("US")))),
+            Resume::Reacquire
+        );
+
+        // Somebody is actually there. This must not be re-acquired: it is the
+        // take-over STANDDOWN already handles.
+        let taken = resume_action(lease::LeaseState::Held(lease_of("LAPTOP")));
+        assert_eq!(taken, Resume::StandDown(lease_of("LAPTOP")));
+
+        // And it arms the push guard through the same mapping the heartbeat
+        // uses, so a resumed session can no more push than a stood-down one.
+        let guard = StandDown::default();
+        let Resume::StandDown(l) = taken else { panic!("expected a take-over") };
+        let outcome = standing_outcome(lease::Standing::TakenOver(l), &guard);
+        assert_eq!(outcome.taken_over_by.as_deref(), Some("LAPTOP"));
+        assert!(!outcome.held);
+        assert_eq!(guard.taken_over_by().as_deref(), Some("LAPTOP"));
+        assert!(push_permitted(&guard, false).is_err(), "a resumed take-over could still push");
+    }
+
+    #[test]
+    fn the_refusal_names_the_machine_in_the_wording_the_window_matches() {
+        let held = lease::LeaseState::Held(lease_of("DESKTOP-01"));
+        let refused = refuse_if_held(&held, "Editing is paused here.").expect_err("allowed");
+        assert_eq!(refused, "This Satchel is open on DESKTOP-01. Editing is paused here.");
+        // SyncSettings.tsx tells a take-over apart from any other sync failure
+        // by this prefix; the old "is using this Satchel" wording is gone.
+        assert!(refused.starts_with(IN_USE_PREFIX));
+        assert!(!refused.contains("is using this Satchel"));
+
+        // Our own lease, a stale one and no lease at all are all ordinary.
+        assert!(refuse_if_held(&lease::LeaseState::Available(None), "x").is_ok());
+        assert!(
+            refuse_if_held(&lease::LeaseState::Available(Some(lease_of("US"))), "x").is_ok()
+        );
     }
 
     #[test]
