@@ -41,12 +41,12 @@ pub fn notebooks_json_path(app: &AppHandle) -> Result<PathBuf, String> {
 
 /// Diagnostic log file: `%LOCALAPPDATA%\Vellum\logs\vellum.log` — machine-local,
 /// never OneDrive-synced (sits alongside the runtime, not under Documents).
+///
+/// Routed through `satchel::machine_dir` rather than `local_data_dir` so the
+/// debug-only machine-dir override moves it too: two processes sharing one
+/// rotating log would make the evidence useless (docs 5.6).
 pub fn log_file_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let local = app
-        .path()
-        .local_data_dir()
-        .map_err(|e| format!("cannot resolve local data directory: {e}"))?;
-    Ok(local.join("Vellum").join("logs").join("vellum.log"))
+    Ok(satchel::machine_dir(app)?.join("logs").join("vellum.log"))
 }
 
 /// Directory holding one notebook's `notebook.db` and `attachments\`.
