@@ -21,6 +21,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import * as api from "../data/api";
 import { onDeviceGone } from "../data/events";
 import { devIntervalMs } from "../lib/dev-tuning";
+import { heldDeviceFrom } from "../lib/satchel-held";
 import { msUntilYield, YIELD_IDLE_MS } from "../lib/yield-lease";
 
 export interface SyncSessionState {
@@ -28,6 +29,10 @@ export interface SyncSessionState {
   conflictCopy: string | null;
   /** Why the session couldn't start — usually another device holding it. */
   message: string | null;
+  /** The device that already had the Satchel when this window opened. Set means
+   *  the opening pull was refused, so nothing was taken and what is on screen is
+   *  whatever this device last had — read-only until the user decides. */
+  heldBy: string | null;
   /** The device that took the Satchel over while we were open. Set means this
    *  session has stood down: read-only, and the backend refuses to push. */
   takenOverBy: string | null;
@@ -48,6 +53,7 @@ export interface SyncSessionState {
 const SyncSessionContext = createContext<SyncSessionState>({
   conflictCopy: null,
   message: null,
+  heldBy: null,
   takenOverBy: null,
   yielded: false,
   preservedCopy: null,
@@ -68,6 +74,7 @@ const YIELD_MS = devIntervalMs("VITE_VELLUM_YIELD_IDLE_MS", YIELD_IDLE_MS);
 export function SyncSessionProvider({ children }: { children: ReactNode }) {
   const [conflictCopy, setConflictCopy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [heldBy, setHeldBy] = useState<string | null>(null);
   const [takenOverBy, setTakenOverBy] = useState<string | null>(null);
   const [yielded, setYielded] = useState(false);
   const [preservedCopy, setPreservedCopy] = useState<string | null>(null);
@@ -83,6 +90,8 @@ export function SyncSessionProvider({ children }: { children: ReactNode }) {
   const yieldedRef = useRef(false);
   const takenOverRef = useRef<string | null>(null);
   takenOverRef.current = takenOverBy;
+  const heldRef = useRef<string | null>(null);
+  heldRef.current = heldBy;
   // One handover at a time: yielding is a full sync, and overlapping it with a
   // re-acquire would race for the same lease file.
   const busyRef = useRef(false);
@@ -130,7 +139,12 @@ export function SyncSessionProvider({ children }: { children: ReactNode }) {
         if (goneRef.current || !report) return;
         if (report.conflictCopy) setConflictCopy(report.conflictCopy);
       } catch (e) {
-        if (!goneRef.current) setMessage(String(e));
+        if (goneRef.current) return;
+        setMessage(String(e));
+        // The one refusal the user can act on: another device has it. Anything
+        // else is a network or configuration failure, which must not make the
+        // window read-only.
+        setHeldBy(heldDeviceFrom(String(e)));
       }
       startHeartbeat();
     })();
@@ -155,10 +169,22 @@ export function SyncSessionProvider({ children }: { children: ReactNode }) {
 
   const takeBack = useCallback(async () => {
     setActionError(null);
+    const arriving = heldRef.current !== null;
     try {
       await api.syncTakeBack();
       setTakenOverBy(null);
       takenOverRef.current = null;
+      if (arriving) {
+        // We never got the opening pull, so the Satchel on this disk is still
+        // whatever this device last had. Now that the lease is ours, run the
+        // same opening sequence properly: it preserves any local work it is
+        // about to replace, then pulls. Reloading afterwards is what makes the
+        // window show the pulled Satchel rather than the stale one it opened
+        // with — every list and every open page was read before the pull.
+        await api.syncBeginSession();
+        window.location.reload();
+        return;
+      }
       // We hold the lease again, so it has to be kept alive again.
       startHeartbeat();
     } catch (e) {
@@ -172,8 +198,9 @@ export function SyncSessionProvider({ children }: { children: ReactNode }) {
   // backstop, exactly as it was before.
   const handOver = useCallback(async () => {
     if (goneRef.current || yieldedRef.current || busyRef.current) return;
-    // Standing down already means it isn't ours to hand over.
-    if (takenOverRef.current) return;
+    // Standing down already means it isn't ours to hand over, and neither is a
+    // Satchel we were refused on arrival.
+    if (takenOverRef.current || heldRef.current) return;
     busyRef.current = true;
     try {
       await api.syncYieldLease();
@@ -291,6 +318,7 @@ export function SyncSessionProvider({ children }: { children: ReactNode }) {
   const value: SyncSessionState = {
     conflictCopy,
     message,
+    heldBy,
     takenOverBy,
     yielded,
     preservedCopy,

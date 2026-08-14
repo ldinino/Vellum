@@ -166,10 +166,12 @@ export function PageEditor({
   const { actions, refineEnabled, refineTemplates, refineAdherence, attachmentsRefreshTick, proofing } =
     useVellum();
   const { setActiveEditor } = useActiveEditor();
-  // Another device took the Satchel over: keep accepting nothing rather than
-  // collecting edits this device can never send (docs/satchels-and-sync.md 5.1).
-  const { takenOverBy } = useSyncSession();
-  const readOnly = takenOverBy !== null;
+  // Another device has the Satchel — it took it over while we were open, or it
+  // already had it when we opened. Either way, keep accepting nothing rather
+  // than collecting edits this device can never send
+  // (docs/satchels-and-sync.md 5.1, 5.5).
+  const { takenOverBy, heldBy } = useSyncSession();
+  const readOnly = takenOverBy !== null || heldBy !== null;
   const [title, setTitle] = useState(page.title);
   const titleRef = useRef<HTMLInputElement>(null);
   const loadingRef = useRef(true);
