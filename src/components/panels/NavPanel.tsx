@@ -5,6 +5,7 @@ import { Icon } from "../ui/Icon";
 import { EditableLabel } from "../ui/EditableLabel";
 import { ContextMenu, MenuItem } from "../ui/ContextMenu";
 import { useVellum } from "../../state/vellum";
+import { useSyncSession } from "../../state/syncSession";
 import { DEFAULT_NOTEBOOK_COLOR, DEFAULT_SECTION_COLOR } from "../../data/palette";
 import { buildSectionMenu, colorSubmenu } from "./sectionMenu";
 import { useReorderDrag } from "../useReorderDrag";
@@ -35,6 +36,10 @@ export function NavPanel({
 }: NavPanelProps) {
   const { notebooks, selectedNotebookId, selectedSectionId, recycleBinCount, actions } =
     useVellum();
+  // Another device has the Satchel: it can be read and navigated, not changed
+  // (docs/satchels-and-sync.md 5.7). The backend refuses these edits regardless;
+  // disabling them here is so the user sees why.
+  const { readOnly } = useSyncSession();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
 
@@ -69,6 +74,7 @@ export function NavPanel({
     {
       label: "Add Section",
       icon: "folder--plus",
+      disabled: readOnly,
       onSelect: async () => {
         if (collapsed) {
           onToggle();
@@ -82,6 +88,7 @@ export function NavPanel({
     {
       label: "Rename",
       icon: "card--pencil",
+      disabled: readOnly,
       onSelect: () => {
         if (collapsed) onToggle();
         setEditingId(nbId);
@@ -90,6 +97,7 @@ export function NavPanel({
     {
       label: "Change color",
       icon: "edit-color",
+      disabled: readOnly,
       submenu: colorSubmenu(color, (c) => actions.setNotebookColor(nbId, c)),
       separatorAfter: true,
     },
@@ -97,6 +105,7 @@ export function NavPanel({
       label: "Delete Notebook",
       icon: "cross",
       danger: true,
+      disabled: readOnly,
       // Recoverable via the Recycle Bin (spec Section 5.1) — no confirmation.
       onSelect: () => actions.deleteNotebook(nbId),
     },
@@ -109,7 +118,7 @@ export function NavPanel({
       label: "Empty Recycle Bin",
       icon: "broom",
       danger: true,
-      disabled: recycleBinCount === 0,
+      disabled: readOnly || recycleBinCount === 0,
       onSelect: confirmEmptyBin,
     },
   ];
@@ -174,6 +183,7 @@ export function NavPanel({
       <div className="v-nav__header">
         <Button
           icon="book--plus"
+          disabled={readOnly}
           onClick={async () => {
             const nb = await actions.createNotebook("New Notebook");
             if (nb) {
@@ -231,12 +241,12 @@ export function NavPanel({
           >
             <div
               className="v-nav__notebook"
-              draggable={editingId !== nb.id}
+              draggable={!readOnly && editingId !== nb.id}
               onDragStart={(e) => nbDnd.onItemDragStart(e, nb.id)}
               onDragEnd={nbDnd.onItemDragEnd}
               onClick={() => actions.toggleNotebook(nb.id)}
               onKeyDown={(e) => {
-                if (e.key === "F2") {
+                if (e.key === "F2" && !readOnly) {
                   e.preventDefault();
                   setEditingId(nb.id);
                 }
@@ -270,7 +280,7 @@ export function NavPanel({
                     s.id === secDnd.draggingId ? "v-nav__section--dragging" : "",
                     secDnd.dropClass(s.id),
                   ].join(" ")}
-                  draggable={editingId !== s.id}
+                  draggable={!readOnly && editingId !== s.id}
                   onDragStart={(e) => {
                     e.stopPropagation();
                     secDnd.onItemDragStart(e, s.id, nb.id);
@@ -278,7 +288,7 @@ export function NavPanel({
                   onDragEnd={secDnd.onItemDragEnd}
                   onClick={() => actions.selectSection(nb.id, s.id)}
                   onKeyDown={(e) => {
-                    if (e.key === "F2") {
+                    if (e.key === "F2" && !readOnly) {
                       e.preventDefault();
                       setEditingId(s.id);
                     }
@@ -293,6 +303,7 @@ export function NavPanel({
                         actions,
                         onRename: () => setEditingId(s.id),
                         onOpenProperties: () => onOpenSectionProperties(nb.id, s.id),
+                        readOnly,
                       }),
                     )
                   }

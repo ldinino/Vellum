@@ -31,6 +31,8 @@ export interface SectionMenuDeps {
   /** Start inline rename of the section label. */
   onRename: () => void;
   onOpenProperties: () => void;
+  /** Another device has the Satchel: nothing here may change it (docs 5.7). */
+  readOnly?: boolean;
 }
 
 export function buildSectionMenu({
@@ -39,18 +41,21 @@ export function buildSectionMenu({
   actions,
   onRename,
   onOpenProperties,
+  readOnly = false,
 }: SectionMenuDeps): MenuItem[] {
   const { id, name, color, pageTemplateId } = section;
   return [
     {
       label: "Add Page",
       icon: "document--plus",
+      disabled: readOnly,
       onSelect: () => actions.createPage(notebookId, id),
     },
-    { label: "Rename", icon: "card--pencil", onSelect: onRename },
+    { label: "Rename", icon: "card--pencil", disabled: readOnly, onSelect: onRename },
     {
       label: "Change color",
       icon: "edit-color",
+      disabled: readOnly,
       // Preserve the section's page-template assignment — update_section writes
       // every column, so passing null here would silently clear it.
       submenu: colorSubmenu(color, (c) =>
@@ -60,6 +65,7 @@ export function buildSectionMenu({
     {
       label: "Properties…",
       icon: "gear",
+      disabled: readOnly,
       onSelect: onOpenProperties,
       separatorAfter: true,
     },
@@ -67,6 +73,7 @@ export function buildSectionMenu({
       label: "Delete Section",
       icon: "cross",
       danger: true,
+      disabled: readOnly,
       // Recoverable via the Recycle Bin (spec Section 5.1) — no confirmation.
       onSelect: () => actions.deleteSection(notebookId, id),
     },

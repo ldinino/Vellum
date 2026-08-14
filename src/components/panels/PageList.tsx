@@ -3,6 +3,7 @@ import { Button } from "../ui/Button";
 import { EditableLabel } from "../ui/EditableLabel";
 import { ContextMenu, MenuItem } from "../ui/ContextMenu";
 import { useVellum } from "../../state/vellum";
+import { useSyncSession } from "../../state/syncSession";
 import { DEFAULT_SECTION_COLOR } from "../../data/palette";
 import type { PageSortDir, PageSortMode } from "../../data/types";
 import { useReorderDrag } from "../useReorderDrag";
@@ -26,6 +27,9 @@ export function PageList() {
     selectedPageId,
     actions,
   } = useVellum();
+  // Another device has the Satchel (docs 5.7): pages can be opened, not made,
+  // renamed, duplicated, moved, reordered or deleted.
+  const { readOnly } = useSyncSession();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
 
@@ -58,7 +62,7 @@ export function PageList() {
   const sortMode: PageSortMode = section?.pageSortMode ?? "custom";
   const sortDir: PageSortDir = section?.pageSortDir ?? "asc";
   // Drag-to-reorder only makes sense for the manual ("custom") order.
-  const dragEnabled = sortMode === "custom";
+  const dragEnabled = sortMode === "custom" && !readOnly;
 
   const openMenu = (e: React.MouseEvent, items: MenuItem[]) => {
     e.preventDefault();
@@ -72,40 +76,47 @@ export function PageList() {
     const setDir = (dir: PageSortDir) =>
       actions.setSectionSort(notebookId, sectionId, sortMode, dir);
     return [
-      { label: "Manual order", checked: sortMode === "custom", onSelect: () => setMode("custom") },
-      { label: "Date created", checked: sortMode === "created", onSelect: () => setMode("created") },
+      { label: "Manual order", checked: sortMode === "custom", disabled: readOnly, onSelect: () => setMode("custom") },
+      { label: "Date created", checked: sortMode === "created", disabled: readOnly, onSelect: () => setMode("created") },
       {
         label: "Date modified",
         checked: sortMode === "modified",
+        disabled: readOnly,
         onSelect: () => setMode("modified"),
         separatorAfter: true,
       },
       {
         label: "Ascending",
         checked: sortDir === "asc",
-        disabled: sortMode === "custom",
+        disabled: readOnly || sortMode === "custom",
         onSelect: () => setDir("asc"),
       },
       {
         label: "Descending",
         checked: sortDir === "desc",
-        disabled: sortMode === "custom",
+        disabled: readOnly || sortMode === "custom",
         onSelect: () => setDir("desc"),
       },
     ];
   };
 
   const pageMenu = (pageId: string): MenuItem[] => [
-    { label: "Rename", icon: "card--pencil", onSelect: () => setEditingId(pageId) },
+    {
+      label: "Rename",
+      icon: "card--pencil",
+      disabled: readOnly,
+      onSelect: () => setEditingId(pageId),
+    },
     {
       label: "Duplicate",
       icon: "documents-stack",
+      disabled: readOnly,
       onSelect: () => actions.duplicatePage(notebookId, pageId),
     },
     {
       label: "Move to section",
       icon: "blue-folder",
-      disabled: otherSections.length === 0,
+      disabled: readOnly || otherSections.length === 0,
       submenu: otherSections.map((s) => ({
         label: s.name,
         // Color chip matching the section's square in the notebook tree
@@ -119,6 +130,7 @@ export function PageList() {
       label: "Delete Page",
       icon: "cross",
       danger: true,
+      disabled: readOnly,
       // Recoverable via the Recycle Bin (spec Section 5.1) — no confirmation.
       onSelect: () => actions.deletePage(notebookId, pageId),
     },
@@ -127,7 +139,11 @@ export function PageList() {
   return (
     <div className="v-pagelist">
       <div className="v-pagelist__header">
-        <Button icon="document--plus" onClick={() => actions.createPage(notebookId, sectionId)}>
+        <Button
+          icon="document--plus"
+          disabled={readOnly}
+          onClick={() => actions.createPage(notebookId, sectionId)}
+        >
           New Page
         </Button>
         <Button
@@ -163,7 +179,7 @@ export function PageList() {
             onDragEnd={dnd.onItemDragEnd}
             onClick={() => actions.selectPage(p.id)}
             onKeyDown={(e) => {
-              if (e.key === "F2") {
+              if (e.key === "F2" && !readOnly) {
                 e.preventDefault();
                 setEditingId(p.id);
               }
