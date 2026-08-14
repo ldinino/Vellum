@@ -71,6 +71,12 @@ const HEARTBEAT_MS = devIntervalMs("VITE_VELLUM_HEARTBEAT_MS", 4 * 60 * 1000);
 /** The yield rule's own default, shortened only by the debug-only rig. */
 const YIELD_MS = devIntervalMs("VITE_VELLUM_YIELD_IDLE_MS", YIELD_IDLE_MS);
 
+/** Where a preserved-copy path waits while the window reloads onto the Satchel
+ *  it has just pulled. Session storage rather than local: it belongs to this
+ *  window's life, and a path that outlived the app would resurface days later
+ *  attached to nothing. */
+const CARRIED_COPY_KEY = "vellum.preservedCopyAcrossReload";
+
 export function SyncSessionProvider({ children }: { children: ReactNode }) {
   const [conflictCopy, setConflictCopy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -134,6 +140,13 @@ export function SyncSessionProvider({ children }: { children: ReactNode }) {
     started.current = true;
 
     void (async () => {
+      // A take-over on arrival pulls and then reloads, which throws away the
+      // report that named the copy it preserved. Pick it up on the way back in.
+      const carried = sessionStorage.getItem(CARRIED_COPY_KEY);
+      if (carried) {
+        sessionStorage.removeItem(CARRIED_COPY_KEY);
+        setConflictCopy(carried);
+      }
       try {
         const report = await api.syncBeginSession();
         if (goneRef.current || !report) return;
@@ -181,7 +194,10 @@ export function SyncSessionProvider({ children }: { children: ReactNode }) {
         // about to replace, then pulls. Reloading afterwards is what makes the
         // window show the pulled Satchel rather than the stale one it opened
         // with — every list and every open page was read before the pull.
-        await api.syncBeginSession();
+        const report = await api.syncBeginSession();
+        // The reload is about to wipe this state, and this is the one thing in
+        // it the person still needs: where the work they did here was put.
+        if (report?.conflictCopy) sessionStorage.setItem(CARRIED_COPY_KEY, report.conflictCopy);
         window.location.reload();
         return;
       }

@@ -18,6 +18,7 @@ import { FirstRunModal } from "./settings/FirstRunModal";
 import { SatchelProblemModal } from "./settings/SatchelProblemModal";
 import { ClosingSync } from "./ClosingSync";
 import { StandDownBar } from "./StandDownBar";
+import { PreservedCopyNotice } from "./PreservedCopyNotice";
 import { YieldNotice } from "./YieldNotice";
 import { useSyncSession } from "../state/syncSession";
 import { AppContextMenus } from "./AppContextMenus";
@@ -238,6 +239,7 @@ export function VellumShell() {
       />
       <TopToolbar />
       <StandDownBar />
+      <PreservedCopyNotice />
       <YieldNotice />
 
       {error && (

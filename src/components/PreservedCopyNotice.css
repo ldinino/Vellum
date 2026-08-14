@@ -1,0 +1,16 @@
+/* Preserved-copy notice. The lost-lease bar's colours, because it carries the
+   same kind of news, but no actions: there is nothing to decide, only somewhere
+   to look. */
+
+.v-preserved {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--notice-warn-border);
+  background: var(--notice-warn-bg);
+  color: var(--notice-warn-text);
+  font-size: var(--text-size-small);
+  line-height: 1.45;
+}
+
+.v-preserved code {
+  overflow-wrap: anywhere;
+}
