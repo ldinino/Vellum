@@ -19,6 +19,7 @@ item ships. Sizes are relative complexity (S/M/L/XL), not time estimates.
 | [HANDOFF](#53-handoff--ask-the-holder-to-let-go) | Ask the holder to let go (remote request file + Notify) | M | STANDDOWN, YIELD |
 | [STAGEDPUSH](#54-stagedpush--make-the-remote-switchover-the-commit-point) | Make the remote switchover the commit point | M | SYNC-A |
 | [COPY](#55-copy--how-the-take-over-is-described) | Take-over wording and vocabulary rules _(shipped)_ | S | STANDDOWN |
+| [LOCKALL](#57-lockall--read-only-means-read-only) | Refuse structural edits too while another device holds it | M | SILENTHOLD |
 | [TWOPROC](#56-twoproc--two-instances-on-one-machine) | Two instances on one machine, to observe any of this | M | YIELD |
 
 **Sequencing.** SATCHEL ships alone. SYNC-A and OPLOG ship together in the next
@@ -535,11 +536,13 @@ and only `TakenOver` stands the session down. A transport failure stays an
 between syncs; §5.2's optimistic re-acquire is exactly the case of finding
 `Vacant` and quietly taking it back.
 
-**Deliberately left open:** local structural edits (create/rename/delete section
-or page, attachments) still write while stood down. Nothing reaches the remote
-except through the guarded push, and the generation check turns divergence into
-a conflict Satchel. Page editing is continuous and is where "silently unable to
-save" bites; structural edits are discrete. Revisit only if it bites in practice.
+**Reversed 2026-08-14 — see §5.7 LOCKALL.** This was left open on the reasoning
+that page editing is continuous and structural edits are discrete. That misses
+where the data goes: a section made while another device holds the Satchel is
+written locally, and the next pull preserves it into a *sibling Satchel*. The
+user asked for a section and got a second Satchel. Worse, a window that refuses
+every keystroke but happily creates pages reads as broken, not as protected.
+Read-only now means read-only.
 
 **Residual, recorded not hidden:** the push guard is enforced by a `PushPermit`
 token the pusher cannot fabricate, which closes "the guard's answer was
@@ -755,6 +758,44 @@ has been. Also rejected: a switch that disables StrictMode from inside shipped
 `main.tsx`, which buys nothing over the recipe above and puts a test hook in
 production code.
 
+### 5.7 LOCKALL — read-only means read-only
+
+**Reverses the 2026-08-13 "structural edits stay allowed" decision.**
+
+Today, while another device holds the Satchel, the only gates are in
+[PageEditor.tsx](../src/components/editor/PageEditor.tsx): the editor body and
+the page title. Nothing in the nav panel, section tabs, page list, menu bar or
+the `vellum.tsx` actions consults the sync session — so **new notebooks,
+sections and pages, and every rename, delete, move and reorder, still go
+through.**
+
+Two reasons that is wrong, and the first is the one that matters:
+
+- **The data has nowhere good to go.** A section created while held is written
+  to the local Satchel. On take-over, the opening pull preserves the local state
+  into a sibling folder and pulls the holder's. So the section survives — inside
+  a second Satchel the user never asked for. Every path ends in a fork.
+- **It reads as broken.** A window that refuses every keystroke but happily
+  creates a page looks like a bug, not a safeguard. "Editing is paused here" has
+  to mean what it says.
+
+**The obstacle, and why this was deferred.** `VellumProvider` wraps
+`SyncSessionProvider` in [App.tsx](../src/App.tsx), so the mutating actions in
+`vellum.tsx` cannot read the sync session as things stand.
+
+**Direction: guard in the backend, not only the UI** — the same call made for
+the push guard in §5.1, and for the same reason. The `StandDown` state already
+lives in Rust; the mutating Tauri commands can refuse against it, which also
+avoids reordering providers. That needs the backend to know about the *arrival*
+case as well, which today is derived on the frontend by parsing an error string
+([satchel-held.ts](../src/lib/satchel-held.ts)) — arming the Rust guard on the
+arrival refusal too would make one source of truth out of two.
+
+The UI should still disable the affordances, so the user sees why rather than
+meeting a refusal. Backend for correctness, UI for feel.
+
+**Attachments count as structural edits** and go the same way.
+
 ### Exit criteria
 
 - Losing the lease makes the session read-only and prevents any later push.
@@ -792,7 +833,8 @@ production code.
 | 2026-08-12 | Handoff works by the departing device **yielding on idle/lock/sleep**, not by the arriving device polling harder. Faster polling was rejected as the primary mechanism (rclone spawn + authenticated round trip per poll; some backends meter transactions); it survives only as an activity-inverse backstop in HANDOFF. |
 | 2026-08-12 | Returning to a yielded device must be optimistically writable — the lease is re-taken in the background, never blocking the first keystroke. |
 | 2026-08-13 | A heartbeat has **three** outcomes, not two: `Ours` / `Vacant` / `TakenOver`. Only `TakenOver` stands a session down; `Vacant` is ordinary (our own sync releases the lease when it finishes) and is YIELD's re-acquire trigger. A transport failure is an `Err`, never a standing — a dropped connection must not mean read-only. |
-| 2026-08-13 | While stood down, **local structural edits stay allowed** (sections, pages, attachments). Nothing reaches the remote except the guarded push, and divergence becomes a conflict Satchel. Only page editing is paused. |
+| 2026-08-13 | While stood down, **local structural edits stay allowed** (sections, pages, attachments). Nothing reaches the remote except the guarded push, and divergence becomes a conflict Satchel. Only page editing is paused. **REVERSED 2026-08-14 — see below.** |
+| 2026-08-14 | **Read-only means read-only (§5.7 LOCKALL).** When another device holds the Satchel, creating and renaming and deleting notebooks, sections and pages is refused too, not just typing. The 2026-08-13 reasoning ignored the destination: a section made while held is written locally and the next pull preserves it into a sibling Satchel, so the user who asked for a section gets a second Satchel. And a window that blocks every keystroke while cheerfully making pages reads as broken rather than protected. The maintainer called it; the Head Engineer had signed off the half-measure. |
 | 2026-08-13 | Take-over copy: **"This Satchel is open on DESKTOP-01. Editing is paused here."** with **[ Save a copy here ] [ Take over ]**. Name the machine — "elsewhere" tells the user they are blocked and refuses to say by what. *Fork* and *Transfer session* rejected. |
 | 2026-08-13 | UI vocabulary: *open on*, *paused*, *take over*, *a copy of your unsent changes*. Banned from the UI: *lease*, *heartbeat*, *stand down*, *generation*, *conflict Satchel*. |
 | 2026-08-13 | HANDOFF gets an explicit **Notify** button, after Word 97's *File In Use* dialog, which solved this against a dumb SMB share with no arbitration. Polling fast is justified because the user asked, not as ambient behaviour. |
