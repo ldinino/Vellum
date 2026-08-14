@@ -270,11 +270,13 @@ pub fn preserve_conflict_copy(
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "Vellum".into());
     let stamp = now.format("%Y-%m-%d %H%M");
-    let mut dest = parent.join(format!("{name} (conflict {stamp} from {device_name})"));
-    // Two conflicts in the same minute must not merge into one folder.
+    // The folder name is something the user reads, so it says what the window
+    // says (docs 5.5) rather than what this function is called.
+    let mut dest = parent.join(format!("{name} (unsent changes {stamp} from {device_name})"));
+    // Two copies in the same minute must not merge into one folder.
     let mut n = 2;
     while dest.exists() {
-        dest = parent.join(format!("{name} (conflict {stamp} from {device_name}) {n}"));
+        dest = parent.join(format!("{name} (unsent changes {stamp} from {device_name}) {n}"));
         n += 1;
     }
     copy_dir_all(satchel_dir, &dest)
@@ -519,6 +521,16 @@ mod tests {
         let second = preserve_conflict_copy(&satchel, "LAPTOP", now).unwrap();
         assert_ne!(first, second);
         assert!(second.is_dir());
+
+        // Both spellings of the name are read by the person who finds the
+        // folder, so both say what the window says (docs 5.5).
+        for dir in [&first, &second] {
+            let shown = dir.file_name().unwrap().to_string_lossy().into_owned();
+            assert!(
+                shown.contains("(unsent changes ") && !shown.contains("conflict"),
+                "the folder the user sees is named {shown}"
+            );
+        }
 
         let _ = std::fs::remove_dir_all(parent);
     }
