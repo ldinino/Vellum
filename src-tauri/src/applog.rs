@@ -109,20 +109,14 @@ impl AppLog {
             area: area.to_string(),
             message: message.into(),
         };
+        let line = file_line(std::process::id(), &entry);
         // Echo to stderr in dev so `tauri dev` shows it inline.
         #[cfg(debug_assertions)]
-        eprintln!("[{}] {}: {}", level.label(), entry.area, entry.message);
+        eprintln!("{line}");
 
         if let Ok(mut inner) = self.inner.lock() {
             if let Some(file) = inner.file.as_mut() {
-                let _ = writeln!(
-                    file,
-                    "{} [{}] {}: {}",
-                    entry.timestamp,
-                    level.label(),
-                    entry.area,
-                    entry.message
-                );
+                let _ = writeln!(file, "{line}");
                 let _ = file.flush();
             }
             while inner.entries.len() >= MAX_ENTRIES {
@@ -172,19 +166,47 @@ impl AppLog {
             inner
                 .entries
                 .iter()
-                .map(|e| {
-                    format!(
-                        "{} [{}] {}: {}",
-                        e.timestamp,
-                        e.level.label(),
-                        e.area,
-                        e.message
-                    )
-                })
+                .map(|e| file_line(std::process::id(), e))
                 .collect::<Vec<_>>()
                 .join("\n")
         } else {
             String::new()
         }
+    }
+}
+
+/// One written log line.
+///
+/// The process id is on every line because the log is per machine directory,
+/// not per process: the two-process rig deliberately gives both instances the
+/// same directory when it is testing one device identity, and a doubled
+/// operation is then only visible if the lines say who wrote them.
+fn file_line(pid: u32, e: &LogEntry) -> String {
+    format!(
+        "{} [pid {}] [{}] {}: {}",
+        e.timestamp,
+        pid,
+        e.level.label(),
+        e.area,
+        e.message
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_line_names_the_process_that_wrote_it() {
+        let entry = LogEntry {
+            timestamp: "2026-08-13T09:00:00+01:00".into(),
+            level: Level::Warn,
+            area: "sync".into(),
+            message: "Pulled generation 3".into(),
+        };
+        assert_eq!(
+            file_line(4321, &entry),
+            "2026-08-13T09:00:00+01:00 [pid 4321] [WARN] sync: Pulled generation 3"
+        );
     }
 }
