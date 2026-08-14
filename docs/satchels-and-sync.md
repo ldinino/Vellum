@@ -374,9 +374,10 @@ which is the point).
 ### Conflicts
 
 At this granularity a conflict is a **whole-Satchel** conflict. Losing side is
-preserved as a sibling Satchel folder (`Vellum (conflict 2026-08-06 from
+preserved as a sibling Satchel folder (`Vellum (unsent changes 2026-08-06 from
 LAPTOP)`) that the user can open like any other and copy pages out of. Never
-overwrite silently.
+overwrite silently. The folder is named for what it holds, not for what went
+wrong — see §5.5.
 
 ### Warnings
 
@@ -660,6 +661,18 @@ your unsent changes*. Never in the UI: *lease*, *heartbeat*, *stand down*,
 something. The backend error string should be brought onto the same wording as
 the bar rather than saying "is using this Satchel" in one place and "is open on"
 in the other.
+
+**A folder name is UI (2026-08-14, #10).** The preserved copy is written as
+`Vellum (unsent changes <stamp> from <device>)`, not `(conflict …)`. A sentence
+scrolls away; a folder sits in Explorer permanently, so the accusation lasts
+longer there than anywhere else. Rust identifiers (`SyncOutcome::Conflict`,
+`preserve_conflict_copy`) are unaffected — the rule governs what the user reads.
+Done while sync was still gated, so no folder on any disk needed migrating.
+
+**Diagnostics are exempt.** `Conflict (local X, remote Y); local copy preserved`
+in the app log stays as it is, even though Settings ▸ About ▸ Diagnostics shows
+it. A log is a support instrument and must be exact; softening its vocabulary
+would cost precision where precision is the entire point. Do not "fix" it.
 
 **Shipped 2026-08-13 (#4).** `sync::IN_USE_PREFIX` in
 [mod.rs](../src-tauri/src/sync/mod.rs) is the single source, both refusals go
