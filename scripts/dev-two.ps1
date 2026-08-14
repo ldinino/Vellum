@@ -39,6 +39,11 @@
 .PARAMETER SeedOnly
   Write the rig files and report the paths without launching anything.
 
+.PARAMETER Force
+  Launch even though this instance already has a live process. Only for the
+  case where two processes on one device identity is the thing being studied -
+  it is otherwise a rig fault, not a scenario (docs 5.6, DOUBLEYIELD).
+
 .EXAMPLE
   pwsh ./scripts/dev-two.ps1 -Which A -Reset
   pwsh ./scripts/dev-two.ps1 -Which B
@@ -48,7 +53,8 @@
 param(
     [Parameter(Mandatory = $true)][ValidateSet('A', 'B')][string]$Which,
     [switch]$Reset,
-    [switch]$SeedOnly
+    [switch]$SeedOnly,
+    [switch]$Force
 )
 
 $ErrorActionPreference = 'Stop'
@@ -80,6 +86,33 @@ $remoteRoot = Join-Path $rig 'remote'          # stands in for the cloud provide
 $machineDir = Join-Path $rig "$Which\machine"  # VELLUM_MACHINE_DIR
 $dataDir = Join-Path $rig "$Which\data"        # the Satchel folder
 $computerName = if ($Which -eq 'A') { 'A-DESK' } else { 'B-LAPTOP' }
+$pidFile = Join-Path $machineDir 'instance.pid'
+
+# Two processes sharing one machine dir share one device identity and one log,
+# so every operation appears twice and their pushes race each other. That looked
+# exactly like an app defect once already (DOUBLEYIELD) and cost a triage cycle.
+# The pid this script writes on launch is what makes it checkable.
+function Get-LiveInstance {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) { return $null }
+    $raw = (Get-Content $Path -Raw -ErrorAction SilentlyContinue)
+    $id = 0
+    if (-not [int]::TryParse("$raw".Trim(), [ref]$id)) { return $null }
+    # A pid on its own proves nothing: Windows reuses them. It has to still be
+    # a Vellum.
+    $p = Get-Process -Id $id -ErrorAction SilentlyContinue
+    if ($p -and $p.ProcessName -eq 'vellum') { return $p }
+    return $null
+}
+
+$live = Get-LiveInstance $pidFile
+if ($live -and -not $SeedOnly) {
+    $msg = "Instance $Which is already running (pid $($live.Id), started $($live.StartTime.ToString('HH:mm:ss'))). " +
+    "A second one would share its device identity and its log, and the two would race each other's syncs. " +
+    "Close it, or pass -Force if a doubled instance is what you are testing."
+    if ($Force) { Write-Warning $msg }
+    else { throw $msg }
+}
 
 if ($Reset) {
     Remove-Item -Recurse -Force (Join-Path $rig $Which) -ErrorAction SilentlyContinue
@@ -198,6 +231,6 @@ $psi.EnvironmentVariables['COMPUTERNAME'] = $computerName
 $proc = [Diagnostics.Process]::Start($psi)
 
 # The capture helper needs to tell the two windows apart, and both processes are
-# called vellum.exe.
-Write-Utf8NoBom (Join-Path $machineDir 'instance.pid') "$($proc.Id)"
+# called vellum.exe. It is also what the duplicate-launch check above reads.
+Write-Utf8NoBom $pidFile "$($proc.Id)"
 Write-Host "  pid         : $($proc.Id)"

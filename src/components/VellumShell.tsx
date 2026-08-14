@@ -18,6 +18,7 @@ import { FirstRunModal } from "./settings/FirstRunModal";
 import { SatchelProblemModal } from "./settings/SatchelProblemModal";
 import { ClosingSync } from "./ClosingSync";
 import { StandDownBar } from "./StandDownBar";
+import { PreservedCopyNotice } from "./PreservedCopyNotice";
 import { YieldNotice } from "./YieldNotice";
 import { useSyncSession } from "../state/syncSession";
 import { AppContextMenus } from "./AppContextMenus";
@@ -53,9 +54,11 @@ export function VellumShell() {
 
   // Always-current ref to the take-over, for the same reason: the close
   // listener is registered once and must see the situation as it stands now.
-  const { takenOverBy } = useSyncSession();
+  const { takenOverBy, heldBy } = useSyncSession();
   const standDownRef = useRef<string | null>(null);
-  standDownRef.current = takenOverBy;
+  // Either way another device has the Satchel, and either way this window has
+  // nothing it is allowed to push on the way out.
+  standDownRef.current = takenOverBy ?? heldBy;
 
   // Shutdown sync (see the close handler): the window stays up until this
   // session's work has been pushed, or the user chooses to leave without it.
@@ -109,9 +112,11 @@ export function VellumShell() {
         // device. Unlike the flush above there is no timeout race: an upload
         // takes as long as it takes, so it is shown instead of hidden, and the
         // overlay offers a way out.
-        // Unless another device took the Satchel over: pushing then would write
-        // over their work. The backend refuses it anyway; asking would only be
-        // a dialog with nothing behind it.
+        // Unless another device has the Satchel: pushing then would write over
+        // their work, and an instance that was refused on arrival has nothing
+        // of theirs to push in any case. The backend refuses it anyway, and
+        // showing that refusal on the way out is a failure the person did not
+        // cause and cannot act on — it left the window unable to close.
         const synced =
           standDownRef.current === null &&
           (await api
@@ -234,6 +239,7 @@ export function VellumShell() {
       />
       <TopToolbar />
       <StandDownBar />
+      <PreservedCopyNotice />
       <YieldNotice />
 
       {error && (

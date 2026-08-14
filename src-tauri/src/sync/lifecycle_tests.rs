@@ -317,3 +317,78 @@ async fn a_taken_over_device_stands_down_and_cannot_push() {
         let _ = std::fs::remove_dir_all(d);
     }
 }
+
+/// SILENTHOLD severity: what an instance that was refused the Satchel on
+/// arrival can still do to the remote on its way out.
+///
+/// It never acquired the lease and STANDDOWN was never armed, so the push
+/// guard does not apply to it. Two things have to hold instead: the live
+/// holder blocks the push outright, and once the holder has gone the stale
+/// generation blocks it as a conflict rather than overwriting the work.
+#[tokio::test]
+async fn an_instance_refused_on_arrival_cannot_overwrite_the_holder() {
+    if skip() {
+        return;
+    }
+    let store = temp("silenthold-store");
+    let one = temp("silenthold-one");
+    let two = temp("silenthold-two");
+    make_satchel(&one, b"the holder is still writing").await;
+    make_satchel(&two, b"stale, never pulled").await;
+
+    let (p1, p2) = super::remote::generate_crypt_passwords().unwrap();
+    let config = RemoteConfig {
+        backend: "local".into(),
+        label: "Folder or network drive".into(),
+        options: BTreeMap::new(),
+        path: store.to_string_lossy().into_owned(),
+        crypt_password: p1,
+        crypt_password2: p2,
+    };
+    let env = config.env_vars();
+    let target = config.target();
+
+    let holder = device("DESKTOP");
+    let arriving = device("LAPTOP");
+    let now = chrono::Utc::now();
+
+    // The holder has the Satchel and has pushed it.
+    lease::acquire(&env, &target, &holder, now).unwrap();
+    engine::push(&env, &target, &one, 0, &holder).await.unwrap();
+
+    // The arriving instance is refused its opening pull, so its generation
+    // stays where it was: it has no idea the remote moved.
+    let state = lease::state(&env, &target, &arriving, now).unwrap();
+    let refused = super::refuse_if_held(&state, "It hasn't been updated from your storage.")
+        .expect_err("the opening pull must be refused while another device holds it");
+    assert!(refused.starts_with(super::IN_USE_PREFIX), "unexpected refusal: {refused}");
+
+    // The push it runs on close goes through the same rule, so while the
+    // holder is live nothing leaves this machine.
+    let state = lease::state(&env, &target, &arriving, now).unwrap();
+    super::refuse_if_held(&state, "Syncing now would risk losing the changes made there.")
+        .expect_err("the closing push must be refused too");
+
+    // The holder finishes and lets go. Now the lease says nothing, and only
+    // the generation stands between the stale instance and the work.
+    lease::release(&env, &target, &holder).unwrap();
+    let state = lease::state(&env, &target, &arriving, chrono::Utc::now()).unwrap();
+    super::refuse_if_held(&state, "x").expect("a released lease no longer refuses");
+    let outcome = engine::push(&env, &target, &two, 0, &arriving).await.unwrap();
+    assert!(
+        matches!(outcome, engine::SyncOutcome::Conflict { local: 0, remote: 1 }),
+        "the stale instance overwrote the remote: {outcome:?}"
+    );
+
+    let check = temp("silenthold-check");
+    engine::pull(&env, &target, &check).unwrap();
+    assert_eq!(
+        std::fs::read(check.join("nb").join("page.txt")).unwrap(),
+        b"the holder is still writing",
+        "the holder's work was overwritten"
+    );
+
+    for d in [store, one, two, check] {
+        let _ = std::fs::remove_dir_all(d);
+    }
+}
