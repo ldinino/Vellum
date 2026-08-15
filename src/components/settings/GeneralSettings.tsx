@@ -9,6 +9,7 @@
 import { Button } from "../ui/Button";
 import { useVellum } from "../../state/vellum";
 import { SatchelSettings } from "./SatchelSettings";
+import { PausedWhileHeld } from "./PausedWhileHeld";
 import "./SettingsPanels.css";
 
 const FAMILY_OPTIONS = [
@@ -64,6 +65,10 @@ export function GeneralSettings() {
 
   return (
     <div className="v-set">
+      {/* Appearance is persisted in app.json, inside the Satchel; the Satchel
+          picker below is machine-local, so it stays usable while another
+          device has this one (docs 5.7.1). */}
+      <PausedWhileHeld>
       <section className="v-set__section">
         <h3 className="v-set__heading">Appearance</h3>
         <p className="v-set__hint">
@@ -165,6 +170,7 @@ export function GeneralSettings() {
           </div>
         </section>
       )}
+      </PausedWhileHeld>
 
       <SatchelSettings />
     </div>
