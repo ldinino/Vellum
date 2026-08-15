@@ -15,6 +15,7 @@ import { ProofingSettings } from "./ProofingSettings";
 import { RefineSettings } from "./RefineSettings";
 import { SyncSettings } from "./SyncSettings";
 import { AboutSettings } from "./AboutSettings";
+import { PausedWhileHeld } from "./PausedWhileHeld";
 import * as api from "../../data/api";
 import "./SettingsModal.css";
 
@@ -86,11 +87,32 @@ export function SettingsModal({
         </nav>
         <div className="v-settings__panel">
           <ErrorBoundary label="This settings page" resetKeys={[tab]}>
+            {/* Everything these panels change is persisted in app.json, which
+                lives inside the Satchel (docs 5.7.1) — so they go inert while
+                another device has it. General wraps itself, because its Satchel
+                picker is machine-local and must stay usable. Sync and About
+                change nothing inside the Satchel. */}
             {tab === "general" && <GeneralSettings />}
-            {tab === "templates" && <PageTemplatesManager />}
-            {tab === "editor" && <EditorSettings />}
-            {tab === "proofing" && <ProofingSettings />}
-            {tab === "refine" && <RefineSettings />}
+            {tab === "templates" && (
+              <PausedWhileHeld>
+                <PageTemplatesManager />
+              </PausedWhileHeld>
+            )}
+            {tab === "editor" && (
+              <PausedWhileHeld>
+                <EditorSettings />
+              </PausedWhileHeld>
+            )}
+            {tab === "proofing" && (
+              <PausedWhileHeld>
+                <ProofingSettings />
+              </PausedWhileHeld>
+            )}
+            {tab === "refine" && (
+              <PausedWhileHeld>
+                <RefineSettings />
+              </PausedWhileHeld>
+            )}
             {tab === "sync" && syncAvailable && <SyncSettings />}
             {tab === "about" && <AboutSettings />}
           </ErrorBoundary>

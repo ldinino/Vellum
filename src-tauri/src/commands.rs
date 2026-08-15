@@ -21,10 +21,12 @@ fn master_index_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
 }
 
 /// Refuse a structural edit while another device has the Satchel
-/// (docs/satchels-and-sync.md 5.7). Every command that creates, renames, moves,
-/// reorders or deletes a notebook, section, page or attachment starts here, so
-/// the rule holds whatever route the edit came in by. The window disables the
-/// affordances as well, but that is for feel; this is what makes it true.
+/// (docs/satchels-and-sync.md 5.7, 5.7.1). Every command that creates, renames,
+/// moves, reorders or deletes a notebook, section, page or attachment starts
+/// here, as does every command that persists `app.json` — settings live inside
+/// the Satchel and travel with it. So the rule holds whatever route the edit
+/// came in by. The window disables the affordances as well, but that is for
+/// feel; this is what makes it true.
 ///
 /// Deliberately not applied to page *content* saves: the editor is already
 /// read-only, and a debounced save still in flight when the Satchel is taken
@@ -930,8 +932,12 @@ pub fn get_app_config(app: AppHandle) -> Result<AppConfig, String> {
     config::load_app_config(&app)
 }
 
+/// Persist settings. Guarded: `app.json` lives *inside* the Satchel and travels
+/// with it, so a theme or dictionary change made while another device holds it
+/// would land in the preserved fork rather than the live Satchel (docs 5.7.1).
 #[tauri::command]
 pub fn save_app_config(app: AppHandle, config: AppConfig) -> Result<(), String> {
+    refuse_when_held(&app)?;
     config::save_app_config(&app, &config)
 }
 
@@ -2447,9 +2453,11 @@ pub async fn refine_delete_model(app: AppHandle, model: String) -> Result<(), St
 
 /// Persist the Refine on/off setting and start/stop Ollama accordingly. When
 /// enabling before the runtime is installed, this is a no-op start (the install
-/// flow handles fetching it), so toggling on never errors.
+/// flow handles fetching it), so toggling on never errors. Guarded: it writes
+/// `app.json`, which is inside the Satchel (docs 5.7.1).
 #[tauri::command]
 pub async fn refine_enable(app: AppHandle, enabled: bool) -> Result<ProcessStatus, String> {
+    refuse_when_held(&app)?;
     let mut cfg = config::load_app_config(&app)?;
     cfg.settings.refine_enabled = enabled;
     config::save_app_config(&app, &cfg)?;
@@ -2527,42 +2535,82 @@ pub async fn refine_detect_hardware(
 mod tests {
     use super::*;
 
-    /// LOCKALL (docs/satchels-and-sync.md 5.7): every command that changes the
-    /// shape of the Satchel consults the held-Satchel guard.
+    /// Commands that must consult the held-Satchel guard: everything that
+    /// changes the shape of the Satchel, plus everything that persists
+    /// `app.json`, which lives inside it (docs 5.7, 5.7.1).
+    const GUARDED: &[&str] = &[
+        "save_app_config",
+        "refine_enable",
+        "create_notebook",
+        "rename_notebook",
+        "set_notebook_color",
+        "set_notebook_proofing",
+        "soft_delete_notebook",
+        "reorder_notebooks",
+        "create_section",
+        "rename_section",
+        "update_section",
+        "soft_delete_section",
+        "reorder_sections",
+        "set_section_sort",
+        "set_section_proofing",
+        "create_page",
+        "set_page_title",
+        "set_page_proofing",
+        "soft_delete_page",
+        "duplicate_page",
+        "move_page",
+        "reorder_pages",
+        "add_attachment",
+        "soft_delete_attachment",
+        "restore_item",
+        "purge_item",
+        "empty_recycle_bin",
+    ];
+
+    /// Commands whose name reads as mutating but that deliberately stay
+    /// unguarded. Each is a decision, not an oversight, so a new one has to be
+    /// argued for here rather than added silently.
+    const UNGUARDED_BY_DECISION: &[(&str, &str)] = &[
+        // The machine-local Satchel *list*, not the held Satchel's contents:
+        // making or renaming a second Satchel while a laptop has the first is
+        // legitimate (docs 5.7.1).
+        ("create_satchel", "machine-local Satchel list"),
+        ("set_active_satchel", "machine-local Satchel list"),
+        ("rename_satchel", "machine-local Satchel list"),
+        // Sync's own remote config and codes live in the machine dir.
+        ("sync_configure", "machine-local remote config"),
+        ("sync_write_connection_code", "writes a file the user picked"),
+        ("sync_apply_connection_code", "machine-local remote config"),
+        ("sync_preserve_local_copy", "the escape hatch from being held"),
+        // Page *content*, deliberately permitted: the editor is already
+        // read-only, and a debounced save still in flight when the Satchel is
+        // taken over is the unsynced work the preserved copy exists to keep.
+        ("save_page_snapshot", "content save, permitted by 5.7"),
+        ("save_page_image", "content save, permitted by 5.7"),
+        ("copy_image_to_page", "reachable only via a read-only editor"),
+        ("import_copy_external_image", "import must first call create_page"),
+        // Read-only inspection of a folder the user is importing from.
+        ("import_scan_folder", "reads only"),
+        ("import_read_file", "reads only"),
+        // Nothing inside the Satchel.
+        ("set_window_acrylic", "window chrome"),
+        ("set_dictionary_words", "in-memory Harper engine only"),
+        ("clear_app_log", "machine-local log"),
+        ("refine_delete_model", "model store outside the Satchel"),
+    ];
+
+    /// Every command on the `GUARDED` list consults the held-Satchel guard
+    /// (docs/satchels-and-sync.md 5.7, 5.7.1).
     ///
-    /// A source scan, because the alternative is a real `AppHandle`. It cannot
-    /// prove the guard is *right* — `sync::tests` does that — but it does catch
-    /// the failure this task exists to prevent: a mutating command that never
-    /// asks, whether by an edit here or by a new command added later.
+    /// A source scan, because the alternative is a real `AppHandle`. Its reach
+    /// is exactly the list above: it catches a guard being **removed** from a
+    /// listed command, and a listed command being **renamed** (an explicit
+    /// panic). It cannot prove the guard is *right* — `sync::tests` does that —
+    /// and on its own it says nothing about a command that is not on the list.
+    /// A brand-new mutating command is `every_mutating_command_is_classified`.
     #[test]
     fn every_structural_command_refuses_while_another_device_holds_the_satchel() {
-        const GUARDED: &[&str] = &[
-            "create_notebook",
-            "rename_notebook",
-            "set_notebook_color",
-            "set_notebook_proofing",
-            "soft_delete_notebook",
-            "reorder_notebooks",
-            "create_section",
-            "rename_section",
-            "update_section",
-            "soft_delete_section",
-            "reorder_sections",
-            "set_section_sort",
-            "set_section_proofing",
-            "create_page",
-            "set_page_title",
-            "set_page_proofing",
-            "soft_delete_page",
-            "duplicate_page",
-            "move_page",
-            "reorder_pages",
-            "add_attachment",
-            "soft_delete_attachment",
-            "restore_item",
-            "purge_item",
-            "empty_recycle_bin",
-        ];
         let source = include_str!("commands.rs");
         for name in GUARDED {
             let at = source
@@ -2577,6 +2625,65 @@ mod tests {
             assert!(
                 source[at..body_end].contains("refuse_when_held(&app)?"),
                 "{name} changes the Satchel without consulting the held-Satchel guard"
+            );
+        }
+    }
+
+    /// Deny by default: a command whose name reads as mutating must be either
+    /// guarded or excused in writing (docs 5.7.2).
+    ///
+    /// The list above only ever catches what is on it, so it cannot notice a
+    /// new mutating command — that is how the Settings gap (5.7.1) survived
+    /// LOCKALL. This closes it from the other side: every `#[tauri::command]`
+    /// whose name contains a mutating verb has to appear in `GUARDED` or in
+    /// `UNGUARDED_BY_DECISION`. It is a name check, so it cannot catch a
+    /// mutating command named without one of these verbs; it can catch the
+    /// ordinary case, which is what the Settings gap was.
+    #[test]
+    fn every_mutating_command_is_classified() {
+        const MUTATING_VERBS: &[&str] = &[
+            "create", "add", "rename", "set", "save", "update", "delete", "remove", "move",
+            "reorder", "duplicate", "purge", "restore", "empty", "clear", "insert", "write",
+            "copy", "import", "apply", "configure",
+        ];
+        let source = include_str!("commands.rs");
+        // Line-based on purpose: matching the attribute as a whole line skips
+        // the occurrences of it inside this file's own strings and doc comments.
+        let lines: Vec<&str> = source.lines().collect();
+        let mut commands: Vec<&str> = Vec::new();
+        for (i, line) in lines.iter().enumerate() {
+            if line.trim() != "#[tauri::command]" {
+                continue;
+            }
+            let signature = lines[i + 1..]
+                .iter()
+                .find(|l| l.contains("fn "))
+                .expect("a #[tauri::command] with no function after it");
+            let at = signature.find("fn ").unwrap() + 3;
+            let end = at + signature[at..].find('(').expect("no ( in a command signature");
+            commands.push(signature[at..end].trim());
+        }
+
+        for name in &commands {
+            let mutating = name.split('_').any(|part| MUTATING_VERBS.contains(&part));
+            if !mutating {
+                continue;
+            }
+            let classified = GUARDED.contains(name)
+                || UNGUARDED_BY_DECISION.iter().any(|(excused, _)| excused == name);
+            assert!(
+                classified,
+                "{name} reads as a mutating command but is neither guarded nor listed in \
+                 UNGUARDED_BY_DECISION — guard it, or say in writing why it does not need it"
+            );
+        }
+
+        // A stale entry on either list is a silent hole: the scan above would
+        // keep excusing a command that no longer exists under that name.
+        for name in GUARDED.iter().chain(UNGUARDED_BY_DECISION.iter().map(|(n, _)| n)) {
+            assert!(
+                commands.contains(name),
+                "{name} is listed here but is not a #[tauri::command] — rename it here too"
             );
         }
     }
