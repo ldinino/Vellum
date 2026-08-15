@@ -13,6 +13,7 @@ import { Icon } from "../ui/Icon";
 import { EditableLabel } from "../ui/EditableLabel";
 import { ContextMenu, MenuItem } from "../ui/ContextMenu";
 import { useVellum } from "../../state/vellum";
+import { useSyncSession } from "../../state/syncSession";
 import { DEFAULT_NOTEBOOK_COLOR, DEFAULT_SECTION_COLOR } from "../../data/palette";
 import { buildSectionMenu } from "./sectionMenu";
 import { useReorderDrag } from "../useReorderDrag";
@@ -30,6 +31,9 @@ export function SectionTabs({
   onOpenSectionProperties,
 }: SectionTabsProps) {
   const { notebooks, selectedNotebookId, selectedSectionId, actions } = useVellum();
+  // Another device has the Satchel (docs 5.7): sections can be switched to, not
+  // added, renamed or reordered.
+  const { readOnly } = useSyncSession();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
 
@@ -90,12 +94,12 @@ export function SectionTabs({
                 dnd.dropClass(s.id),
               ].join(" ")}
               style={{ ["--tab-color" as string]: s.color ?? DEFAULT_SECTION_COLOR }}
-              draggable={editingId !== s.id}
+              draggable={!readOnly && editingId !== s.id}
               onDragStart={(e) => dnd.onItemDragStart(e, s.id)}
               onDragEnd={dnd.onItemDragEnd}
               onClick={() => notebook && actions.selectSection(notebook.id, s.id)}
               onKeyDown={(e) => {
-                if (e.key === "F2") {
+                if (e.key === "F2" && !readOnly) {
                   e.preventDefault();
                   setEditingId(s.id);
                 }
@@ -111,6 +115,7 @@ export function SectionTabs({
                     actions,
                     onRename: () => setEditingId(s.id),
                     onOpenProperties: () => onOpenSectionProperties(notebook.id, s.id),
+                    readOnly,
                   }),
                 )
               }
@@ -135,6 +140,7 @@ export function SectionTabs({
             className="v-sectiontabs__add"
             title="New section"
             aria-label="New section"
+            disabled={readOnly}
             onClick={async () => {
               const sec = await actions.createSection(notebook.id, "New Section");
               if (sec) {

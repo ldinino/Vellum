@@ -4,6 +4,7 @@ import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { Icon } from "../ui/Icon";
 import { useVellum } from "../../state/vellum";
+import { useSyncSession } from "../../state/syncSession";
 import type { RecycleItem } from "../../data/types";
 import "./RecycleBinModal.css";
 
@@ -59,6 +60,8 @@ interface RecycleBinModalProps {
  */
 export function RecycleBinModal({ open, onClose }: RecycleBinModalProps) {
   const { recycleBin, actions } = useVellum();
+  // Restoring and purging both change the Satchel, so they wait too (docs 5.7).
+  const { readOnly } = useSyncSession();
 
   // Refresh from the backend each time the bin is opened.
   useEffect(() => {
@@ -97,7 +100,7 @@ export function RecycleBinModal({ open, onClose }: RecycleBinModalProps) {
       width={560}
       footer={
         <>
-          <Button icon="cross" onClick={confirmEmpty} disabled={empty}>
+          <Button icon="cross" onClick={confirmEmpty} disabled={empty || readOnly}>
             Empty Recycle Bin
           </Button>
           <Button accent onClick={onClose}>
@@ -148,11 +151,16 @@ export function RecycleBinModal({ open, onClose }: RecycleBinModalProps) {
                 <div className="v-recyclebin__actions">
                   <Button
                     icon="arrow-circle-225-left"
+                    disabled={readOnly}
                     onClick={() => actions.restoreItem(item)}
                   >
                     Restore
                   </Button>
-                  <Button icon="cross-small" onClick={() => confirmPurge(item)}>
+                  <Button
+                    icon="cross-small"
+                    disabled={readOnly}
+                    onClick={() => confirmPurge(item)}
+                  >
                     Delete
                   </Button>
                 </div>

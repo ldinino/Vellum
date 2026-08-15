@@ -14,6 +14,7 @@ import { useActiveEditor } from "../state/activeEditor";
 import { requestOpenFind } from "./editor/find";
 import { printCurrentPage } from "../lib/print-page";
 import { useVellum } from "../state/vellum";
+import { useSyncSession } from "../state/syncSession";
 import "./MenuBar.css";
 
 const inTauri = "__TAURI_INTERNALS__" in window;
@@ -37,6 +38,8 @@ export function MenuBar({
     selectedPageId,
     pages,
   } = useVellum();
+  // Another device has the Satchel, so nothing new may be made in it (docs 5.7).
+  const { readOnly } = useSyncSession();
   const [open, setOpen] = useState<{ id: string; x: number; y: number } | null>(null);
   // The open page (drives Export / Print).
   const currentPage = pages.find((p) => p.id === selectedPageId) ?? null;
@@ -51,6 +54,7 @@ export function MenuBar({
     {
       label: "New Notebook",
       icon: "book--plus",
+      disabled: readOnly,
       onSelect: async () => {
         const nb = await actions.createNotebook("New Notebook");
         if (nb) await actions.toggleNotebook(nb.id);
@@ -59,7 +63,7 @@ export function MenuBar({
     {
       label: "New Section",
       icon: "folder--plus",
-      disabled: !selectedNotebookId,
+      disabled: readOnly || !selectedNotebookId,
       onSelect: async () => {
         if (!selectedNotebookId) return;
         const s = await actions.createSection(selectedNotebookId, "New Section");
@@ -69,7 +73,7 @@ export function MenuBar({
     {
       label: "New Page",
       icon: "document--plus",
-      disabled: !selectedNotebookId || !selectedSectionId,
+      disabled: readOnly || !selectedNotebookId || !selectedSectionId,
       onSelect: () => {
         if (selectedNotebookId && selectedSectionId) {
           actions.createPage(selectedNotebookId, selectedSectionId);
@@ -80,7 +84,7 @@ export function MenuBar({
     {
       label: "Import documents…",
       icon: "document-import",
-      disabled: !selectedNotebookId,
+      disabled: readOnly || !selectedNotebookId,
       onSelect: () => onOpenImport(),
     },
     {

@@ -19,13 +19,21 @@ interface AttachmentBarProps {
   onRemove: (id: string) => void;
   /** Files dropped onto the bar — attach all of them. */
   onAttachFiles: (files: FileList) => void;
+  /** Another device has the Satchel: attachments can be opened, not changed. */
+  readOnly?: boolean;
 }
 
 /**
  * Email-style attachment strip pinned above the page (spec Section 12). Always
  * shown so it's a stable drop target; when empty it invites a drag.
  */
-export function AttachmentBar({ attachments, onOpen, onRemove, onAttachFiles }: AttachmentBarProps) {
+export function AttachmentBar({
+  attachments,
+  onOpen,
+  onRemove,
+  onAttachFiles,
+  readOnly = false,
+}: AttachmentBarProps) {
   const [dragOver, setDragOver] = useState(false);
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
 
@@ -39,13 +47,13 @@ export function AttachmentBar({ attachments, onOpen, onRemove, onAttachFiles }: 
       onDragOver={(e) => {
         // Page-reorder drags aren't attachments — ignore so the bar doesn't
         // light up as a drop target for them.
-        if (isReorderDrag(e.dataTransfer)) return;
+        if (readOnly || isReorderDrag(e.dataTransfer)) return;
         e.preventDefault();
         setDragOver(true);
       }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => {
-        if (isReorderDrag(e.dataTransfer)) return;
+        if (readOnly || isReorderDrag(e.dataTransfer)) return;
         e.preventDefault();
         e.stopPropagation();
         setDragOver(false);
@@ -56,7 +64,9 @@ export function AttachmentBar({ attachments, onOpen, onRemove, onAttachFiles }: 
         <Icon name="paper-clip" />
       </span>
       {attachments.length === 0 ? (
-        <span className="v-attachbar__hint">Drag files here to attach</span>
+        <span className="v-attachbar__hint">
+          {readOnly ? "No attachments" : "Drag files here to attach"}
+        </span>
       ) : (
         attachments.map((a) => (
           <button
@@ -85,6 +95,7 @@ export function AttachmentBar({ attachments, onOpen, onRemove, onAttachFiles }: 
               label: "Remove",
               icon: "cross-small",
               danger: true,
+              disabled: readOnly,
               onSelect: () => onRemove(menu.id),
             },
           ]}

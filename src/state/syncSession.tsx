@@ -36,6 +36,12 @@ export interface SyncSessionState {
   /** The device that took the Satchel over while we were open. Set means this
    *  session has stood down: read-only, and the backend refuses to push. */
   takenOverBy: string | null;
+  /** True while another device has the Satchel, however this session lost it.
+   *  Read-only means read-only (docs 5.7): nothing in the Satchel may be typed
+   *  in, created, renamed, moved or deleted. The backend refuses these anyway;
+   *  this is what lets the window disable the affordance instead of letting the
+   *  user meet a refusal. */
+  readOnly: boolean;
   /** True while this device has handed the Satchel back for its other devices
    *  to use. Unlike a take-over this is not a restriction: editing continues,
    *  and returning to the window takes the Satchel back by itself. */
@@ -55,6 +61,7 @@ const SyncSessionContext = createContext<SyncSessionState>({
   message: null,
   heldBy: null,
   takenOverBy: null,
+  readOnly: false,
   yielded: false,
   preservedCopy: null,
   preserveCopy: async () => {},
@@ -336,6 +343,7 @@ export function SyncSessionProvider({ children }: { children: ReactNode }) {
     message,
     heldBy,
     takenOverBy,
+    readOnly: takenOverBy !== null || heldBy !== null,
     yielded,
     preservedCopy,
     preserveCopy,

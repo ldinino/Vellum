@@ -20,6 +20,19 @@ fn master_index_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     Ok(paths::data_dir(app)?.join("search-index.db"))
 }
 
+/// Refuse a structural edit while another device has the Satchel
+/// (docs/satchels-and-sync.md 5.7). Every command that creates, renames, moves,
+/// reorders or deletes a notebook, section, page or attachment starts here, so
+/// the rule holds whatever route the edit came in by. The window disables the
+/// affordances as well, but that is for feel; this is what makes it true.
+///
+/// Deliberately not applied to page *content* saves: the editor is already
+/// read-only, and a debounced save still in flight when the Satchel is taken
+/// over is exactly the unsynced work the preserved copy exists to keep.
+fn refuse_when_held(app: &AppHandle) -> Result<(), String> {
+    sync::edits_permitted(&app.state::<sync::StandDown>())
+}
+
 /// Display name for a notebook id, used in search breadcrumbs.
 fn notebook_name(app: &AppHandle, notebook_id: &str) -> Result<String, String> {
     let registry = config::load_registry(app)?;
@@ -939,6 +952,7 @@ pub fn list_notebooks(app: AppHandle) -> Result<Vec<NotebookMeta>, String> {
 /// current schema, and a registry entry (written atomically).
 #[tauri::command]
 pub async fn create_notebook(app: AppHandle, name: String) -> Result<NotebookMeta, String> {
+    refuse_when_held(&app)?;
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err("Notebook name cannot be empty".into());
@@ -1026,6 +1040,7 @@ pub async fn open_notebook(app: AppHandle, notebook_id: String) -> Result<String
 /// never move a OneDrive-synced database; `name` and `folder` may diverge.
 #[tauri::command]
 pub async fn rename_notebook(app: AppHandle, notebook_id: String, name: String) -> Result<NotebookMeta, String> {
+    refuse_when_held(&app)?;
     let trimmed = name.trim();
     if trimmed.is_empty() {
         return Err("Notebook name cannot be empty".into());
@@ -1050,6 +1065,7 @@ pub fn set_notebook_color(
     notebook_id: String,
     color: Option<String>,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let mut registry = config::load_registry(&app)?;
     let meta = registry
         .notebooks
@@ -1072,6 +1088,7 @@ pub async fn set_notebook_proofing(
     grammar_pref: Option<bool>,
     spell_pref: Option<bool>,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let mut registry = config::load_registry(&app)?;
     let meta = registry
         .notebooks
@@ -1093,6 +1110,7 @@ pub async fn set_notebook_proofing(
 /// on disk until the notebook is purged, so it stays fully recoverable.
 #[tauri::command]
 pub async fn soft_delete_notebook(app: AppHandle, notebook_id: String) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let mut registry = config::load_registry(&app)?;
     let meta = registry
         .notebooks
@@ -1147,6 +1165,7 @@ async fn purge_notebook(app: &AppHandle, notebook_id: &str) -> Result<(), String
 /// the desired order; sort_order is reassigned to match.
 #[tauri::command]
 pub fn reorder_notebooks(app: AppHandle, ordered_ids: Vec<String>) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let mut registry = config::load_registry(&app)?;
     for (order, id) in ordered_ids.iter().enumerate() {
         if let Some(meta) = registry.notebooks.iter_mut().find(|n| &n.id == id) {
@@ -1174,6 +1193,7 @@ pub async fn create_section(
     notebook_id: String,
     name: String,
 ) -> Result<Section, String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::create_section(&pool, &name).await;
     r
@@ -1186,6 +1206,7 @@ pub async fn rename_section(
     section_id: String,
     name: String,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::rename_section(&pool, &section_id, &name).await;
     r?;
@@ -1203,6 +1224,7 @@ pub async fn update_section(
     color: Option<String>,
     page_template_id: Option<String>,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::update_section(&pool, &section_id, &name, color, page_template_id).await;
     r?;
@@ -1220,6 +1242,7 @@ pub async fn soft_delete_section(
     notebook_id: String,
     section_id: String,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::soft_delete_section(&pool, &section_id).await;
     let page_ids = r?;
@@ -1270,6 +1293,7 @@ pub async fn reorder_sections(
     notebook_id: String,
     ordered_ids: Vec<String>,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::reorder_sections(&pool, &ordered_ids).await;
     r
@@ -1283,6 +1307,7 @@ pub async fn set_section_sort(
     mode: String,
     dir: String,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::set_section_sort(&pool, &section_id, &mode, &dir).await;
     r
@@ -1297,6 +1322,7 @@ pub async fn set_section_proofing(
     grammar_pref: Option<bool>,
     spell_pref: Option<bool>,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::set_section_proofing(&pool, &section_id, grammar_pref, spell_pref).await;
     r
@@ -1417,6 +1443,7 @@ pub async fn create_page(
     section_id: String,
     title: String,
 ) -> Result<Page, String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let page = match notebook::create_page(&pool, &section_id, &title).await {
         Ok(p) => p,
@@ -1462,6 +1489,7 @@ pub async fn set_page_title(
     page_id: String,
     title: String,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::set_page_title(&pool, &page_id, &title).await;
     r?;
@@ -1478,6 +1506,7 @@ pub async fn set_page_proofing(
     grammar_pref: Option<bool>,
     spell_pref: Option<bool>,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::set_page_proofing(&pool, &page_id, grammar_pref, spell_pref).await;
     r
@@ -1491,6 +1520,7 @@ pub async fn soft_delete_page(
     notebook_id: String,
     page_id: String,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::soft_delete_page(&pool, &page_id).await;
     r?;
@@ -1522,6 +1552,7 @@ pub async fn duplicate_page(
     notebook_id: String,
     page_id: String,
 ) -> Result<Page, String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::duplicate_page(&pool, &page_id).await;
     let page = r?;
@@ -1536,6 +1567,7 @@ pub async fn move_page(
     page_id: String,
     to_section_id: String,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::move_page(&pool, &page_id, &to_section_id).await;
     r?;
@@ -1550,6 +1582,7 @@ pub async fn reorder_pages(
     notebook_id: String,
     ordered_ids: Vec<String>,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::reorder_pages(&pool, &ordered_ids).await;
     r
@@ -1752,6 +1785,7 @@ pub async fn add_attachment(
     bytes: Vec<u8>,
     mime_type: Option<String>,
 ) -> Result<notebook::Attachment, String> {
+    refuse_when_held(&app)?;
     let dir = notebook_folder(&app, &notebook_id)?;
     let safe = sanitize_attachment_name(&filename);
     // Per-attachment uuid folder keeps the original filename intact + collision-free.
@@ -1782,6 +1816,7 @@ pub async fn soft_delete_attachment(
     notebook_id: String,
     attachment_id: String,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let pool = pool_for(&app, &notebook_id).await?;
     let r = notebook::soft_delete_attachment(&pool, &attachment_id).await;
     if let Some(page_id) = r? {
@@ -1963,6 +1998,7 @@ pub async fn restore_item(
     notebook_id: String,
     id: String,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     match kind.as_str() {
         "notebook" => {
             let mut registry = config::load_registry(&app)?;
@@ -2012,6 +2048,7 @@ pub async fn purge_item(
     notebook_id: String,
     id: String,
 ) -> Result<(), String> {
+    refuse_when_held(&app)?;
     match kind.as_str() {
         "notebook" => purge_notebook(&app, &notebook_id).await,
         "section" => purge_section(&app, &notebook_id, &id).await,
@@ -2026,6 +2063,7 @@ pub async fn purge_item(
 /// item is logged and the rest still run.
 #[tauri::command]
 pub async fn empty_recycle_bin(app: AppHandle) -> Result<(), String> {
+    refuse_when_held(&app)?;
     let registry = config::load_registry(&app)?;
 
     let deleted_notebooks: Vec<String> = registry
@@ -2488,6 +2526,60 @@ pub async fn refine_detect_hardware(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// LOCKALL (docs/satchels-and-sync.md 5.7): every command that changes the
+    /// shape of the Satchel consults the held-Satchel guard.
+    ///
+    /// A source scan, because the alternative is a real `AppHandle`. It cannot
+    /// prove the guard is *right* — `sync::tests` does that — but it does catch
+    /// the failure this task exists to prevent: a mutating command that never
+    /// asks, whether by an edit here or by a new command added later.
+    #[test]
+    fn every_structural_command_refuses_while_another_device_holds_the_satchel() {
+        const GUARDED: &[&str] = &[
+            "create_notebook",
+            "rename_notebook",
+            "set_notebook_color",
+            "set_notebook_proofing",
+            "soft_delete_notebook",
+            "reorder_notebooks",
+            "create_section",
+            "rename_section",
+            "update_section",
+            "soft_delete_section",
+            "reorder_sections",
+            "set_section_sort",
+            "set_section_proofing",
+            "create_page",
+            "set_page_title",
+            "set_page_proofing",
+            "soft_delete_page",
+            "duplicate_page",
+            "move_page",
+            "reorder_pages",
+            "add_attachment",
+            "soft_delete_attachment",
+            "restore_item",
+            "purge_item",
+            "empty_recycle_bin",
+        ];
+        let source = include_str!("commands.rs");
+        for name in GUARDED {
+            let at = source
+                .find(&format!("fn {name}("))
+                .unwrap_or_else(|| panic!("no command named {name} — rename it here too"));
+            // Everything up to the next command, so a guard on the following
+            // function cannot be mistaken for this one's.
+            let body_end = source[at..]
+                .find("#[tauri::command]")
+                .map(|i| at + i)
+                .unwrap_or(source.len());
+            assert!(
+                source[at..body_end].contains("refuse_when_held(&app)?"),
+                "{name} changes the Satchel without consulting the held-Satchel guard"
+            );
+        }
+    }
 
     /// The startup rebuild must re-index only what changed while the app was
     /// closed: unchanged pages are skipped (the common launch does no writes at

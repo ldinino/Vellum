@@ -71,24 +71,56 @@ pub struct LeaseStanding {
     pub taken_over_by: Option<String>,
 }
 
-/// Records that another device took the Satchel over while we were open.
+/// How this device came to be without the Satchel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HoldReason {
+    /// Another device took it over while we were open.
+    TakenOver,
+    /// Another device already had it when this window opened.
+    OnArrival,
+}
+
+/// Records that another device has the Satchel, whether it took it over while we
+/// were open or already had it when we arrived.
 ///
-/// This is the push guard, and it lives in the backend on purpose: the close
-/// handler, Settings ▸ Sync and any future caller all funnel through
-/// [`sync_now`], so refusing here is the only way to be sure nothing pushes
-/// over the new holder.
+/// This is the guard, and it lives in the backend on purpose: the close handler,
+/// Settings ▸ Sync and every mutating command funnel through it, so refusing
+/// here is the only way to be sure nothing writes over the new holder — a guard
+/// that only the window applies is not a guard.
 #[derive(Default)]
-pub struct StandDown(std::sync::Mutex<Option<String>>);
+pub struct StandDown(std::sync::Mutex<Option<(String, HoldReason)>>);
 
 impl StandDown {
     /// The device that took over, if this session has stood down.
+    ///
+    /// Deliberately blind to [`HoldReason::OnArrival`]: arriving to a held
+    /// Satchel leaves the push path exactly as it was, where the refusal comes
+    /// from the lease and carries the wording that offers a take-over.
     pub fn taken_over_by(&self) -> Option<String> {
-        self.0.lock().map(|g| g.clone()).unwrap_or(None)
+        match self.0.lock().map(|g| g.clone()).unwrap_or(None) {
+            Some((name, HoldReason::TakenOver)) => Some(name),
+            _ => None,
+        }
+    }
+
+    /// The device that has the Satchel, however this session lost it.
+    pub fn held_by(&self) -> Option<String> {
+        self.0.lock().map(|g| g.clone()).unwrap_or(None).map(|(n, _)| n)
     }
 
     pub fn record(&self, device_name: String) {
+        self.set(device_name, HoldReason::TakenOver);
+    }
+
+    /// Another device had it before we opened (docs 5.7): structural edits are
+    /// refused the same way, and this is the one place that fact lives.
+    pub fn record_on_arrival(&self, device_name: String) {
+        self.set(device_name, HoldReason::OnArrival);
+    }
+
+    fn set(&self, device_name: String, reason: HoldReason) {
         if let Ok(mut g) = self.0.lock() {
-            *g = Some(device_name);
+            *g = Some((device_name, reason));
         }
     }
 
@@ -318,6 +350,22 @@ fn refuse_if_held(state: &lease::LeaseState, consequence: &str) -> Result<(), St
     }
 }
 
+/// What the window says while another device has the Satchel (docs 5.5).
+pub const EDITING_PAUSED: &str = "Editing is paused here.";
+
+/// Whether this device may change anything in the Satchel (docs 5.7 LOCKALL).
+///
+/// Read-only has to mean read-only: a section created while another device holds
+/// the Satchel is written locally, and the next pull preserves it into a sibling
+/// Satchel the user never asked for. Refusing in the backend covers every route
+/// in — menu, context menu, drag, keyboard — with one rule.
+pub fn edits_permitted(guard: &StandDown) -> Result<(), String> {
+    match guard.held_by() {
+        Some(holder) => Err(in_use(&holder, EDITING_PAUSED)),
+        None => Ok(()),
+    }
+}
+
 /// Whether a push may leave this device.
 ///
 /// Split out from [`sync_now`] because that needs an `AppHandle`, and this is
@@ -451,10 +499,15 @@ pub async fn begin_session(app: &AppHandle) -> Result<Option<SyncReport>, String
 
     // Opening read-only would be a lie: the editor saves as you type. Better to
     // say plainly that the other device has it and change nothing.
-    refuse_if_held(
-        &lease::state(&env, &target, &me, now)?,
-        "It hasn't been updated from your storage.",
-    )?;
+    let standing = lease::state(&env, &target, &me, now)?;
+    // Arm the same guard the take-over path arms, so "another device has this
+    // Satchel" has one home in the backend rather than being re-derived in the
+    // window from the text of this error (docs 5.7).
+    if let lease::LeaseState::Held(l) = &standing {
+        app.state::<StandDown>()
+            .record_on_arrival(l.device_name.clone());
+    }
+    refuse_if_held(&standing, "It hasn't been updated from your storage.")?;
     lease::acquire(&env, &target, &me, now)?;
 
     let current = binding(app)?;
@@ -744,5 +797,36 @@ mod tests {
         assert!(refused.contains("DESKTOP"));
         // The take-over prompt is the user saying so out loud.
         assert!(push_permitted(&guard, true).is_ok());
+    }
+
+    /// LOCKALL (docs/satchels-and-sync.md 5.7): while another device has the
+    /// Satchel, nothing in it may be created, renamed, moved or deleted —
+    /// whether it was taken over mid-session or already held on arrival.
+    #[test]
+    fn nothing_is_editable_while_another_device_has_the_satchel() {
+        let guard = StandDown::default();
+        assert!(edits_permitted(&guard).is_ok(), "an unheld Satchel was read-only");
+
+        guard.record("DESKTOP".into());
+        let refused = edits_permitted(&guard).expect_err("a stood-down device edited");
+        assert!(refused.starts_with(IN_USE_PREFIX), "unexpected refusal: {refused}");
+        assert!(refused.contains("DESKTOP"), "the refusal doesn't name the holder");
+        assert!(refused.contains(EDITING_PAUSED));
+        // Wording rule, docs 5.5.
+        assert!(!refused.to_lowercase().contains("conflict"));
+
+        guard.clear();
+        assert!(edits_permitted(&guard).is_ok(), "taking the Satchel back left it read-only");
+
+        // The arrival case refuses identically...
+        guard.record_on_arrival("LAPTOP".into());
+        let refused = edits_permitted(&guard).expect_err("an arriving device edited");
+        assert!(refused.starts_with(IN_USE_PREFIX), "unexpected refusal: {refused}");
+        assert!(refused.contains("LAPTOP"));
+        // ...but leaves the push path exactly as it was: arriving to a held
+        // Satchel is the lease's refusal to make, and its wording is what offers
+        // the user a take-over.
+        assert_eq!(guard.taken_over_by(), None);
+        let _permit = push_permitted(&guard, false).expect("arrival armed the push guard");
     }
 }
