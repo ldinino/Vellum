@@ -19,7 +19,8 @@ item ships. Sizes are relative complexity (S/M/L/XL), not time estimates.
 | [HANDOFF](#53-handoff--ask-the-holder-to-let-go) | Ask the holder to let go (remote request file + Notify) | M | STANDDOWN, YIELD |
 | [STAGEDPUSH](#54-stagedpush--make-the-remote-switchover-the-commit-point) | Make the remote switchover the commit point | M | SYNC-A |
 | [COPY](#55-copy--how-the-take-over-is-described) | Take-over wording and vocabulary rules _(shipped)_ | S | STANDDOWN |
-| [LOCKALL](#57-lockall--read-only-means-read-only) | Refuse structural edits too while another device holds it | M | SILENTHOLD |
+| [LOCKALL](#57-lockall--read-only-means-read-only) | Refuse structural edits too while another device holds it _(shipped)_ | M | SILENTHOLD |
+| [LOCKSETTINGS](#571-settings-are-satchel-scoped-and-still-unguarded) | Guard the Satchel-scoped settings writes too | S | LOCKALL |
 | [TWOPROC](#56-twoproc--two-instances-on-one-machine) | Two instances on one machine, to observe any of this | M | YIELD |
 
 **Sequencing.** SATCHEL ships alone. SYNC-A and OPLOG ship together in the next
@@ -795,6 +796,53 @@ The UI should still disable the affordances, so the user sees why rather than
 meeting a refusal. Backend for correctness, UI for feel.
 
 **Attachments count as structural edits** and go the same way.
+
+**Shipped 2026-08-14 (#13).** The guard lives in the backend —
+`sync::edits_permitted` against a `StandDown` that now carries a `HoldReason`,
+so the arrival case arms the same state instead of being derived on the frontend
+by parsing an error string. `taken_over_by()` stays deliberately blind to
+`OnArrival`, which leaves the push path and its take-over wording untouched.
+Providers were **not** reordered and did not need to be: `SyncSessionProvider`
+is innermost, so components could always read the session; only `vellum.tsx`'s
+actions could not, and the backend guard makes that moot.
+
+**Content saves stay permitted, deliberately.** The editor is already read-only,
+and a debounced save still in flight when the Satchel is taken over is exactly
+the unsynced work the preserved copy exists to keep.
+
+### 5.7.1 Settings are Satchel-scoped, and still unguarded
+
+Found at audit, and it is a gap in **§5.7's scope as written**, not in its
+implementation: the task said "notebooks, sections, pages, attachments", so
+`save_app_config` and `set_dictionary_words` were correctly left alone.
+
+But `save_app_config` writes `paths::app_json_path` — *inside* the Satchel — and
+this document's own opening says settings travel with it as part of the synced
+payload. So changing a theme or adding a dictionary word while another device
+holds the Satchel lands that change in the preserved fork rather than the live
+Satchel. Same defect class as the one §5.7 exists to close, arriving through
+Settings instead of the nav.
+
+Correctly **excluded** and not to be "fixed": `create_satchel`,
+`set_active_satchel` and `rename_satchel` act on the machine-local Satchel
+*list*, not on the held Satchel's contents.
+
+Reachable-only-in-theory, worth defence in depth but not urgent:
+`save_page_image`, `copy_image_to_page` and `import_copy_external_image` do
+write data, but the first two are reachable only through an editor that is
+already read-only, and an import must first call the guarded `create_page`.
+
+### 5.7.2 The guard's source-scan test, and what it does not catch
+
+`every_structural_command_refuses_while_another_device_holds_the_satchel` scans
+the source for a guard call in each of a hardcoded list of commands. It catches
+a guard being **removed** (proven by mutation) and a command being **renamed**
+(explicit panic). It does **not** catch a brand-new mutating command that is
+never added to the list — its doc comment currently claims otherwise.
+
+The stronger shape, if it is ever worth the effort: scan every
+`#[tauri::command]` whose name matches a mutating verb and require it to appear
+either in `GUARDED` or in an explicit exemption list, so the default is deny.
 
 ### Exit criteria
 
